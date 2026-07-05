@@ -35,6 +35,8 @@ let package = Package(
         .target(name: "ReconnectKit", dependencies: ["Models"]),
         .target(name: "TmuxKit", dependencies: ["Models"]),
         .target(name: "TerminalUI", dependencies: [
+            "Models",
+            "ToolbarUI",
             .product(name: "SwiftTerm", package: "SwiftTerm"),
         ]),
         .target(name: "ToolbarUI", dependencies: ["Models"]),
@@ -43,5 +45,6 @@ let package = Package(
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"]),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"]),
         .testTarget(name: "TmuxKitTests", dependencies: ["TmuxKit"]),
+        .testTarget(name: "ToolbarUITests", dependencies: ["ToolbarUI"]),
     ]
 )

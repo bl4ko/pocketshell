@@ -1,0 +1,35 @@
+name: pocketshell
+options:
+  bundleIdPrefix: com.bl4ko
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  Core:
+    path: Packages/Core
+targets:
+  pocketshell:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: Core
+        products:
+          - Models
+          - KeyKit
+          - SSHKit
+          - ReconnectKit
+          - TmuxKit
+          - TerminalUI
+          - ToolbarUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bl4ko.pocketshell
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        SWIFT_VERSION: "6.0"

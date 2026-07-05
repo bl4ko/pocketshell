@@ -27,7 +27,7 @@ public final class TerminalBridge: ObservableObject {
         }
     }
 
-    func processOutgoing(_ data: Data) {
+    public func processOutgoing(_ data: Data) {
         if ctrlActive,
            let text = String(data: data, encoding: .utf8),
            text.count == 1,

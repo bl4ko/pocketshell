@@ -2,15 +2,12 @@ import SwiftUI
 
 @main
 struct PocketshellApp: App {
+    @StateObject private var store = AppStore()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            HostsListView()
+                .environmentObject(store)
         }
-    }
-}
-
-struct ContentView: View {
-    var body: some View {
-        Text("pocketshell")
     }
 }

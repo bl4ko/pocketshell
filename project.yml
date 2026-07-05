@@ -33,3 +33,28 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         SWIFT_VERSION: "6.0"
+  pocketshellUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: pocketshell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bl4ko.pocketshell.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        TEST_TARGET_NAME: pocketshell
+schemes:
+  pocketshell:
+    build:
+      targets:
+        pocketshell: all
+        pocketshellUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - pocketshellUITests

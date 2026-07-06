@@ -26,7 +26,8 @@ final class ConnectionController: ObservableObject {
     private let knownHosts: KnownHostsStore
     private var connection: SSHConnection?
     private var shell: ShellStream?
-    private var machine = ReconnectMachine()
+    private var machine = ReconnectMachine(baseDelay: .seconds(3))
+    private var lastErrorMessage: String?
     private var monitor: NWPathMonitor?
     private var retryTask: Task<Void, Never>?
     private var attachCommand: String?
@@ -92,18 +93,46 @@ final class ConnectionController: ObservableObject {
                 _ = machine.handle(.userDisconnect)
                 return
             }
-            handleConnectFailure("\(error)")
+            handleConnectFailure(humanize(error))
             return
         } catch {
-            handleConnectFailure(error.localizedDescription)
+            handleConnectFailure(humanize(error))
             return
         }
 
-        if initial, let session = host.tmuxSession {
+        if let session = host.tmuxSession, attachCommand == nil {
             await listTmuxWindows(connection: connection, session: session)
         } else {
             await openShellAndPump()
         }
+    }
+
+    private func humanize(_ error: Error) -> String {
+        if let ssh = error as? SSHError {
+            switch ssh {
+            case .authenticationFailed:
+                return "auth failed — device key installed on host? (Keys screen)"
+            case .connectionClosed:
+                return "connection closed during handshake"
+            case .notConnected:
+                return "not connected"
+            case .commandFailed(let status):
+                return "command failed (exit \(status))"
+            case .hostKeyMismatch:
+                return "host key mismatch"
+            }
+        }
+        let text = "\(error)"
+        if text.localizedCaseInsensitiveContains("timeout") || text.localizedCaseInsensitiveContains("timed out") {
+            return "timeout — host unreachable (VPN/VLAN? Local Network permission in iOS Settings > Privacy?)"
+        }
+        if text.localizedCaseInsensitiveContains("refused") {
+            return "connection refused — sshd running on port \(host.port)?"
+        }
+        if text.localizedCaseInsensitiveContains("unreachable") || text.localizedCaseInsensitiveContains("route") {
+            return "host unreachable — check network/VPN and Local Network permission"
+        }
+        return text
     }
 
     private func listTmuxWindows(connection: SSHConnection, session: String) async {
@@ -137,6 +166,7 @@ final class ConnectionController: ObservableObject {
                 Task { try? await shell.resize(cols, rows) }
             }
             _ = machine.handle(.established)
+            lastErrorMessage = nil
             phase = .attached
             Task { [weak self] in
                 for await chunk in shell.output {
@@ -162,8 +192,9 @@ final class ConnectionController: ObservableObject {
     private func applyAction(_ action: ReconnectMachine.Action, message: String = "connection lost") {
         switch action {
         case .scheduleRetry(let delay):
-            let seconds = Double(delay.components.seconds)
-            phase = .reconnecting("\(message) — retrying in \(Int(seconds))s")
+            lastErrorMessage = message
+            let seconds = Int(delay.components.seconds)
+            phase = .reconnecting("\(message)\nretrying in \(seconds)s")
             retryTask?.cancel()
             retryTask = Task { [weak self] in
                 try? await Task.sleep(for: delay)
@@ -186,7 +217,11 @@ final class ConnectionController: ObservableObject {
 
     private func reconnect() async {
         guard !stopped else { return }
-        phase = .reconnecting("reconnecting…")
+        if let lastErrorMessage {
+            phase = .reconnecting("reconnecting…\nlast error: \(lastErrorMessage)")
+        } else {
+            phase = .reconnecting("reconnecting…")
+        }
         await connection?.disconnect()
         await establish(initial: false)
     }

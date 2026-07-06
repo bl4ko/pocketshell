@@ -46,5 +46,6 @@ let package = Package(
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"]),
         .testTarget(name: "TmuxKitTests", dependencies: ["TmuxKit"]),
         .testTarget(name: "ToolbarUITests", dependencies: ["ToolbarUI"]),
+        .testTarget(name: "TerminalUITests", dependencies: ["TerminalUI"]),
     ]
 )

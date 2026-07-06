@@ -16,6 +16,16 @@ public struct SSHTerminalView: UIViewRepresentable {
         view.backgroundColor = .black
         view.nativeBackgroundColor = .black
         view.nativeForegroundColor = .white
+        view.allowMouseReporting = false
+        view.inputAccessoryView = nil
+        let pan = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleScrollPan(_:))
+        )
+        let gestureDelegate = SimultaneousGestureDelegate()
+        pan.delegate = gestureDelegate
+        context.coordinator.gestureDelegate = gestureDelegate
+        view.addGestureRecognizer(pan)
         bridge.view = view
         return view
     }
@@ -26,11 +36,62 @@ public struct SSHTerminalView: UIViewRepresentable {
         Coordinator(bridge: bridge)
     }
 
+    final class SimultaneousGestureDelegate: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+    }
+
     public final class Coordinator: NSObject, TerminalViewDelegate, @unchecked Sendable {
         private let bridge: TerminalBridge
+        private var scrollTracker = PanScrollTracker(step: 1)
+        var gestureDelegate: SimultaneousGestureDelegate?
 
         init(bridge: TerminalBridge) {
             self.bridge = bridge
+        }
+
+        @objc func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
+            MainActor.assumeIsolated {
+                handleScrollPanOnMain(gesture)
+            }
+        }
+
+        @MainActor private func handleScrollPanOnMain(_ gesture: UIPanGestureRecognizer) {
+            guard let view = gesture.view as? TerminalView else { return }
+            let terminal = view.getTerminal()
+            guard terminal.mouseMode != .off else { return }
+            switch gesture.state {
+            case .began:
+                scrollTracker = PanScrollTracker(step: Double(view.font.lineHeight))
+            case .changed:
+                let delta = gesture.translation(in: view).y
+                gesture.setTranslation(.zero, in: view)
+                let lines = scrollTracker.lines(for: Double(delta))
+                guard lines != 0 else { return }
+                let flags = terminal.encodeButton(
+                    button: lines > 0 ? 4 : 5,
+                    release: false,
+                    shift: false,
+                    meta: false,
+                    control: false
+                )
+                let location = gesture.location(in: view)
+                let col = clamp(Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
+                let row = clamp(Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                for _ in 0..<abs(lines) {
+                    terminal.sendEvent(buttonFlags: flags, x: col, y: row)
+                }
+            default:
+                break
+            }
+        }
+
+        private func clamp(_ value: Int, max limit: Int) -> Int {
+            min(max(value, 0), max(limit, 0))
         }
 
         public func send(source: TerminalView, data: ArraySlice<UInt8>) {

@@ -7,15 +7,9 @@ import ToolbarUI
 struct TerminalScreen: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var connection: ConnectionController
-    @State private var showSnippets = false
+    @ObservedObject var connection: ConnectionController
 
     let host: HostConfig
-
-    init(host: HostConfig, controller: @autoclosure @escaping () -> ConnectionController) {
-        self.host = host
-        _connection = StateObject(wrappedValue: controller())
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,28 +24,11 @@ struct TerminalScreen: View {
                 onKey: { connection.bridge.handleToolbar($0) }
             )
         }
-        .navigationTitle(host.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showSnippets = true
-                } label: {
-                    Image(systemName: "text.badge.plus")
-                }
-            }
-        }
-        .sheet(isPresented: $showSnippets) {
-            snippetPicker
-        }
         .sheet(isPresented: windowPickerShown) {
             windowPicker
         }
         .task {
             await connection.start()
-        }
-        .onDisappear {
-            Task { await connection.stop() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -131,33 +108,6 @@ struct TerminalScreen: View {
             }
             .navigationTitle("tmux windows")
             .presentationDetents([.medium])
-        }
-    }
-
-    private var snippetPicker: some View {
-        NavigationStack {
-            List(terminalSnippets) { snippet in
-                Button {
-                    connection.sendText(snippet.command + "\n")
-                    showSnippets = false
-                } label: {
-                    VStack(alignment: .leading) {
-                        Text(snippet.name)
-                        Text(snippet.command)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-            }
-            .navigationTitle("Snippets")
-            .presentationDetents([.medium])
-        }
-    }
-
-    private var terminalSnippets: [Snippet] {
-        store.snippets.filter {
-            $0.runMode == .typeIntoTerminal && ($0.hostID == nil || $0.hostID == host.id)
         }
     }
 }

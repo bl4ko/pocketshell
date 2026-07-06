@@ -36,3 +36,16 @@ import Testing
     #expect(labels.contains("tab"))
     #expect(ToolbarKey.defaults.contains { $0.action == .arrowUp })
 }
+
+@Test func defaultToolbarHasTermiusQuickKeys() {
+    let actions = ToolbarKey.defaults.map(\.action)
+    #expect(actions.contains(.sequence("\u{03}")))
+    #expect(actions.contains(.sequence("\u{04}")))
+    #expect(actions.contains(.sequence("\u{1a}")))
+    #expect(actions.contains(.sequence("\u{1b}[H")))
+    #expect(actions.contains(.sequence("\u{1b}[F")))
+    #expect(actions.contains(.sequence("\u{1b}[5~")))
+    #expect(actions.contains(.sequence("\u{1b}[6~")))
+    #expect(actions.contains(.sequence("/")))
+    #expect(actions.contains(.sequence("-")))
+}

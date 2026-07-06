@@ -29,16 +29,18 @@ public struct TmuxSession: Equatable, Hashable, Sendable, Identifiable {
 }
 
 public enum Tmux {
+    static let tmux = "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux"
+
     public static func listWindowsCommand(session: String) -> String {
-        "tmux list-windows -t \(shellQuote(session)) -F '#{window_index}|#{window_name}|#{window_active}'"
+        "\(tmux) list-windows -t \(shellQuote(session)) -F '#{window_index}|#{window_name}|#{window_active}'"
     }
 
     public static func listSessionsCommand() -> String {
-        "tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}'"
+        "\(tmux) list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}'"
     }
 
     public static func attachCommand(session: String, windowIndex: Int?) -> String {
-        let attach = "tmux attach-session -t \(shellQuote(session))"
+        let attach = "\(tmux) attach-session -t \(shellQuote(session))"
         guard let windowIndex else { return attach }
         return "\(attach) \\; select-window -t \(windowIndex)"
     }

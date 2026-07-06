@@ -3,7 +3,7 @@ import Testing
 
 @Test func listWindowsCommandUsesPipeFormat() {
     #expect(Tmux.listWindowsCommand(session: "claude")
-        == "tmux list-windows -t 'claude' -F '#{window_index}|#{window_name}|#{window_active}'")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'claude' -F '#{window_index}|#{window_name}|#{window_active}'")
 }
 
 @Test func parseWindowsParsesIndexNameActive() {
@@ -32,7 +32,7 @@ import Testing
 
 @Test func listSessionsCommandUsesPipeFormat() {
     #expect(Tmux.listSessionsCommand()
-        == "tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}'")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}'")
 }
 
 @Test func parseSessionsParsesNameWindowsAttached() {
@@ -45,15 +45,15 @@ import Testing
 
 @Test func attachCommandWithWindow() {
     #expect(Tmux.attachCommand(session: "claude", windowIndex: 3)
-        == "tmux attach-session -t 'claude' \\; select-window -t 3")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux attach-session -t 'claude' \\; select-window -t 3")
 }
 
 @Test func attachCommandWithoutWindow() {
     #expect(Tmux.attachCommand(session: "claude", windowIndex: nil)
-        == "tmux attach-session -t 'claude'")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux attach-session -t 'claude'")
 }
 
 @Test func sessionNameWithSingleQuoteIsEscaped() {
     #expect(Tmux.listWindowsCommand(session: "a'b")
-        == "tmux list-windows -t 'a'\\''b' -F '#{window_index}|#{window_name}|#{window_active}'")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'a'\\''b' -F '#{window_index}|#{window_name}|#{window_active}'")
 }

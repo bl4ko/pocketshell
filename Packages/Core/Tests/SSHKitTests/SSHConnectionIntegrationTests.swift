@@ -65,6 +65,12 @@ final class TestSSHD {
     }
 }
 
+private actor OutcomeBox {
+    private var value: String?
+    func set(_ v: String) { value = v }
+    func get() -> String? { value }
+}
+
 private func makeConnection(_ sshd: TestSSHD, knownHostsFile: URL? = nil) -> SSHConnection {
     let file = knownHostsFile ?? FileManager.default.temporaryDirectory
         .appendingPathComponent("kh-\(UUID().uuidString).json")
@@ -144,6 +150,38 @@ private func makeConnection(_ sshd: TestSSHD, knownHostsFile: URL? = nil) -> SSH
         await #expect(throws: (any Error).self) {
             try await connection.connect()
         }
+    }
+
+    @Test func wrongKeyFailsAuthenticationQuickly() async throws {
+        let sshd = try TestSSHD()
+        defer { sshd.stop() }
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kh-\(UUID().uuidString).json")
+        let connection = SSHConnection(
+            host: sshd.hostConfig(),
+            key: .software(P256.Signing.PrivateKey()),
+            knownHosts: KnownHostsStore(fileURL: file)
+        )
+        let box = OutcomeBox()
+        Task {
+            do {
+                try await connection.connect()
+                await box.set("connected")
+            } catch SSHError.authenticationFailed {
+                await box.set("authFailed")
+            } catch {
+                await box.set("error: \(error)")
+            }
+        }
+        var outcome = "hung"
+        for _ in 0..<80 {
+            if let value = await box.get() {
+                outcome = value
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(outcome == "authFailed")
     }
 
     @Test func execReturnsExitStatusFailure() async throws {

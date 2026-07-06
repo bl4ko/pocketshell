@@ -204,7 +204,7 @@ final class KeyAuthDelegate: NIOSSHClientUserAuthenticationDelegate, @unchecked 
         nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>
     ) {
         guard !offered, availableMethods.contains(.publicKey) else {
-            nextChallengePromise.succeed(nil)
+            nextChallengePromise.fail(SSHError.authenticationFailed)
             return
         }
         offered = true

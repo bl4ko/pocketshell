@@ -64,23 +64,33 @@ struct TerminalScreen: View {
         Group {
             switch connection.phase {
             case .connecting:
-                banner("connecting…", color: .blue)
+                banner("connecting…", color: .blue, icon: "bolt.horizontal")
             case .reconnecting(let message):
-                banner(message, color: .orange)
+                banner(message, color: .orange, icon: "arrow.clockwise")
             case .failed(let message):
-                banner(message, color: .red)
+                banner(message, color: .red, icon: "exclamationmark.triangle.fill")
             default:
                 EmptyView()
             }
         }
     }
 
-    private func banner(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption.monospaced())
-            .frame(maxWidth: .infinity)
-            .padding(6)
-            .background(color.opacity(0.25))
+    private func banner(_ text: String, color: Color, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .padding(.top, 1)
+            Text(text)
+                .font(.caption.monospaced())
+                .multilineTextAlignment(.leading)
+                .lineLimit(4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(color.opacity(0.15))
     }
 
     private var windowPickerShown: Binding<Bool> {

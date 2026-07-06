@@ -11,24 +11,14 @@ struct HostsListView: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(store.hosts) { host in
-                    NavigationLink(value: host) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(host.name).font(.headline)
-                            Text("\(host.username)@\(host.hostname):\(String(host.port))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                ForEach(groupedHosts, id: \.0) { group, hosts in
+                    Section {
+                        ForEach(hosts) { host in
+                            hostRow(host)
                         }
-                    }
-                    .contextMenu {
-                        Button("Edit") { editingHost = host }
-                        ForEach(execSnippets(for: host)) { snippet in
-                            Button(snippet.name) {
-                                runningSnippet = SnippetRun(host: host, snippet: snippet)
-                            }
-                        }
-                        Button("Delete", role: .destructive) {
-                            store.hosts.removeAll { $0.id == host.id }
+                    } header: {
+                        if let group {
+                            Text(group)
                         }
                     }
                 }
@@ -69,6 +59,40 @@ struct HostsListView: View {
                         description: Text("Add a host, then install the device key from the Keys screen.")
                     )
                 }
+            }
+        }
+    }
+
+    private var groupedHosts: [(String?, [HostConfig])] {
+        let grouped = Dictionary(grouping: store.hosts) { $0.group }
+        var result: [(String?, [HostConfig])] = []
+        if let ungrouped = grouped[nil] {
+            result.append((nil, ungrouped))
+        }
+        for group in grouped.keys.compactMap({ $0 }).sorted() {
+            result.append((group, grouped[group] ?? []))
+        }
+        return result
+    }
+
+    private func hostRow(_ host: HostConfig) -> some View {
+        NavigationLink(value: host) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(host.name).font(.headline)
+                Text("\(host.username)@\(host.hostname):\(String(host.port))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contextMenu {
+            Button("Edit") { editingHost = host }
+            ForEach(execSnippets(for: host)) { snippet in
+                Button(snippet.name) {
+                    runningSnippet = SnippetRun(host: host, snippet: snippet)
+                }
+            }
+            Button("Delete", role: .destructive) {
+                store.hosts.removeAll { $0.id == host.id }
             }
         }
     }

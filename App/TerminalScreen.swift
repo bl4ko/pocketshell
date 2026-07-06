@@ -21,7 +21,8 @@ struct TerminalScreen: View {
                     get: { connection.bridge.ctrlActive },
                     set: { connection.bridge.ctrlActive = $0 }
                 ),
-                onKey: { connection.bridge.handleToolbar($0) }
+                onKey: { connection.bridge.handleToolbar($0) },
+                onHideKeyboard: { connection.bridge.hideKeyboard() }
             )
         }
         .sheet(isPresented: windowPickerShown) {

@@ -10,6 +10,7 @@ struct HostFormView: View {
     @State private var hostname = ""
     @State private var port = 22
     @State private var username = ""
+    @State private var group = ""
     @State private var tmuxSession = ""
     @State private var onConnectCommand = ""
 
@@ -26,6 +27,8 @@ struct HostFormView: View {
                         .keyboardType(.numberPad)
                     TextField("Username", text: $username)
                         .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Group (optional)", text: $group)
                         .autocorrectionDisabled()
                 }
                 Section {
@@ -55,6 +58,7 @@ struct HostFormView: View {
                 hostname = host.hostname
                 port = host.port
                 username = host.username
+                group = host.group ?? ""
                 tmuxSession = host.tmuxSession ?? ""
                 onConnectCommand = host.onConnectCommand ?? ""
             }
@@ -67,6 +71,9 @@ struct HostFormView: View {
         updated.hostname = hostname
         updated.port = port
         updated.username = username
+        updated.group = group.trimmingCharacters(in: .whitespaces).isEmpty
+            ? nil
+            : group.trimmingCharacters(in: .whitespaces)
         updated.tmuxSession = tmuxSession.isEmpty ? nil : tmuxSession
         updated.onConnectCommand = onConnectCommand.isEmpty ? nil : onConnectCommand
         if let index = store.hosts.firstIndex(where: { $0.id == updated.id }) {

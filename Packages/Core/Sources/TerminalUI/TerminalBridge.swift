@@ -17,6 +17,10 @@ public final class TerminalBridge: ObservableObject {
         view?.feed(byteArray: [UInt8](data)[...])
     }
 
+    public func hideKeyboard() {
+        _ = view?.resignFirstResponder()
+    }
+
     public func handleToolbar(_ action: ToolbarKey.Action) {
         if case .ctrlModifier = action {
             ctrlActive.toggle()

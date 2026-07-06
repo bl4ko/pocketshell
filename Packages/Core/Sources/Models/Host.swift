@@ -9,6 +9,7 @@ public struct HostConfig: Identifiable, Codable, Hashable, Sendable {
     public var keyTag: String
     public var tmuxSession: String?
     public var onConnectCommand: String?
+    public var group: String?
 
     public init(
         id: UUID = UUID(),
@@ -18,7 +19,8 @@ public struct HostConfig: Identifiable, Codable, Hashable, Sendable {
         username: String,
         keyTag: String,
         tmuxSession: String? = nil,
-        onConnectCommand: String? = nil
+        onConnectCommand: String? = nil,
+        group: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -28,5 +30,6 @@ public struct HostConfig: Identifiable, Codable, Hashable, Sendable {
         self.keyTag = keyTag
         self.tmuxSession = tmuxSession
         self.onConnectCommand = onConnectCommand
+        self.group = group
     }
 }

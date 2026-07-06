@@ -74,6 +74,16 @@ final class ConnectionController: ObservableObject {
         bridge.processOutgoing(Data(text.utf8))
     }
 
+    var isTmuxAttached: Bool {
+        attachCommand?.contains("attach-session") ?? false
+    }
+
+    func attachFromShell(session: String, windowIndex: Int? = nil) {
+        let command = Tmux.attachCommand(session: session, windowIndex: windowIndex)
+        attachCommand = command
+        sendText(command + "\n")
+    }
+
     func tmuxSessions() async -> [TmuxSession] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""

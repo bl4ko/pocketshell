@@ -15,6 +15,19 @@ import Testing
     #expect(decoded == host)
 }
 
+@Test func hostConfigGroupRoundTripsAndDefaultsNil() throws {
+    var host = HostConfig(name: "m", hostname: "h", username: "u", keyTag: "k")
+    #expect(host.group == nil)
+    host.group = "homelab"
+    let data = try JSONEncoder().encode(host)
+    let decoded = try JSONDecoder().decode(HostConfig.self, from: data)
+    #expect(decoded.group == "homelab")
+
+    let legacy = Data(#"{"id":"00000000-0000-0000-0000-000000000001","name":"a","hostname":"b","port":22,"username":"c","keyTag":"d"}"#.utf8)
+    let old = try JSONDecoder().decode(HostConfig.self, from: legacy)
+    #expect(old.group == nil)
+}
+
 @Test func snippetCodableRoundTrip() throws {
     let snippet = Snippet(name: "launch all", command: "~/.claude/scripts/launch-all.sh", runMode: .execAndShowOutput)
     let data = try JSONEncoder().encode(snippet)

@@ -35,14 +35,7 @@ struct HostsListView: View {
             }
             .navigationTitle("pocketshell")
             .navigationDestination(for: HostConfig.self) { host in
-                TerminalScreen(
-                    host: host,
-                    controller: ConnectionController(
-                        host: host,
-                        key: (try? store.deviceKey()) ?? .software(.init()),
-                        knownHosts: store.knownHosts
-                    )
-                )
+                HostTabsScreen(host: host)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

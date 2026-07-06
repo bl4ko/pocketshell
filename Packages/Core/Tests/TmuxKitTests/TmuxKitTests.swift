@@ -57,3 +57,23 @@ import Testing
     #expect(Tmux.listWindowsCommand(session: "a'b")
         == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'a'\\''b' -F '#{window_index}|#{window_name}|#{window_active}'")
 }
+
+@Test func promptKeysWrapCommandWithPrefixAndEnter() {
+    #expect(Tmux.promptKeys("select-window -t 3") == "\u{02}:select-window -t 3\r")
+}
+
+@Test func switchClientCommandQuotesSession() {
+    #expect(Tmux.switchClientCommand(session: "agents") == "switch-client -t 'agents'")
+}
+
+@Test func selectWindowInlineCommand() {
+    #expect(Tmux.selectWindowCommand(index: 3) == "select-window -t 3")
+}
+
+@Test func nextPaneKeysIsPrefixO() {
+    #expect(Tmux.nextPaneKeys == "\u{02}o")
+}
+
+@Test func zoomPaneKeysIsPrefixZ() {
+    #expect(Tmux.zoomPaneKeys == "\u{02}z")
+}

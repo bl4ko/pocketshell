@@ -74,6 +74,18 @@ final class ConnectionController: ObservableObject {
         bridge.processOutgoing(Data(text.utf8))
     }
 
+    func tmuxSessions() async -> [TmuxSession] {
+        guard let connection else { return [] }
+        let output = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
+        return Tmux.parseSessions(output)
+    }
+
+    func tmuxWindows(session: String) async -> [TmuxWindow] {
+        guard let connection else { return [] }
+        let output = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
+        return Tmux.parseWindows(output)
+    }
+
     func appForegrounded() {
         if machine.handle(.appForegrounded) == .connect {
             retryTask?.cancel()

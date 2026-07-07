@@ -100,6 +100,22 @@ final class ConnectionController: ObservableObject {
         return Tmux.parseWindows(output)
     }
 
+    func dashboardItems(session: String) async -> [WindowDashboardItem] {
+        guard let connection else { return [] }
+        let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
+        let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session, lines: 8))) ?? ""
+        let captures = Tmux.parsePaneCaptures(capturesOutput)
+        return Tmux.parseWindows(windowsOutput).map { window in
+            let text = captures[window.index] ?? ""
+            let preview = text.split(separator: "\n").suffix(3).joined(separator: "\n")
+            return WindowDashboardItem(
+                window: window,
+                preview: preview,
+                status: AgentStatus.classify(text)
+            )
+        }
+    }
+
     func appForegrounded() {
         if machine.handle(.appForegrounded) == .connect {
             retryTask?.cancel()

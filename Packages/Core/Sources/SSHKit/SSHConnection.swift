@@ -89,6 +89,7 @@ public actor SSHConnection {
             }
         }
 
+        try await sendUTF8Locale(childChannel)
         let exec = SSHChannelRequestEvent.ExecRequest(command: command, wantReply: true)
         try await childChannel.triggerUserOutboundEvent(exec)
         return try await collector.result()
@@ -114,6 +115,7 @@ public actor SSHConnection {
             terminalPixelHeight: 0,
             terminalModes: SSHTerminalModes([:])
         )
+        try await sendUTF8Locale(childChannel)
         try await childChannel.triggerUserOutboundEvent(pty)
         if let command {
             try await childChannel.triggerUserOutboundEvent(
@@ -143,6 +145,11 @@ public actor SSHConnection {
                 try? await childChannel.close()
             }
         )
+    }
+
+    private func sendUTF8Locale(_ childChannel: Channel) async throws {
+        let env = SSHChannelRequestEvent.EnvironmentRequest(wantReply: false, name: "LANG", value: "en_US.UTF-8")
+        try await childChannel.triggerUserOutboundEvent(env)
     }
 
     func createChildChannel(

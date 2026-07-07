@@ -117,7 +117,7 @@ final class ConnectionController: ObservableObject {
         let captures = Tmux.parsePaneCaptures(capturesOutput)
         return Tmux.parseWindows(windowsOutput).map { window in
             let text = captures[window.index] ?? ""
-            let preview = text.split(separator: "\n").suffix(3).joined(separator: "\n")
+            let preview = Tmux.previewLines(text, count: 3)
             return WindowDashboardItem(
                 window: window,
                 preview: preview,

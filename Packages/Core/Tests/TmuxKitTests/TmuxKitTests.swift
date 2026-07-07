@@ -45,12 +45,12 @@ import Testing
 
 @Test func attachCommandWithWindow() {
     #expect(Tmux.attachCommand(session: "claude", windowIndex: 3)
-        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux attach-session -t 'claude' \\; select-window -t 3")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u attach-session -t 'claude' \\; select-window -t 3")
 }
 
 @Test func attachCommandWithoutWindow() {
     #expect(Tmux.attachCommand(session: "claude", windowIndex: nil)
-        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux attach-session -t 'claude'")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u attach-session -t 'claude'")
 }
 
 @Test func sessionNameWithSingleQuoteIsEscaped() {

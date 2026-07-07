@@ -34,7 +34,7 @@ public enum AgentStatus: Equatable, Sendable {
     case idle
 
     public static func classify(_ paneText: String) -> AgentStatus {
-        if paneText.contains("esc to interrupt") {
+        if paneText.contains("esc to interrupt") || paneText.contains("Compacting conversation") {
             return .busy
         }
         if paneText.contains("Do you want") {
@@ -56,7 +56,7 @@ public enum Tmux {
     }
 
     public static func attachCommand(session: String, windowIndex: Int?) -> String {
-        let attach = "\(tmux) attach-session -t \(shellQuote(session))"
+        let attach = "\(tmux) -u attach-session -t \(shellQuote(session))"
         guard let windowIndex else { return attach }
         return "\(attach) \\; select-window -t \(windowIndex)"
     }
@@ -97,6 +97,13 @@ public enum Tmux {
         }
         flush()
         return result
+    }
+
+    public static func previewLines(_ text: String, count: Int) -> String {
+        text.split(separator: "\n")
+            .filter { line in line.contains { $0.isLetter || $0.isNumber } }
+            .suffix(count)
+            .joined(separator: "\n")
     }
 
     public static func parseWindows(_ output: String) -> [TmuxWindow] {

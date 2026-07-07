@@ -22,6 +22,34 @@ import Testing
     #expect(AgentStatus.classify("") == .idle)
 }
 
+@Test func classifyBusyWhileCompacting() {
+    #expect(AgentStatus.classify("· Compacting conversation… (21s)") == .busy)
+}
+
+@Test func previewLinesDropsDecorationOnlyLines() {
+    let pane = """
+    ⏺ Done refactoring auth module
+    ╭──────────────────────────╮
+    │ >                        │
+    ╰──────────────────────────╯
+    """
+    #expect(Tmux.previewLines(pane, count: 3) == "⏺ Done refactoring auth module")
+}
+
+@Test func previewLinesDropsDashAndUnderscoreLines() {
+    let pane = "result: 4 tests passed\n----------\n____________\n  ? for shortcuts"
+    #expect(Tmux.previewLines(pane, count: 3) == "result: 4 tests passed\n  ? for shortcuts")
+}
+
+@Test func previewLinesKeepsLastCountMeaningfulLines() {
+    let pane = "a1\nb2\nc3\nd4\ne5"
+    #expect(Tmux.previewLines(pane, count: 3) == "c3\nd4\ne5")
+}
+
+@Test func previewLinesEmptyWhenNothingMeaningful() {
+    #expect(Tmux.previewLines("───\n\n│ │", count: 3) == "")
+}
+
 @Test func busyWinsOverWaiting() {
     let pane = "Do you want tea?\nworking… (esc to interrupt)"
     #expect(AgentStatus.classify(pane) == .busy)

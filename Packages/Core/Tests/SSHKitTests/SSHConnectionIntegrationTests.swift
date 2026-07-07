@@ -47,6 +47,7 @@ final class TestSSHD {
         PasswordAuthentication no
         KbdInteractiveAuthentication no
         LogLevel QUIET
+        AcceptEnv LANG LC_*
         Subsystem sftp /usr/libexec/sftp-server
         """
         let configURL = dir.appendingPathComponent("sshd_config")
@@ -230,6 +231,34 @@ private func makeConnection(_ sshd: TestSSHD, knownHostsFile: URL? = nil) -> SSH
         try await connection.connect()
         let output = try await connection.exec("echo ed-ok")
         #expect(output.contains("ed-ok"))
+        await connection.disconnect()
+    }
+
+    @Test func execChannelGetsUTF8Locale() async throws {
+        let sshd = try TestSSHD()
+        defer { sshd.stop() }
+        let connection = makeConnection(sshd)
+        try await connection.connect()
+        let output = try await connection.exec("printenv LANG")
+        #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == "en_US.UTF-8")
+        await connection.disconnect()
+    }
+
+    @Test func shellChannelGetsUTF8Locale() async throws {
+        let sshd = try TestSSHD()
+        defer { sshd.stop() }
+        let connection = makeConnection(sshd)
+        try await connection.connect()
+        let shell = try await connection.openShell(cols: 80, rows: 24)
+        try await shell.write(Data("printenv LANG\n".utf8))
+        var collected = Data()
+        let deadline = Date().addingTimeInterval(5)
+        for await chunk in shell.output {
+            collected.append(chunk)
+            if String(data: collected, encoding: .utf8)?.contains("en_US.UTF-8") == true { break }
+            if Date() > deadline { break }
+        }
+        #expect(String(data: collected, encoding: .utf8)?.contains("en_US.UTF-8") == true)
         await connection.disconnect()
     }
 

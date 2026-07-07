@@ -87,6 +87,7 @@ struct HostsListView: View {
                     )
                 }
             }
+            .themedScreen()
         }
     }
 

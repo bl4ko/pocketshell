@@ -55,6 +55,7 @@ struct VNCHostFormView: View {
                         .disabled(name.isEmpty || hostname.isEmpty)
                 }
             }
+            .themedScreen()
         }
     }
 

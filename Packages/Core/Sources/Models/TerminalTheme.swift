@@ -30,6 +30,8 @@ public struct TerminalTheme: Equatable, Sendable, Identifiable {
 
     public var id: String { name }
 
+    public var accentHex: String { ansi[4] }
+
     public static func named(_ name: String) -> TerminalTheme {
         all.first { $0.name == name } ?? defaultTheme
     }

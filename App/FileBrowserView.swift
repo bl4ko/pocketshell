@@ -48,6 +48,7 @@ struct FileBrowserView: View {
                 Task { await sftp?.close() }
             }
             .quickLookPreview($previewURL)
+            .themedScreen()
         }
     }
 

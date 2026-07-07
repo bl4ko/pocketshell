@@ -8,6 +8,7 @@ enum AppSettings {
 }
 
 struct SettingsView: View {
+    @EnvironmentObject var monitor: SessionMonitor
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
     @AppStorage(AppSettings.appLockKey) private var appLock = false
     @AppStorage(AppSettings.agentNotifyKey) private var agentNotify = false
@@ -26,6 +27,9 @@ struct SettingsView: View {
                     .onChange(of: agentNotify) { _, on in
                         if on {
                             SessionMonitor.requestAuthorization()
+                            monitor.startPolling()
+                        } else {
+                            monitor.stopPolling()
                         }
                     }
             } header: {
@@ -54,6 +58,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .themedScreen()
     }
 
     private func themePreview(_ theme: TerminalTheme) -> some View {

@@ -56,6 +56,7 @@ struct KeysView: View {
         .sheet(isPresented: $importing) {
             ImportKeyView()
         }
+        .themedScreen()
     }
 
     private func loadKey() {
@@ -118,6 +119,7 @@ struct ImportKeyView: View {
                         .disabled(name.isEmpty || keyText.isEmpty)
                 }
             }
+            .themedScreen()
         }
     }
 

@@ -59,6 +59,7 @@ struct SnippetsView: View {
                 )
             }
         }
+        .themedScreen()
     }
 }
 
@@ -108,6 +109,7 @@ struct SnippetFormView: View {
                 runMode = snippet.runMode
                 hostID = snippet.hostID
             }
+            .themedScreen()
         }
     }
 

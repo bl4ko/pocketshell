@@ -49,6 +49,7 @@ struct PortForwardSheet: View {
             .onDisappear {
                 stop()
             }
+            .themedScreen()
         }
         .presentationDetents([.medium])
     }

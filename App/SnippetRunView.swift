@@ -39,6 +39,7 @@ struct SnippetRunView: View {
                 }
             }
             .task { await run() }
+            .themedScreen()
         }
     }
 

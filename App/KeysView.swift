@@ -78,6 +78,7 @@ struct ImportKeyView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var keyText = ""
+    @State private var passphrase = ""
     @State private var error: String?
 
     var body: some View {
@@ -96,7 +97,10 @@ struct ImportKeyView: View {
                 } header: {
                     Text("OpenSSH private key")
                 } footer: {
-                    Text("Unencrypted ed25519 or ECDSA P-256 key (-----BEGIN OPENSSH PRIVATE KEY-----). Passphrase-protected keys: remove the passphrase first with ssh-keygen -p -N ''. RSA keys are not supported.")
+                    Text("ed25519 or ECDSA P-256 key (-----BEGIN OPENSSH PRIVATE KEY-----). RSA keys are not supported.")
+                }
+                Section {
+                    SecureField("Passphrase (if protected)", text: $passphrase)
                 }
                 if let error {
                     Section {
@@ -119,12 +123,18 @@ struct ImportKeyView: View {
 
     private func importKey() {
         do {
-            _ = try store.importKey(name: name, privateKeyText: keyText)
+            _ = try store.importKey(
+                name: name,
+                privateKeyText: keyText,
+                passphrase: passphrase.isEmpty ? nil : passphrase
+            )
             dismiss()
         } catch let parseError as OpenSSHPrivateKey.ParseError {
             error = switch parseError {
             case .notOpenSSHKey: "not an OpenSSH private key (needs BEGIN OPENSSH PRIVATE KEY)"
-            case .encrypted: "key is passphrase-protected — export it unencrypted (ssh-keygen -p -N '')"
+            case .encrypted: "key is passphrase-protected — enter the passphrase below"
+            case .wrongPassphrase: "wrong passphrase"
+            case .unsupportedCipher(let cipher): "unsupported cipher \(cipher)"
             case .unsupportedKeyType(let type): "unsupported key type \(type) — use ed25519 or ECDSA P-256"
             case .malformed: "key data is malformed"
             }

@@ -75,8 +75,8 @@ final class AppStore: ObservableObject {
         return try deviceKey()
     }
 
-    func importKey(name: String, privateKeyText: String) throws -> ImportedKey {
-        let material = try OpenSSHPrivateKey.parse(privateKeyText)
+    func importKey(name: String, privateKeyText: String, passphrase: String? = nil) throws -> ImportedKey {
+        let material = try OpenSSHPrivateKey.parse(privateKeyText, passphrase: passphrase)
         let tag = "imported-\(UUID().uuidString)"
         try keyStore.saveImported(tag: tag, key: material)
         let key = ImportedKey(

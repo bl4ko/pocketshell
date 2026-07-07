@@ -105,6 +105,11 @@ final class ConnectionController: ObservableObject {
         return try await connection.openSFTP()
     }
 
+    func forwardPort(remoteHost: String, remotePort: Int) async throws -> PortForwardHandle {
+        guard let connection else { throw SSHError.notConnected }
+        return try await connection.forwardPort(localPort: 0, remoteHost: remoteHost, remotePort: remotePort)
+    }
+
     func dashboardItems(session: String) async -> [WindowDashboardItem] {
         guard let connection else { return [] }
         let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""

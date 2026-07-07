@@ -37,6 +37,10 @@ public actor SSHConnection {
         channel?.isActive ?? false
     }
 
+    var activeChannel: Channel? {
+        channel
+    }
+
     public func connect() async throws {
         let userAuth = KeyAuthDelegate(username: host.username, key: key)
         let serverAuth = TOFUServerAuthDelegate(host: host.hostname, port: host.port, store: knownHosts)

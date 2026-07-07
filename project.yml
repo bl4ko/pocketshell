@@ -31,6 +31,8 @@ targets:
       path: App/Info.plist
       properties:
         UILaunchScreen: {}
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: Connects to SSH hosts on your local network.
         NSFaceIDUsageDescription: Unlock pocketshell.
         UISupportedInterfaceOrientations:

@@ -14,6 +14,7 @@ struct HostTabsScreen: View {
     @State private var showSnippets = false
     @State private var showTmuxJump = false
     @State private var showFiles = false
+    @State private var showForward = false
     @State private var addingSnippet = false
     @State private var editingSnippet: Snippet?
 
@@ -43,10 +44,19 @@ struct HostTabsScreen: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showFiles = true
+                Menu {
+                    Button {
+                        showFiles = true
+                    } label: {
+                        Label("Files", systemImage: "folder")
+                    }
+                    Button {
+                        showForward = true
+                    } label: {
+                        Label("Port forward", systemImage: "network")
+                    }
                 } label: {
-                    Image(systemName: "folder")
+                    Image(systemName: "ellipsis.circle")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -72,6 +82,9 @@ struct HostTabsScreen: View {
         }
         .sheet(isPresented: $showFiles) {
             FileBrowserView(controller: activeController)
+        }
+        .sheet(isPresented: $showForward) {
+            PortForwardSheet(controller: activeController)
         }
         .onAppear {
             if tabs.isEmpty {

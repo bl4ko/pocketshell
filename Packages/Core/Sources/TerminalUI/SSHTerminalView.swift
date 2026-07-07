@@ -1,21 +1,57 @@
 #if os(iOS)
+import Models
 import SwiftTerm
 import SwiftUI
 import UIKit
 
+extension UIColor {
+    convenience init(_ rgb: RGBColor) {
+        self.init(
+            red: CGFloat(rgb.red) / 255,
+            green: CGFloat(rgb.green) / 255,
+            blue: CGFloat(rgb.blue) / 255,
+            alpha: 1
+        )
+    }
+}
+
 public struct SSHTerminalView: UIViewRepresentable {
     private let bridge: TerminalBridge
+    private let theme: TerminalTheme
 
-    public init(bridge: TerminalBridge) {
+    public init(bridge: TerminalBridge, theme: TerminalTheme = .defaultTheme) {
         self.bridge = bridge
+        self.theme = theme
+    }
+
+    static func apply(_ theme: TerminalTheme, to view: TerminalView) {
+        if let background = RGBColor(hex: theme.background) {
+            view.backgroundColor = UIColor(background)
+            view.nativeBackgroundColor = UIColor(background)
+        }
+        if let foreground = RGBColor(hex: theme.foreground) {
+            view.nativeForegroundColor = UIColor(foreground)
+        }
+        if let cursor = RGBColor(hex: theme.cursor) {
+            view.caretColor = UIColor(cursor)
+        }
+        let colors = theme.ansi.compactMap { RGBColor(hex: $0) }.map {
+            SwiftTerm.Color(
+                red: UInt16($0.red) * 257,
+                green: UInt16($0.green) * 257,
+                blue: UInt16($0.blue) * 257
+            )
+        }
+        if colors.count == 16 {
+            view.installColors(colors)
+        }
     }
 
     public func makeUIView(context: Context) -> TerminalView {
         let view = TerminalView()
         view.terminalDelegate = context.coordinator
-        view.backgroundColor = .black
-        view.nativeBackgroundColor = .black
-        view.nativeForegroundColor = .white
+        Self.apply(theme, to: view)
+        context.coordinator.appliedTheme = theme.name
         view.allowMouseReporting = false
         view.inputAccessoryView = nil
         let pan = UIPanGestureRecognizer(
@@ -39,7 +75,12 @@ public struct SSHTerminalView: UIViewRepresentable {
         return view
     }
 
-    public func updateUIView(_ uiView: TerminalView, context: Context) {}
+    public func updateUIView(_ uiView: TerminalView, context: Context) {
+        if context.coordinator.appliedTheme != theme.name {
+            Self.apply(theme, to: uiView)
+            context.coordinator.appliedTheme = theme.name
+        }
+    }
 
     public func makeCoordinator() -> Coordinator {
         Coordinator(bridge: bridge)
@@ -58,6 +99,7 @@ public struct SSHTerminalView: UIViewRepresentable {
         private let bridge: TerminalBridge
         private var scrollTracker = PanScrollTracker(step: 1)
         var gestureDelegate: SimultaneousGestureDelegate?
+        var appliedTheme: String?
 
         init(bridge: TerminalBridge) {
             self.bridge = bridge

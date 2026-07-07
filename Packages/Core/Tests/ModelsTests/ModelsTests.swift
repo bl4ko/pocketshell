@@ -62,3 +62,10 @@ import Testing
     #expect(actions.contains(.sequence("/")))
     #expect(actions.contains(.sequence("-")))
 }
+
+@Test func importedKeyCodableRoundTrip() throws {
+    let key = ImportedKey(name: "bitwarden-ed25519", tag: "imported-abc", publicKeyLine: "ssh-ed25519 AAAA test")
+    let data = try JSONEncoder().encode(key)
+    let decoded = try JSONDecoder().decode(ImportedKey.self, from: data)
+    #expect(decoded == key)
+}

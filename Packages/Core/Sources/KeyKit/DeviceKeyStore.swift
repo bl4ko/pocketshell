@@ -5,23 +5,22 @@ import Security
 public enum DeviceKeyMaterial: Sendable {
     case enclave(SecureEnclave.P256.Signing.PrivateKey)
     case software(P256.Signing.PrivateKey)
+    case ed25519(Curve25519.Signing.PrivateKey)
 
-    public var publicKey: P256.Signing.PublicKey {
+    public var publicKeyRawRepresentation: Data {
         switch self {
-        case .enclave(let key): key.publicKey
-        case .software(let key): key.publicKey
-        }
-    }
-
-    public func signature(for data: Data) throws -> P256.Signing.ECDSASignature {
-        switch self {
-        case .enclave(let key): try key.signature(for: data)
-        case .software(let key): try key.signature(for: data)
+        case .enclave(let key): key.publicKey.rawRepresentation
+        case .software(let key): key.publicKey.rawRepresentation
+        case .ed25519(let key): key.publicKey.rawRepresentation
         }
     }
 
     public func openSSHPublicKeyLine(comment: String) -> String {
-        OpenSSHPublicKey.line(for: publicKey, comment: comment)
+        switch self {
+        case .enclave(let key): OpenSSHPublicKey.line(for: key.publicKey, comment: comment)
+        case .software(let key): OpenSSHPublicKey.line(for: key.publicKey, comment: comment)
+        case .ed25519(let key): OpenSSHPublicKey.line(forEd25519: key.publicKey, comment: comment)
+        }
     }
 }
 
@@ -76,9 +75,22 @@ public struct DeviceKeyStore: Sendable {
             return .enclave(try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: body))
         case 0x02:
             return .software(try P256.Signing.PrivateKey(rawRepresentation: body))
+        case 0x03:
+            return .ed25519(try Curve25519.Signing.PrivateKey(rawRepresentation: body))
         default:
             throw StoreError.corruptStoredKey
         }
+    }
+
+    public func saveImported(tag: String, key: DeviceKeyMaterial) throws {
+        let stored: Data
+        switch key {
+        case .enclave(let key): stored = Data([0x01]) + key.dataRepresentation
+        case .software(let key): stored = Data([0x02]) + key.rawRepresentation
+        case .ed25519(let key): stored = Data([0x03]) + key.rawRepresentation
+        }
+        try delete(tag: tag)
+        try save(tag: tag, data: stored)
     }
 
     public func delete(tag: String) throws {

@@ -39,3 +39,10 @@ import Testing
     var tracker = PanScrollTracker(step: 0)
     #expect(tracker.lines(for: 3) == 3)
 }
+
+@Test func fontZoomScalesAndClamps() {
+    #expect(FontZoom.size(base: 13, scale: 1.0) == 13)
+    #expect(FontZoom.size(base: 13, scale: 2.0) == 26)
+    #expect(FontZoom.size(base: 13, scale: 0.1) == FontZoom.range.lowerBound)
+    #expect(FontZoom.size(base: 13, scale: 10) == FontZoom.range.upperBound)
+}

@@ -26,6 +26,15 @@ public struct SSHTerminalView: UIViewRepresentable {
         pan.delegate = gestureDelegate
         context.coordinator.gestureDelegate = gestureDelegate
         view.addGestureRecognizer(pan)
+        let pinch = UIPinchGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handlePinch(_:))
+        )
+        view.addGestureRecognizer(pinch)
+        let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
+        if FontZoom.range.contains(saved) {
+            view.font = UIFont.monospacedSystemFont(ofSize: CGFloat(saved), weight: .regular)
+        }
         bridge.view = view
         return view
     }
@@ -54,9 +63,35 @@ public struct SSHTerminalView: UIViewRepresentable {
             self.bridge = bridge
         }
 
+        static let fontSizeKey = "pocketshell.terminalFontSize"
+        private var pinchBaseSize: Double = 0
+
         @objc func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
             MainActor.assumeIsolated {
                 handleScrollPanOnMain(gesture)
+            }
+        }
+
+        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            MainActor.assumeIsolated {
+                handlePinchOnMain(gesture)
+            }
+        }
+
+        @MainActor private func handlePinchOnMain(_ gesture: UIPinchGestureRecognizer) {
+            guard let view = gesture.view as? TerminalView else { return }
+            switch gesture.state {
+            case .began:
+                pinchBaseSize = Double(view.font.pointSize)
+            case .changed:
+                let size = FontZoom.size(base: pinchBaseSize, scale: Double(gesture.scale))
+                if abs(size - Double(view.font.pointSize)) >= 0.5 {
+                    view.font = UIFont.monospacedSystemFont(ofSize: CGFloat(size.rounded()), weight: .regular)
+                }
+            case .ended:
+                UserDefaults.standard.set(Double(view.font.pointSize), forKey: Self.fontSizeKey)
+            default:
+                break
             }
         }
 

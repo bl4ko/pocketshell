@@ -11,6 +11,7 @@ struct HostFormView: View {
     @State private var port = 22
     @State private var username = ""
     @State private var group = ""
+    @State private var keyTag = AppStore.deviceKeyTag
     @State private var tmuxSession = ""
     @State private var onConnectCommand = ""
 
@@ -30,6 +31,12 @@ struct HostFormView: View {
                         .autocorrectionDisabled()
                     TextField("Group (optional)", text: $group)
                         .autocorrectionDisabled()
+                    Picker("Key", selection: $keyTag) {
+                        Text("Device key").tag(AppStore.deviceKeyTag)
+                        ForEach(store.importedKeys) { key in
+                            Text(key.name).tag(key.tag)
+                        }
+                    }
                 }
                 Section {
                     TextField("tmux session (optional)", text: $tmuxSession)
@@ -59,6 +66,7 @@ struct HostFormView: View {
                 port = host.port
                 username = host.username
                 group = host.group ?? ""
+                keyTag = host.keyTag
                 tmuxSession = host.tmuxSession ?? ""
                 onConnectCommand = host.onConnectCommand ?? ""
             }
@@ -74,6 +82,7 @@ struct HostFormView: View {
         updated.group = group.trimmingCharacters(in: .whitespaces).isEmpty
             ? nil
             : group.trimmingCharacters(in: .whitespaces)
+        updated.keyTag = keyTag
         updated.tmuxSession = tmuxSession.isEmpty ? nil : tmuxSession
         updated.onConnectCommand = onConnectCommand.isEmpty ? nil : onConnectCommand
         if let index = store.hosts.firstIndex(where: { $0.id == updated.id }) {

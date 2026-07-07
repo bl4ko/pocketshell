@@ -77,3 +77,16 @@ import Testing
 @Test func zoomPaneKeysIsPrefixZ() {
     #expect(Tmux.zoomPaneKeys == "\u{02}z")
 }
+
+@Test func windowCycleKeysUsePrefix() {
+    #expect(Tmux.nextWindowKeys == "\u{02}n")
+    #expect(Tmux.previousWindowKeys == "\u{02}p")
+}
+
+@Test func parseSessionsAcceptsMultipleAttachedClients() {
+    let sessions = Tmux.parseSessions("agents|4|2\nidle|1|0")
+    #expect(sessions == [
+        TmuxSession(name: "agents", windows: 4, attached: true),
+        TmuxSession(name: "idle", windows: 1, attached: false),
+    ])
+}

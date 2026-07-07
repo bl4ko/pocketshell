@@ -13,6 +13,7 @@ struct PocketshellApp: App {
         let monitor = SessionMonitor(store: store)
         _store = StateObject(wrappedValue: store)
         _monitor = StateObject(wrappedValue: monitor)
+        WatchRelay.shared.activate(store: store)
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: SessionMonitor.refreshTaskID,
             using: nil

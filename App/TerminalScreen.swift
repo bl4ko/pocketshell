@@ -124,6 +124,7 @@ struct WindowDashboardSheet: View {
             .navigationTitle("Sessions")
             .navigationBarTitleDisplayMode(.inline)
             .presentationDetents([.medium, .large])
+            .themedScreen()
             .task {
                 await refresh()
             }

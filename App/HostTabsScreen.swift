@@ -96,6 +96,7 @@ struct HostTabsScreen: View {
                 Task { await tab.controller.stop() }
             }
         }
+        .themedScreen()
     }
 
     private var activeController: ConnectionController? {
@@ -213,6 +214,7 @@ struct HostTabsScreen: View {
             .sheet(item: $editingSnippet) { snippet in
                 SnippetFormView(snippet: snippet)
             }
+            .themedScreen()
         }
         .presentationDetents([.medium, .large])
     }
@@ -305,6 +307,7 @@ struct TmuxJumpSheet: View {
             .task {
                 await load()
             }
+            .themedScreen()
         }
     }
 

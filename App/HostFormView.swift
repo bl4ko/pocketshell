@@ -70,6 +70,7 @@ struct HostFormView: View {
                 tmuxSession = host.tmuxSession ?? ""
                 onConnectCommand = host.onConnectCommand ?? ""
             }
+            .themedScreen()
         }
     }
 

@@ -34,6 +34,11 @@ import Testing
     #expect(Set(names).count == names.count)
 }
 
+@Test func accentHexIsAnsiBlue() {
+    #expect(TerminalTheme.defaultTheme.accentHex == "2472c8")
+    #expect(TerminalTheme.named("Dracula").accentHex == "bd93f9")
+}
+
 @Test func namedLookupFallsBackToDefault() {
     #expect(TerminalTheme.named("Dracula").name == "Dracula")
     #expect(TerminalTheme.named("nonexistent") == TerminalTheme.defaultTheme)

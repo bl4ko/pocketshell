@@ -31,6 +31,7 @@ final class ConnectionController: ObservableObject {
     private var monitor: NWPathMonitor?
     private var retryTask: Task<Void, Never>?
     private var attachCommand: String?
+    private var shellGeneration = 0
     private var stopped = false
 
     init(host: HostConfig, key: DeviceKeyMaterial, knownHosts: KnownHostsStore) {
@@ -78,10 +79,13 @@ final class ConnectionController: ObservableObject {
         attachCommand?.contains("attach-session") ?? false
     }
 
-    func attachFromShell(session: String, windowIndex: Int? = nil) {
-        let command = Tmux.attachCommand(session: session, windowIndex: windowIndex)
-        attachCommand = command
-        sendText(command + "\n")
+    func jump(toSession session: String, windowIndex: Int? = nil) async {
+        attachCommand = Tmux.attachCommand(session: session, windowIndex: windowIndex)
+        shellGeneration += 1
+        let old = shell
+        shell = nil
+        await old?.close()
+        await openShellAndPump()
     }
 
     func tmuxSessions() async -> [TmuxSession] {
@@ -190,19 +194,21 @@ final class ConnectionController: ObservableObject {
             _ = machine.handle(.established)
             lastErrorMessage = nil
             phase = .attached
+            shellGeneration += 1
+            let generation = shellGeneration
             Task { [weak self] in
                 for await chunk in shell.output {
                     self?.bridge.feed(chunk)
                 }
-                await self?.handleStreamEnded()
+                await self?.handleStreamEnded(generation: generation)
             }
         } catch {
             handleConnectFailure("\(error)")
         }
     }
 
-    private func handleStreamEnded() async {
-        guard !stopped else { return }
+    private func handleStreamEnded(generation: Int) async {
+        guard !stopped, generation == shellGeneration else { return }
         applyAction(machine.handle(.connectionLost))
     }
 

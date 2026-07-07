@@ -74,18 +74,6 @@ public enum Tmux {
     public static let nextWindowKeys = "\u{02}n"
     public static let previousWindowKeys = "\u{02}p"
 
-    public static func promptKeys(_ command: String) -> String {
-        "\u{02}:\(command)\r"
-    }
-
-    public static func switchClientCommand(session: String) -> String {
-        "switch-client -t \(shellQuote(session))"
-    }
-
-    public static func selectWindowCommand(index: Int) -> String {
-        "select-window -t \(index)"
-    }
-
     static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }

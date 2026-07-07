@@ -237,9 +237,7 @@ struct TmuxJumpSheet: View {
                     } header: {
                         Text("Sessions")
                     } footer: {
-                        if !attached {
-                            Text("Not inside tmux — tapping attaches.")
-                        }
+                        Text("Tapping re-attaches this tab to the target.")
                     }
                 }
                 if !windows.isEmpty {
@@ -293,20 +291,15 @@ struct TmuxJumpSheet: View {
     }
 
     private func jump(toSession session: String) {
-        if attached {
-            controller?.sendText(Tmux.promptKeys(Tmux.switchClientCommand(session: session)))
-        } else {
-            controller?.attachFromShell(session: session)
-        }
+        let controller = controller
+        Task { await controller?.jump(toSession: session) }
         dismiss()
     }
 
     private func jump(toWindow index: Int) {
-        if attached {
-            controller?.sendText(Tmux.promptKeys(Tmux.selectWindowCommand(index: index)))
-        } else if let windowsSession {
-            controller?.attachFromShell(session: windowsSession, windowIndex: index)
-        }
+        guard let windowsSession else { return }
+        let controller = controller
+        Task { await controller?.jump(toSession: windowsSession, windowIndex: index) }
         dismiss()
     }
 

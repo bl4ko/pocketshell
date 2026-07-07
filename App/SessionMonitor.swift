@@ -63,6 +63,8 @@ final class SessionMonitor: ObservableObject {
                 ))
                 snapshots.append(.init(
                     host: host.name,
+                    session: session,
+                    index: window.index,
                     name: "\(window.index): \(window.name)",
                     status: status.label,
                     lastLine: text.split(separator: "\n").last.map(String.init) ?? ""
@@ -70,8 +72,10 @@ final class SessionMonitor: ObservableObject {
             }
         }
         let transitions = tracker.update(samples)
-        SnapshotStore.save(SessionSnapshot(windows: snapshots, updatedAt: Date()))
+        let snapshot = SessionSnapshot(windows: snapshots, updatedAt: Date())
+        SnapshotStore.save(snapshot)
         WidgetCenter.shared.reloadTimelines(ofKind: "pocketshell-sessions")
+        WatchRelay.shared.push(snapshot)
         for transition in transitions {
             notify(transition)
         }

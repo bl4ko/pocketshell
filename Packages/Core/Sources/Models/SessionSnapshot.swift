@@ -3,12 +3,16 @@ import Foundation
 public struct SessionSnapshot: Codable, Equatable, Sendable {
     public struct Window: Codable, Equatable, Sendable {
         public var host: String
+        public var session: String
+        public var index: Int
         public var name: String
         public var status: String
         public var lastLine: String
 
-        public init(host: String, name: String, status: String, lastLine: String) {
+        public init(host: String, session: String, index: Int, name: String, status: String, lastLine: String) {
             self.host = host
+            self.session = session
+            self.index = index
             self.name = name
             self.status = status
             self.lastLine = lastLine

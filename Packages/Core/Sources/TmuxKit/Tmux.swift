@@ -61,6 +61,13 @@ public enum Tmux {
         return "\(attach) \\; select-window -t \(windowIndex)"
     }
 
+    public static func sendKeysCommand(session: String, windowIndex: Int, text: String, pressEnter: Bool) -> String {
+        let target = "\(shellQuote(session)):\(windowIndex)"
+        let send = "\(tmux) send-keys -t \(target) -l \(shellQuote(text))"
+        guard pressEnter else { return send }
+        return "\(send) \\; send-keys -t \(target) Enter"
+    }
+
     public static func capturePanesCommand(session: String, lines: Int) -> String {
         let target = shellQuote(session)
         return "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w -S -\(lines); done"

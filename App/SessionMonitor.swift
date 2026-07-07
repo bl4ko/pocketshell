@@ -8,6 +8,18 @@ import TmuxKit
 import UserNotifications
 import WidgetKit
 
+final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Sendable {
+    static let shared = ForegroundNotificationDelegate()
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .list])
+    }
+}
+
 @MainActor
 final class SessionMonitor: ObservableObject {
     static let refreshTaskID = "com.bl4ko.pocketshell.refresh"
@@ -67,7 +79,7 @@ final class SessionMonitor: ObservableObject {
                     index: window.index,
                     name: "\(window.index): \(window.name)",
                     status: status.label,
-                    lastLine: text.split(separator: "\n").last.map(String.init) ?? ""
+                    lastLine: Tmux.previewLines(text, count: 1)
                 ))
             }
         }

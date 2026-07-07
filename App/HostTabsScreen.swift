@@ -203,7 +203,7 @@ struct HostTabsScreen: View {
 struct TmuxJumpSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var sessions: [TmuxSession] = []
-    @State private var windows: [TmuxWindow] = []
+    @State private var windows: [WindowDashboardItem] = []
     @State private var windowsSession: String?
     @State private var loaded = false
 
@@ -242,17 +242,11 @@ struct TmuxJumpSheet: View {
                 }
                 if !windows.isEmpty {
                     Section("Windows") {
-                        ForEach(windows) { window in
+                        ForEach(windows) { item in
                             Button {
-                                jump(toWindow: window.index)
+                                jump(toWindow: item.window.index)
                             } label: {
-                                HStack {
-                                    Text("\(window.index): \(window.name)")
-                                    if window.active {
-                                        Spacer()
-                                        Image(systemName: "eye").foregroundStyle(.secondary)
-                                    }
-                                }
+                                DashboardRow(item: item)
                             }
                         }
                     }
@@ -311,7 +305,7 @@ struct TmuxJumpSheet: View {
         sessions = await controller.tmuxSessions()
         let current = sessions.first { $0.attached } ?? sessions.first
         if let current {
-            windows = await controller.tmuxWindows(session: current.name)
+            windows = await controller.dashboardItems(session: current.name)
             windowsSession = current.name
         }
         loaded = true

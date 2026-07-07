@@ -28,6 +28,22 @@ public struct TmuxSession: Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
+public enum AgentStatus: Equatable, Sendable {
+    case busy
+    case waiting
+    case idle
+
+    public static func classify(_ paneText: String) -> AgentStatus {
+        if paneText.contains("esc to interrupt") {
+            return .busy
+        }
+        if paneText.contains("Do you want") {
+            return .waiting
+        }
+        return .idle
+    }
+}
+
 public enum Tmux {
     static let tmux = "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux"
 
@@ -43,6 +59,37 @@ public enum Tmux {
         let attach = "\(tmux) attach-session -t \(shellQuote(session))"
         guard let windowIndex else { return attach }
         return "\(attach) \\; select-window -t \(windowIndex)"
+    }
+
+    public static func capturePanesCommand(session: String, lines: Int) -> String {
+        let target = shellQuote(session)
+        return "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w -S -\(lines); done"
+    }
+
+    public static func parsePaneCaptures(_ output: String) -> [Int: String] {
+        var result: [Int: String] = [:]
+        var current: Int?
+        var lines: [String] = []
+        func flush() {
+            guard let index = current else { return }
+            var text = lines
+            while text.last?.isEmpty == true {
+                text.removeLast()
+            }
+            result[index] = text.joined(separator: "\n")
+        }
+        for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("@@pane:"), line.hasSuffix("@@"),
+               let index = Int(line.dropFirst(7).dropLast(2)) {
+                flush()
+                current = index
+                lines = []
+            } else if current != nil {
+                lines.append(String(line))
+            }
+        }
+        flush()
+        return result
     }
 
     public static func parseWindows(_ output: String) -> [TmuxWindow] {

@@ -87,20 +87,33 @@ struct TerminalScreen: View {
     }
 
     private var windowPicker: some View {
+        WindowDashboardSheet(connection: connection, host: host)
+    }
+}
+
+struct WindowDashboardSheet: View {
+    @ObservedObject var connection: ConnectionController
+    @State private var items: [WindowDashboardItem] = []
+
+    let host: HostConfig
+
+    var body: some View {
         NavigationStack {
             List {
-                if case .pickingWindow(let windows) = connection.phase {
+                if items.isEmpty, case .pickingWindow(let windows) = connection.phase {
                     ForEach(windows) { window in
                         Button {
                             Task { await connection.selectWindow(window) }
                         } label: {
-                            HStack {
-                                Text("\(window.index): \(window.name)")
-                                if window.active {
-                                    Spacer()
-                                    Image(systemName: "eye").foregroundStyle(.secondary)
-                                }
-                            }
+                            Text("\(window.index): \(window.name)")
+                        }
+                    }
+                } else {
+                    ForEach(items) { item in
+                        Button {
+                            Task { await connection.selectWindow(item.window) }
+                        } label: {
+                            DashboardRow(item: item)
                         }
                     }
                 }
@@ -108,8 +121,20 @@ struct TerminalScreen: View {
                     Task { await connection.openPlainShell() }
                 }
             }
-            .navigationTitle("tmux windows")
-            .presentationDetents([.medium])
+            .navigationTitle("Sessions")
+            .navigationBarTitleDisplayMode(.inline)
+            .presentationDetents([.medium, .large])
+            .task {
+                await refresh()
+            }
+            .refreshable {
+                await refresh()
+            }
         }
+    }
+
+    private func refresh() async {
+        guard let session = host.tmuxSession else { return }
+        items = await connection.dashboardItems(session: session)
     }
 }

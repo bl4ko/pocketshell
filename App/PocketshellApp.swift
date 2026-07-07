@@ -14,6 +14,7 @@ struct PocketshellApp: App {
         _store = StateObject(wrappedValue: store)
         _monitor = StateObject(wrappedValue: monitor)
         WatchRelay.shared.activate(store: store)
+        UNUserNotificationCenter.current().delegate = ForegroundNotificationDelegate.shared
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: SessionMonitor.refreshTaskID,
             using: nil
@@ -32,6 +33,7 @@ struct PocketshellApp: App {
         WindowGroup {
             HostsListView()
                 .environmentObject(store)
+                .environmentObject(monitor)
                 .overlay { AppLockOverlay(lock: lock) }
                 .onAppear {
                     if lock.isLocked {

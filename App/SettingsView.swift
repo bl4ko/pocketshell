@@ -3,13 +3,22 @@ import SwiftUI
 
 enum AppSettings {
     static let terminalThemeKey = "pocketshell.terminalTheme"
+    static let appLockKey = "pocketshell.appLock"
 }
 
 struct SettingsView: View {
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
+    @AppStorage(AppSettings.appLockKey) private var appLock = false
 
     var body: some View {
         List {
+            Section {
+                Toggle("Require Face ID", isOn: $appLock)
+            } header: {
+                Text("Security")
+            } footer: {
+                Text("Locks the app after 30 seconds in background. Takes effect on next launch.")
+            }
             Section("Terminal theme") {
                 ForEach(TerminalTheme.all) { theme in
                     Button {

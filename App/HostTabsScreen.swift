@@ -81,7 +81,7 @@ struct HostTabsScreen: View {
     private func addTab() {
         let controller = ConnectionController(
             host: host,
-            key: (try? store.deviceKey()) ?? .software(.init()),
+            key: (try? store.key(for: host)) ?? .software(.init()),
             knownHosts: store.knownHosts
         )
         let tab = TerminalTab(controller: controller)
@@ -260,7 +260,15 @@ struct TmuxJumpSheet: View {
                     }
                 }
                 if attached {
-                    Section("Panes") {
+                    Section("Quick") {
+                        Button("Next window") {
+                            controller?.sendText(Tmux.nextWindowKeys)
+                            dismiss()
+                        }
+                        Button("Previous window") {
+                            controller?.sendText(Tmux.previousWindowKeys)
+                            dismiss()
+                        }
                         Button("Next pane") {
                             controller?.sendText(Tmux.nextPaneKeys)
                             dismiss()

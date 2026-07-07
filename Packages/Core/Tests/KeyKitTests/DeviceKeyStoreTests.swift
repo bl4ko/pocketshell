@@ -10,7 +10,7 @@ import Testing
 
     let first = try store.loadOrCreate(tag: tag, preferEnclave: false)
     let second = try store.loadOrCreate(tag: tag, preferEnclave: false)
-    #expect(first.publicKey.rawRepresentation == second.publicKey.rawRepresentation)
+    #expect(first.publicKeyRawRepresentation == second.publicKeyRawRepresentation)
 }
 
 @Test func softwareKeyKindWhenEnclaveNotPreferred() throws {
@@ -33,7 +33,7 @@ import Testing
     try store.delete(tag: tag)
     let second = try store.loadOrCreate(tag: tag, preferEnclave: false)
     defer { try? store.delete(tag: tag) }
-    #expect(first.publicKey.rawRepresentation != second.publicKey.rawRepresentation)
+    #expect(first.publicKeyRawRepresentation != second.publicKeyRawRepresentation)
 }
 
 @Test func signProducesValidSignature() throws {
@@ -42,7 +42,11 @@ import Testing
     defer { try? store.delete(tag: tag) }
 
     let key = try store.loadOrCreate(tag: tag, preferEnclave: false)
+    guard case .software(let privateKey) = key else {
+        Issue.record("expected software key")
+        return
+    }
     let message = Data("hello".utf8)
-    let signature = try key.signature(for: message)
-    #expect(key.publicKey.isValidSignature(signature, for: message))
+    let signature = try privateKey.signature(for: message)
+    #expect(privateKey.publicKey.isValidSignature(signature, for: message))
 }

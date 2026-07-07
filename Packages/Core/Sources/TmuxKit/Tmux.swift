@@ -62,15 +62,17 @@ public enum Tmux {
             let parts = line.split(separator: "|", omittingEmptySubsequences: false)
             guard parts.count >= 3,
                   let windows = Int(parts[parts.count - 2]),
-                  let attached = flag(parts.last!)
+                  let attachedClients = Int(parts.last!)
             else { return nil }
             let name = parts[0..<(parts.count - 2)].joined(separator: "|")
-            return TmuxSession(name: name, windows: windows, attached: attached)
+            return TmuxSession(name: name, windows: windows, attached: attachedClients > 0)
         }
     }
 
     public static let nextPaneKeys = "\u{02}o"
     public static let zoomPaneKeys = "\u{02}z"
+    public static let nextWindowKeys = "\u{02}n"
+    public static let previousWindowKeys = "\u{02}p"
 
     public static func promptKeys(_ command: String) -> String {
         "\u{02}:\(command)\r"

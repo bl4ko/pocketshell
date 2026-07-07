@@ -9,15 +9,20 @@ import Testing
 final class TestSSHD {
     let port: Int
     let dir: URL
-    let clientKey: P256.Signing.PrivateKey
+    let clientKeyMaterial: DeviceKeyMaterial
     private let process: Process
 
-    init() throws {
+    var clientKey: P256.Signing.PrivateKey {
+        guard case .software(let key) = clientKeyMaterial else { fatalError("not a software key") }
+        return key
+    }
+
+    init(key: DeviceKeyMaterial = .software(P256.Signing.PrivateKey())) throws {
         dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("pocketshell-sshd-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         port = Int.random(in: 20000...29999)
-        clientKey = P256.Signing.PrivateKey()
+        clientKeyMaterial = key
 
         let hostKey = dir.appendingPathComponent("host_ed25519")
         let keygen = Process()
@@ -27,7 +32,7 @@ final class TestSSHD {
         keygen.waitUntilExit()
 
         let authorizedKeys = dir.appendingPathComponent("authorized_keys")
-        let pubLine = OpenSSHPublicKey.line(for: clientKey.publicKey, comment: "test")
+        let pubLine = clientKeyMaterial.openSSHPublicKeyLine(comment: "test")
         try (pubLine + "\n").write(to: authorizedKeys, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: authorizedKeys.path)
 
@@ -76,7 +81,7 @@ private func makeConnection(_ sshd: TestSSHD, knownHostsFile: URL? = nil) -> SSH
         .appendingPathComponent("kh-\(UUID().uuidString).json")
     return SSHConnection(
         host: sshd.hostConfig(),
-        key: .software(sshd.clientKey),
+        key: sshd.clientKeyMaterial,
         knownHosts: KnownHostsStore(fileURL: file)
     )
 }
@@ -127,7 +132,7 @@ private func makeConnection(_ sshd: TestSSHD, knownHostsFile: URL? = nil) -> SSH
         #expect(entries.count == 1)
         #expect(entries.values.first?.hasPrefix("SHA256:") == true)
 
-        let second = SSHConnection(host: sshd.hostConfig(), key: .software(sshd.clientKey), knownHosts: store)
+        let second = SSHConnection(host: sshd.hostConfig(), key: sshd.clientKeyMaterial, knownHosts: store)
         try await second.connect()
         let output = try await second.exec("true; echo ok")
         #expect(output.contains("ok"))
@@ -182,6 +187,49 @@ private func makeConnection(_ sshd: TestSSHD, knownHostsFile: URL? = nil) -> SSH
             try await Task.sleep(for: .milliseconds(100))
         }
         #expect(outcome == "authFailed")
+    }
+
+    @Test func execWorksWhileShellChannelOpen() async throws {
+        let sshd = try TestSSHD()
+        defer { sshd.stop() }
+        let connection = makeConnection(sshd)
+        try await connection.connect()
+        let shell = try await connection.openShell(cols: 80, rows: 24)
+        let pump = Task {
+            for await _ in shell.output {}
+        }
+
+        let box = OutcomeBox()
+        Task {
+            do {
+                let output = try await connection.exec("echo side-channel-ok")
+                await box.set(output.trimmingCharacters(in: .whitespacesAndNewlines))
+            } catch {
+                await box.set("error: \(error)")
+            }
+        }
+        var outcome = "hung"
+        for _ in 0..<50 {
+            if let value = await box.get() {
+                outcome = value
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(outcome == "side-channel-ok")
+        await shell.close()
+        pump.cancel()
+        await connection.disconnect()
+    }
+
+    @Test func importedEd25519KeyAuthenticates() async throws {
+        let sshd = try TestSSHD(key: .ed25519(Curve25519.Signing.PrivateKey()))
+        defer { sshd.stop() }
+        let connection = makeConnection(sshd)
+        try await connection.connect()
+        let output = try await connection.exec("echo ed-ok")
+        #expect(output.contains("ed-ok"))
+        await connection.disconnect()
     }
 
     @Test func execReturnsExitStatusFailure() async throws {

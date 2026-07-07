@@ -43,18 +43,21 @@ public struct TerminalToolbar: View {
                 .padding(.vertical, 4)
             }
             if let onHideKeyboard {
+                Divider()
+                    .frame(height: 24)
                 Button {
                     onHideKeyboard()
                 } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
+                    Image(systemName: "keyboard")
                         .font(.footnote)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(Color.secondary.opacity(0.15))
+                        .background(Color.accentColor.opacity(0.2))
                         .foregroundStyle(.primary)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
+                .padding(.leading, 8)
                 .padding(.trailing, 8)
             }
         }

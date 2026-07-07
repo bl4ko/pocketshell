@@ -30,6 +30,7 @@ final class AppStore: ObservableObject {
     static let deviceKeyTag = "pocketshell-device-key"
 
     @Published var hosts: [HostConfig] { didSet { hostsStore.save(hosts) } }
+    @Published var vncHosts: [VNCHostConfig] { didSet { vncHostsStore.save(vncHosts) } }
     @Published var snippets: [Snippet] { didSet { snippetsStore.save(snippets) } }
     @Published var toolbarKeys: [ToolbarKey] { didSet { toolbarStore.save(toolbarKeys) } }
     @Published var importedKeys: [ImportedKey] { didSet { importedKeysStore.save(importedKeys) } }
@@ -38,12 +39,14 @@ final class AppStore: ObservableObject {
     let knownHosts: KnownHostsStore
 
     private let hostsStore = JSONStore<[HostConfig]>(filename: "hosts.json")
+    private let vncHostsStore = JSONStore<[VNCHostConfig]>(filename: "vnc-hosts.json")
     private let snippetsStore = JSONStore<[Snippet]>(filename: "snippets.json")
     private let toolbarStore = JSONStore<[ToolbarKey]>(filename: "toolbar.json")
     private let importedKeysStore = JSONStore<[ImportedKey]>(filename: "imported-keys.json")
 
     init() {
         hosts = hostsStore.load() ?? []
+        vncHosts = vncHostsStore.load() ?? []
         snippets = snippetsStore.load() ?? []
         toolbarKeys = toolbarStore.load() ?? ToolbarKey.defaults
         importedKeys = importedKeysStore.load() ?? []
@@ -91,5 +94,18 @@ final class AppStore: ObservableObject {
     func deleteImportedKey(_ key: ImportedKey) {
         try? keyStore.delete(tag: key.tag)
         importedKeys.removeAll { $0.id == key.id }
+    }
+
+    func setVNCPassword(_ password: String, for host: VNCHostConfig) {
+        PasswordVault.set(password, account: "vnc-\(host.id.uuidString)")
+    }
+
+    func vncPassword(for host: VNCHostConfig) -> String {
+        PasswordVault.get(account: "vnc-\(host.id.uuidString)") ?? ""
+    }
+
+    func deleteVNCHost(_ host: VNCHostConfig) {
+        PasswordVault.delete(account: "vnc-\(host.id.uuidString)")
+        vncHosts.removeAll { $0.id == host.id }
     }
 }

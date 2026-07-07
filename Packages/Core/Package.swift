@@ -12,12 +12,14 @@ let package = Package(
         .library(name: "TmuxKit", targets: ["TmuxKit"]),
         .library(name: "TerminalUI", targets: ["TerminalUI"]),
         .library(name: "ToolbarUI", targets: ["ToolbarUI"]),
+        .library(name: "VNCKit", targets: ["VNCKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
+        .package(url: "https://github.com/royalapplications/royalvnc.git", revision: "92d4427c73817d8f849bb289ff190aa4b40c44ea"),
     ],
     targets: [
         .target(name: "Models"),
@@ -40,6 +42,10 @@ let package = Package(
             .product(name: "SwiftTerm", package: "SwiftTerm"),
         ]),
         .target(name: "ToolbarUI", dependencies: ["Models"]),
+        .target(name: "VNCKit", dependencies: [
+            "Models",
+            .product(name: "RoyalVNCKit", package: "royalvnc"),
+        ]),
         .testTarget(name: "ModelsTests", dependencies: ["Models"]),
         .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"]),
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"]),
@@ -47,5 +53,6 @@ let package = Package(
         .testTarget(name: "TmuxKitTests", dependencies: ["TmuxKit"]),
         .testTarget(name: "ToolbarUITests", dependencies: ["ToolbarUI"]),
         .testTarget(name: "TerminalUITests", dependencies: ["TerminalUI"]),
+        .testTarget(name: "VNCKitTests", dependencies: ["VNCKit"]),
     ]
 )

@@ -47,6 +47,7 @@ final class TestSSHD {
         PasswordAuthentication no
         KbdInteractiveAuthentication no
         LogLevel QUIET
+        Subsystem sftp /usr/libexec/sftp-server
         """
         let configURL = dir.appendingPathComponent("sshd_config")
         try config.write(to: configURL, atomically: true, encoding: .utf8)

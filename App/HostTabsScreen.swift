@@ -13,6 +13,7 @@ struct HostTabsScreen: View {
     @State private var selectedTab: UUID?
     @State private var showSnippets = false
     @State private var showTmuxJump = false
+    @State private var showFiles = false
     @State private var addingSnippet = false
     @State private var editingSnippet: Snippet?
 
@@ -43,6 +44,13 @@ struct HostTabsScreen: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    showFiles = true
+                } label: {
+                    Image(systemName: "folder")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
                     showSnippets = true
                 } label: {
                     Image(systemName: "text.badge.plus")
@@ -61,6 +69,9 @@ struct HostTabsScreen: View {
         }
         .sheet(isPresented: $showTmuxJump) {
             TmuxJumpSheet(controller: activeController)
+        }
+        .sheet(isPresented: $showFiles) {
+            FileBrowserView(controller: activeController)
         }
         .onAppear {
             if tabs.isEmpty {

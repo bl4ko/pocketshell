@@ -141,7 +141,7 @@ public actor SSHConnection {
         )
     }
 
-    private func createChildChannel(
+    func createChildChannel(
         _ initializer: @escaping @Sendable (Channel) -> EventLoopFuture<Void>
     ) async throws -> Channel {
         guard let channel, channel.isActive else { throw SSHError.notConnected }

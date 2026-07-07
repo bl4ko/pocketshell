@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "VNCKit", targets: ["VNCKit"]),
         .library(name: "LockKit", targets: ["LockKit"]),
         .library(name: "MonitorKit", targets: ["MonitorKit"]),
+        .library(name: "SFTPKit", targets: ["SFTPKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),
@@ -27,6 +28,7 @@ let package = Package(
         .target(name: "Models"),
         .target(name: "LockKit"),
         .target(name: "MonitorKit", dependencies: ["TmuxKit"]),
+        .target(name: "SFTPKit"),
         .target(name: "KeyKit", dependencies: [
             "Models",
             .product(name: "Crypto", package: "swift-crypto"),
@@ -34,6 +36,7 @@ let package = Package(
         .target(name: "SSHKit", dependencies: [
             "Models",
             "KeyKit",
+            "SFTPKit",
             .product(name: "NIOSSH", package: "swift-nio-ssh"),
             .product(name: "NIOCore", package: "swift-nio"),
             .product(name: "NIOPosix", package: "swift-nio"),
@@ -53,6 +56,7 @@ let package = Package(
         .testTarget(name: "ModelsTests", dependencies: ["Models"]),
         .testTarget(name: "LockKitTests", dependencies: ["LockKit"]),
         .testTarget(name: "MonitorKitTests", dependencies: ["MonitorKit"]),
+        .testTarget(name: "SFTPKitTests", dependencies: ["SFTPKit"]),
         .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"]),
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"]),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"]),

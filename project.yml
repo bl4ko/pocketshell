@@ -26,6 +26,7 @@ targets:
           - VNCKit
           - LockKit
           - MonitorKit
+          - SFTPKit
     info:
       path: App/Info.plist
       properties:

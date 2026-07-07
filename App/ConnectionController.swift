@@ -100,6 +100,11 @@ final class ConnectionController: ObservableObject {
         return Tmux.parseWindows(output)
     }
 
+    func openSFTP() async throws -> SFTPSession {
+        guard let connection else { throw SSHError.notConnected }
+        return try await connection.openSFTP()
+    }
+
     func dashboardItems(session: String) async -> [WindowDashboardItem] {
         guard let connection else { return [] }
         let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""

@@ -13,6 +13,7 @@ targets:
     sources:
       - App
     dependencies:
+      - target: pocketshellWidget
       - package: Core
         products:
           - Models
@@ -53,6 +54,33 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         SWIFT_VERSION: "6.0"
+  pocketshellWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widget
+    dependencies:
+      - package: Core
+        products:
+          - Models
+    info:
+      path: Widget/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/pocketshellWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.bl4ko.pocketshell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bl4ko.pocketshell.widget
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        SWIFT_VERSION: "6.0"
+        SKIP_INSTALL: YES
   pocketshellUITests:
     type: bundle.ui-testing
     platform: iOS

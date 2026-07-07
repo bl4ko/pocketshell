@@ -6,6 +6,7 @@ import MonitorKit
 import SSHKit
 import TmuxKit
 import UserNotifications
+import WidgetKit
 
 @MainActor
 final class SessionMonitor: ObservableObject {
@@ -70,6 +71,7 @@ final class SessionMonitor: ObservableObject {
         }
         let transitions = tracker.update(samples)
         SnapshotStore.save(SessionSnapshot(windows: snapshots, updatedAt: Date()))
+        WidgetCenter.shared.reloadTimelines(ofKind: "pocketshell-sessions")
         for transition in transitions {
             notify(transition)
         }

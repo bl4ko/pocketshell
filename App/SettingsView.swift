@@ -4,11 +4,13 @@ import SwiftUI
 enum AppSettings {
     static let terminalThemeKey = "pocketshell.terminalTheme"
     static let appLockKey = "pocketshell.appLock"
+    static let agentNotifyKey = "pocketshell.agentNotify"
 }
 
 struct SettingsView: View {
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
     @AppStorage(AppSettings.appLockKey) private var appLock = false
+    @AppStorage(AppSettings.agentNotifyKey) private var agentNotify = false
 
     var body: some View {
         List {
@@ -18,6 +20,18 @@ struct SettingsView: View {
                 Text("Security")
             } footer: {
                 Text("Locks the app after 30 seconds in background. Takes effect on next launch.")
+            }
+            Section {
+                Toggle("Notify when agents finish", isOn: $agentNotify)
+                    .onChange(of: agentNotify) { _, on in
+                        if on {
+                            SessionMonitor.requestAuthorization()
+                        }
+                    }
+            } header: {
+                Text("Agents")
+            } footer: {
+                Text("Polls tmux windows on hosts with a tmux session and notifies when a busy agent goes idle or needs input.")
             }
             Section("Terminal theme") {
                 ForEach(TerminalTheme.all) { theme in

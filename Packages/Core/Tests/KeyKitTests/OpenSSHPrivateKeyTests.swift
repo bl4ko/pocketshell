@@ -56,6 +56,27 @@ private func keyAndBlob(_ line: String) -> String {
     }
 }
 
+@Test func decryptsEd25519KeyWithPassphrase() throws {
+    let fixture = try keygen(type: "ed25519", passphrase: "secret123")
+    let material = try OpenSSHPrivateKey.parse(fixture.privateKey, passphrase: "secret123")
+    let line = material.openSSHPublicKeyLine(comment: "import@test")
+    #expect(keyAndBlob(line) == keyAndBlob(fixture.publicLine))
+}
+
+@Test func decryptsP256KeyWithPassphrase() throws {
+    let fixture = try keygen(type: "ecdsa", passphrase: "hunter2hunter2")
+    let material = try OpenSSHPrivateKey.parse(fixture.privateKey, passphrase: "hunter2hunter2")
+    let line = material.openSSHPublicKeyLine(comment: "import@test")
+    #expect(keyAndBlob(line) == keyAndBlob(fixture.publicLine))
+}
+
+@Test func wrongPassphraseFails() throws {
+    let fixture = try keygen(type: "ed25519", passphrase: "secret123")
+    #expect(throws: OpenSSHPrivateKey.ParseError.wrongPassphrase) {
+        _ = try OpenSSHPrivateKey.parse(fixture.privateKey, passphrase: "nope")
+    }
+}
+
 @Test func rejectsRSAKeyAsUnsupported() throws {
     let fixture = try keygen(type: "rsa")
     #expect(throws: OpenSSHPrivateKey.ParseError.unsupportedKeyType("ssh-rsa")) {

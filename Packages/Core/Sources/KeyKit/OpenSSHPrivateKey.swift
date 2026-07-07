@@ -1,3 +1,4 @@
+import CommonCrypto
 import Crypto
 import Foundation
 
@@ -5,6 +6,8 @@ public enum OpenSSHPrivateKey {
     public enum ParseError: Error, Equatable {
         case notOpenSSHKey
         case encrypted
+        case wrongPassphrase
+        case unsupportedCipher(String)
         case unsupportedKeyType(String)
         case malformed
     }
@@ -13,7 +16,7 @@ public enum OpenSSHPrivateKey {
     private static let footer = "-----END OPENSSH PRIVATE KEY-----"
     private static let magic = "openssh-key-v1\0"
 
-    public static func parse(_ text: String) throws -> DeviceKeyMaterial {
+    public static func parse(_ text: String, passphrase: String? = nil) throws -> DeviceKeyMaterial {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let headerRange = trimmed.range(of: header),
               let footerRange = trimmed.range(of: footer)
@@ -28,20 +31,35 @@ public enum OpenSSHPrivateKey {
             throw ParseError.notOpenSSHKey
         }
         guard let cipher = reader.readString(),
-              reader.readString() != nil,
-              reader.readString() != nil,
+              let kdfName = reader.readString(),
+              let kdfOptions = reader.readData(),
               let keyCount = reader.readUInt32()
         else { throw ParseError.malformed }
-        guard cipher == "none" else { throw ParseError.encrypted }
         guard keyCount == 1 else { throw ParseError.malformed }
-        guard reader.readData() != nil, let privateSection = reader.readData() else {
+        guard reader.readData() != nil, var privateSection = reader.readData() else {
             throw ParseError.malformed
         }
 
+        if cipher != "none" {
+            let passphrase = passphrase?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !passphrase.isEmpty else { throw ParseError.encrypted }
+            privateSection = try decrypt(
+                privateSection,
+                cipher: cipher,
+                kdfName: kdfName,
+                kdfOptions: kdfOptions,
+                passphrase: passphrase
+            )
+        }
+
         var section = WireReader(privateSection)
-        guard let check1 = section.readUInt32(), let check2 = section.readUInt32(), check1 == check2,
-              let keyType = section.readString()
-        else { throw ParseError.malformed }
+        guard let check1 = section.readUInt32(), let check2 = section.readUInt32() else {
+            throw ParseError.malformed
+        }
+        guard check1 == check2 else {
+            throw cipher == "none" ? ParseError.malformed : ParseError.wrongPassphrase
+        }
+        guard let keyType = section.readString() else { throw ParseError.malformed }
 
         switch keyType {
         case "ssh-ed25519":
@@ -69,6 +87,79 @@ public enum OpenSSHPrivateKey {
         default:
             throw ParseError.unsupportedKeyType(keyType)
         }
+    }
+
+    private static func decrypt(
+        _ ciphertext: Data,
+        cipher: String,
+        kdfName: String,
+        kdfOptions: Data,
+        passphrase: String
+    ) throws -> Data {
+        let (keyLength, mode): (Int, CCMode) = switch cipher {
+        case "aes256-ctr": (32, CCMode(kCCModeCTR))
+        case "aes192-ctr": (24, CCMode(kCCModeCTR))
+        case "aes128-ctr": (16, CCMode(kCCModeCTR))
+        case "aes256-cbc": (32, CCMode(kCCModeCBC))
+        case "aes128-cbc": (16, CCMode(kCCModeCBC))
+        default: throw ParseError.unsupportedCipher(cipher)
+        }
+        guard kdfName == "bcrypt" else { throw ParseError.unsupportedCipher("\(cipher)/\(kdfName)") }
+
+        var options = WireReader(kdfOptions)
+        guard let salt = options.readData(), let rounds = options.readUInt32(), rounds > 0 else {
+            throw ParseError.malformed
+        }
+        let ivLength = 16
+        let derived = BcryptPBKDF.derive(
+            passphrase: Data(passphrase.utf8),
+            salt: salt,
+            rounds: Int(rounds),
+            keyLength: keyLength + ivLength
+        )
+        let key = derived.prefix(keyLength)
+        let iv = derived.suffix(ivLength)
+
+        var cryptor: CCCryptorRef?
+        let createStatus = key.withUnsafeBytes { keyBytes in
+            iv.withUnsafeBytes { ivBytes in
+                CCCryptorCreateWithMode(
+                    CCOperation(kCCDecrypt),
+                    mode,
+                    CCAlgorithm(kCCAlgorithmAES),
+                    CCPadding(ccNoPadding),
+                    ivBytes.baseAddress,
+                    keyBytes.baseAddress,
+                    keyBytes.count,
+                    nil,
+                    0,
+                    0,
+                    mode == CCMode(kCCModeCTR) ? CCModeOptions(kCCModeOptionCTR_BE) : 0,
+                    &cryptor
+                )
+            }
+        }
+        guard createStatus == kCCSuccess, let cryptor else { throw ParseError.malformed }
+        defer { CCCryptorRelease(cryptor) }
+
+        var plaintext = Data(count: ciphertext.count)
+        var written = 0
+        let updateStatus = plaintext.withUnsafeMutableBytes { outBytes in
+            ciphertext.withUnsafeBytes { inBytes in
+                CCCryptorUpdate(
+                    cryptor,
+                    inBytes.baseAddress,
+                    inBytes.count,
+                    outBytes.baseAddress,
+                    outBytes.count,
+                    &written
+                )
+            }
+        }
+        guard updateStatus == kCCSuccess, written == ciphertext.count else {
+            throw ParseError.wrongPassphrase
+        }
+        return plaintext
     }
 }
 

@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "ToolbarUI", targets: ["ToolbarUI"]),
         .library(name: "VNCKit", targets: ["VNCKit"]),
         .library(name: "LockKit", targets: ["LockKit"]),
+        .library(name: "MonitorKit", targets: ["MonitorKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),
@@ -25,6 +26,7 @@ let package = Package(
     targets: [
         .target(name: "Models"),
         .target(name: "LockKit"),
+        .target(name: "MonitorKit", dependencies: ["TmuxKit"]),
         .target(name: "KeyKit", dependencies: [
             "Models",
             .product(name: "Crypto", package: "swift-crypto"),
@@ -50,6 +52,7 @@ let package = Package(
         ]),
         .testTarget(name: "ModelsTests", dependencies: ["Models"]),
         .testTarget(name: "LockKitTests", dependencies: ["LockKit"]),
+        .testTarget(name: "MonitorKitTests", dependencies: ["MonitorKit"]),
         .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"]),
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"]),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"]),

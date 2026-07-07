@@ -19,6 +19,9 @@ final class SmokeUITests: XCTestCase {
         }
 
         app.buttons["plus"].firstMatch.tap()
+        let sshHostItem = app.buttons["SSH Host"].firstMatch
+        XCTAssertTrue(sshHostItem.waitForExistence(timeout: 5))
+        sshHostItem.tap()
         let nameField = app.textFields["Name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.tap()

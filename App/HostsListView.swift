@@ -6,6 +6,8 @@ struct HostsListView: View {
     @EnvironmentObject var store: AppStore
     @State private var editingHost: HostConfig?
     @State private var addingHost = false
+    @State private var addingVNCHost = false
+    @State private var editingVNCHost: VNCHostConfig?
     @State private var runningSnippet: SnippetRun?
 
     var body: some View {
@@ -22,24 +24,43 @@ struct HostsListView: View {
                         }
                     }
                 }
+                if !store.vncHosts.isEmpty {
+                    Section("Desktops") {
+                        ForEach(store.vncHosts) { host in
+                            vncHostRow(host)
+                        }
+                    }
+                }
             }
             .navigationTitle("pocketshell")
             .navigationDestination(for: HostConfig.self) { host in
                 HostTabsScreen(host: host)
             }
+            .navigationDestination(for: VNCHostConfig.self) { host in
+                VNCDesktopScreen(host: host)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     NavigationLink("Keys") { KeysView() }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink("Snippets") { SnippetsView() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        addingHost = true
+                    Menu {
+                        Button("SSH Host") { addingHost = true }
+                        Button("VNC Desktop") { addingVNCHost = true }
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityIdentifier("plus")
                 }
             }
             .sheet(isPresented: $addingHost) {
@@ -47,6 +68,12 @@ struct HostsListView: View {
             }
             .sheet(item: $editingHost) { host in
                 HostFormView(host: host)
+            }
+            .sheet(isPresented: $addingVNCHost) {
+                VNCHostFormView(host: nil)
+            }
+            .sheet(item: $editingVNCHost) { host in
+                VNCHostFormView(host: host)
             }
             .sheet(item: $runningSnippet) { run in
                 SnippetRunView(host: run.host, snippet: run.snippet)
@@ -93,6 +120,23 @@ struct HostsListView: View {
             }
             Button("Delete", role: .destructive) {
                 store.hosts.removeAll { $0.id == host.id }
+            }
+        }
+    }
+
+    private func vncHostRow(_ host: VNCHostConfig) -> some View {
+        NavigationLink(value: host) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(host.name).font(.headline)
+                Text("vnc://\(host.hostname):\(String(host.port))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contextMenu {
+            Button("Edit") { editingVNCHost = host }
+            Button("Delete", role: .destructive) {
+                store.deleteVNCHost(host)
             }
         }
     }

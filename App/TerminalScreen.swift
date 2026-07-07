@@ -8,13 +8,14 @@ struct TerminalScreen: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var connection: ConnectionController
+    @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
 
     let host: HostConfig
 
     var body: some View {
         VStack(spacing: 0) {
             statusBanner
-            SSHTerminalView(bridge: connection.bridge)
+            SSHTerminalView(bridge: connection.bridge, theme: TerminalTheme.named(themeName))
             TerminalToolbar(
                 keys: store.toolbarKeys,
                 ctrlActive: Binding(

@@ -68,3 +68,18 @@ import Testing
     }
     #expect(VNCKeyCombo.presets.count >= 8)
 }
+
+@Test func presetsIncludeDesktopSwitchingAndFullscreenExit() {
+    let labels = VNCKeyCombo.presets.map(\.label)
+    #expect(labels.contains("⌃←"))
+    #expect(labels.contains("⌃→"))
+    #expect(labels.contains("⌃↑"))
+    #expect(labels.contains("⌃⌘F"))
+}
+
+@Test func parsesControlCommandCombo() {
+    let combo = VNCKeyCombo.parse("ctrl+cmd+f")
+    #expect(combo?.modifiers == [VNCKeyCode.control, VNCKeyCode.commandForARD])
+    #expect(combo?.key == VNCKeyCode(asciiCharacter: UInt8(ascii: "f")))
+    #expect(combo?.label == "⌃⌘F")
+}

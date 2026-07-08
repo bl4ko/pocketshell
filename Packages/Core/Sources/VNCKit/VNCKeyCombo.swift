@@ -11,7 +11,8 @@ public struct VNCKeyCombo: Equatable, Identifiable, Sendable {
     public var id: String { label }
 
     public static let presets: [VNCKeyCombo] = [
-        "cmd+space", "cmd+tab", "cmd+h", "cmd+w", "cmd+q", "cmd+m",
+        "cmd+space", "cmd+tab", "ctrl+left", "ctrl+right", "ctrl+up",
+        "ctrl+cmd+f", "cmd+h", "cmd+w", "cmd+q", "cmd+m",
         "cmd+c", "cmd+v", "cmd+t", "cmd+n", "cmd+z", "cmd+a",
     ].compactMap(parse)
 

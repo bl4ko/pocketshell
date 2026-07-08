@@ -26,6 +26,10 @@ import Testing
     #expect(AgentStatus.classify("· Compacting conversation… (21s)") == .busy)
 }
 
+@Test func classifyBusyForCodexCapitalEsc() {
+    #expect(AgentStatus.classify("Working (7s • Esc to interrupt)") == .busy)
+}
+
 @Test func previewLinesDropsDecorationOnlyLines() {
     let pane = """
     ⏺ Done refactoring auth module

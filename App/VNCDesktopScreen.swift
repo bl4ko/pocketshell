@@ -3,6 +3,7 @@ import SwiftUI
 import VNCKit
 
 struct VNCDesktopScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var store: AppStore
     @StateObject private var holder = SessionHolder()
 
@@ -18,7 +19,15 @@ struct VNCDesktopScreen: View {
         }
         .navigationTitle(host.name)
         .navigationBarTitleDisplayMode(.inline)
-        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, let session = holder.session else { return }
+            switch session.phase {
+            case .disconnected, .failed:
+                session.connect()
+            default:
+                break
+            }
+        }
         .onAppear {
             if holder.session == nil {
                 let session = VNCSessionController(

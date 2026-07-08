@@ -34,7 +34,8 @@ public enum AgentStatus: Equatable, Sendable {
     case idle
 
     public static func classify(_ paneText: String) -> AgentStatus {
-        if paneText.contains("esc to interrupt") || paneText.contains("Compacting conversation") {
+        let lowered = paneText.lowercased()
+        if lowered.contains("esc to interrupt") || lowered.contains("compacting conversation") {
             return .busy
         }
         if paneText.contains("Do you want") {

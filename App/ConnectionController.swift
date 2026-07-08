@@ -29,8 +29,13 @@ final class ConnectionController: ObservableObject {
     private var machine = ReconnectMachine(baseDelay: .seconds(3))
     private var lastErrorMessage: String?
     private var monitor: NWPathMonitor?
+    private enum PendingShell {
+        case tmux(session: String, windowIndex: Int?)
+        case plain(String?)
+    }
+
     private var retryTask: Task<Void, Never>?
-    private var attachCommand: String?
+    private var pendingShell: PendingShell?
     private var shellGeneration = 0
     private var stopped = false
 
@@ -62,12 +67,12 @@ final class ConnectionController: ObservableObject {
 
     func selectWindow(_ window: TmuxWindow?) async {
         guard let session = host.tmuxSession else { return }
-        attachCommand = Tmux.attachCommand(session: session, windowIndex: window?.index)
+        pendingShell = .tmux(session: session, windowIndex: window?.index)
         await openShellAndPump()
     }
 
     func openPlainShell() async {
-        attachCommand = host.onConnectCommand
+        pendingShell = .plain(host.onConnectCommand)
         await openShellAndPump()
     }
 
@@ -76,11 +81,12 @@ final class ConnectionController: ObservableObject {
     }
 
     var isTmuxAttached: Bool {
-        attachCommand?.contains("attach-session") ?? false
+        if case .tmux = pendingShell { return true }
+        return false
     }
 
     func jump(toSession session: String, windowIndex: Int? = nil) async {
-        attachCommand = Tmux.attachCommand(session: session, windowIndex: windowIndex)
+        pendingShell = .tmux(session: session, windowIndex: windowIndex)
         shellGeneration += 1
         let old = shell
         shell = nil
@@ -91,7 +97,7 @@ final class ConnectionController: ObservableObject {
     func tmuxSessions() async -> [TmuxSession] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
-        return Tmux.parseSessions(output)
+        return Tmux.consolidateGroups(Tmux.parseSessions(output))
     }
 
     func tmuxWindows(session: String) async -> [TmuxWindow] {
@@ -152,7 +158,7 @@ final class ConnectionController: ObservableObject {
             return
         }
 
-        if let session = host.tmuxSession, attachCommand == nil {
+        if let session = host.tmuxSession, pendingShell == nil {
             await listTmuxWindows(connection: connection, session: session)
         } else {
             await openShellAndPump()
@@ -204,9 +210,21 @@ final class ConnectionController: ObservableObject {
     private func openShellAndPump() async {
         guard let connection else { return }
         let size = bridge.currentSize
+        let command: String? = switch pendingShell {
+        case .tmux(let session, let windowIndex):
+            Tmux.attachCommand(
+                session: session,
+                windowIndex: windowIndex,
+                clientTag: String(UUID().uuidString.prefix(8)).lowercased()
+            )
+        case .plain(let plain):
+            plain
+        case nil:
+            nil
+        }
         do {
             let shell = try await connection.openShell(
-                command: attachCommand,
+                command: command,
                 cols: size.cols,
                 rows: size.rows
             )

@@ -32,25 +32,46 @@ import Testing
 
 @Test func listSessionsCommandUsesPipeFormat() {
     #expect(Tmux.listSessionsCommand()
-        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}'")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_group}'")
 }
 
-@Test func parseSessionsParsesNameWindowsAttached() {
-    let sessions = Tmux.parseSessions("claude|5|1\nother|1|0")
+@Test func parseSessionsParsesNameWindowsAttachedGroup() {
+    let sessions = Tmux.parseSessions("claude|5|1|\nother|1|0|other")
     #expect(sessions == [
-        TmuxSession(name: "claude", windows: 5, attached: true),
-        TmuxSession(name: "other", windows: 1, attached: false),
+        TmuxSession(name: "claude", windows: 5, attached: true, group: nil),
+        TmuxSession(name: "other", windows: 1, attached: false, group: "other"),
+    ])
+}
+
+@Test func consolidateGroupsMergesClonesIntoBase() {
+    let sessions = [
+        TmuxSession(name: "agents", windows: 4, attached: false, group: "agents"),
+        TmuxSession(name: "agents-psh-a1b2", windows: 4, attached: true, group: "agents"),
+        TmuxSession(name: "solo", windows: 1, attached: false, group: nil),
+    ]
+    #expect(Tmux.consolidateGroups(sessions) == [
+        TmuxSession(name: "agents", windows: 4, attached: true, group: "agents"),
+        TmuxSession(name: "solo", windows: 1, attached: false, group: nil),
+    ])
+}
+
+@Test func consolidateGroupsKeepsCloneWhenBaseGone() {
+    let sessions = [
+        TmuxSession(name: "agents-psh-a1b2", windows: 4, attached: true, group: "agents"),
+    ]
+    #expect(Tmux.consolidateGroups(sessions) == [
+        TmuxSession(name: "agents-psh-a1b2", windows: 4, attached: true, group: "agents"),
     ])
 }
 
 @Test func attachCommandWithWindow() {
-    #expect(Tmux.attachCommand(session: "claude", windowIndex: 3)
-        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u attach-session -t 'claude' \\; select-window -t 3")
+    #expect(Tmux.attachCommand(session: "claude", windowIndex: 3, clientTag: "ab12cd")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on \\; select-window -t 3")
 }
 
 @Test func attachCommandWithoutWindow() {
-    #expect(Tmux.attachCommand(session: "claude", windowIndex: nil)
-        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u attach-session -t 'claude'")
+    #expect(Tmux.attachCommand(session: "claude", windowIndex: nil, clientTag: "ab12cd")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on")
 }
 
 @Test func sessionNameWithSingleQuoteIsEscaped() {
@@ -72,9 +93,9 @@ import Testing
 }
 
 @Test func parseSessionsAcceptsMultipleAttachedClients() {
-    let sessions = Tmux.parseSessions("agents|4|2\nidle|1|0")
+    let sessions = Tmux.parseSessions("agents|4|2|\nidle|1|0|")
     #expect(sessions == [
-        TmuxSession(name: "agents", windows: 4, attached: true),
-        TmuxSession(name: "idle", windows: 1, attached: false),
+        TmuxSession(name: "agents", windows: 4, attached: true, group: nil),
+        TmuxSession(name: "idle", windows: 1, attached: false, group: nil),
     ])
 }

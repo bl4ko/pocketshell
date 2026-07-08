@@ -5,6 +5,7 @@ import TmuxKit
 struct TerminalTab: Identifiable {
     let id = UUID()
     let controller: ConnectionController
+    var name: String?
 }
 
 struct HostTabsScreen: View {
@@ -17,6 +18,8 @@ struct HostTabsScreen: View {
     @State private var showForward = false
     @State private var addingSnippet = false
     @State private var editingSnippet: Snippet?
+    @State private var renamingTab: UUID?
+    @State private var renameText = ""
 
     let host: HostConfig
 
@@ -126,8 +129,9 @@ struct HostTabsScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                    Text("\(index + 1)")
+                    Text(tab.name ?? "\(index + 1)")
                         .font(.footnote.monospaced())
+                        .lineLimit(1)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 6)
                         .background(
@@ -140,6 +144,10 @@ struct HostTabsScreen: View {
                             selectedTab = tab.id
                         }
                         .contextMenu {
+                            Button("Rename Tab") {
+                                renameText = tab.name ?? ""
+                                renamingTab = tab.id
+                            }
                             Button("Close Tab", role: .destructive) {
                                 closeTab(tab)
                             }
@@ -150,6 +158,26 @@ struct HostTabsScreen: View {
             .padding(.vertical, 4)
         }
         .background(.thinMaterial)
+        .alert("Rename tab", isPresented: renameAlertShown) {
+            TextField("name", text: $renameText)
+            Button("Save") { applyRename() }
+            Button("Cancel", role: .cancel) { renamingTab = nil }
+        }
+    }
+
+    private var renameAlertShown: Binding<Bool> {
+        Binding(
+            get: { renamingTab != nil },
+            set: { if !$0 { renamingTab = nil } }
+        )
+    }
+
+    private func applyRename() {
+        guard let id = renamingTab,
+              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        tabs[index].name = trimmed.isEmpty ? nil : trimmed
+        renamingTab = nil
     }
 
     private var snippetPicker: some View {

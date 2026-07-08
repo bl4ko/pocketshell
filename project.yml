@@ -73,9 +73,11 @@ targets:
       properties:
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.bl4ko.pocketshell
+        CFBundleDisplayName: pocketshell
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bl4ko.pocketshell.watchkitapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0

@@ -30,6 +30,36 @@ import Testing
     #expect(AgentStatus.classify("Working (7s • Esc to interrupt)") == .busy)
 }
 
+@Test func classifyBusyForSpinnerWithTimerParen() {
+    #expect(AgentStatus.classify("✻ Waddling… (6m 14s · ↓ 22.7k tokens · almost done thinking)") == .busy)
+}
+
+@Test func classifyIdleForFinishedSpinnerLine() {
+    #expect(AgentStatus.classify("✻ Baked for 12m 3s") == .idle)
+}
+
+@Test func classifyBusySpinnerInsideFullPane() {
+    let pane = """
+      … +53 lines (ctrl+o to expand)
+
+    ✻ Waddling… (6m 14s · ↓ 22.7k tokens · almost done thinking)
+
+    ● How is Claude doing this session? (optional)
+      1: Bad    2: Fine   3: Good   0: Dismiss
+      ctx: 12% used / 88% left  [Opus 4.8 (1M context)]
+    """
+    #expect(AgentStatus.classify(pane) == .busy)
+}
+
+@Test func classifyIdleForStatusLineParens() {
+    let pane = """
+    ❯ Yes recreate
+      ctx: 9% used / 91% left  [Opus 4.8 (1M context)]
+      ⏵⏵ auto mode on (shift+tab to cycle)
+    """
+    #expect(AgentStatus.classify(pane) == .idle)
+}
+
 @Test func previewLinesDropsDecorationOnlyLines() {
     let pane = """
     ⏺ Done refactoring auth module

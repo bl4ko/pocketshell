@@ -18,13 +18,15 @@ public struct TmuxSession: Equatable, Hashable, Sendable, Identifiable {
     public var name: String
     public var windows: Int
     public var attached: Bool
+    public var group: String?
 
     public var id: String { name }
 
-    public init(name: String, windows: Int, attached: Bool) {
+    public init(name: String, windows: Int, attached: Bool, group: String? = nil) {
         self.name = name
         self.windows = windows
         self.attached = attached
+        self.group = group
     }
 }
 
@@ -36,6 +38,9 @@ public enum AgentStatus: Equatable, Sendable {
     public static func classify(_ paneText: String) -> AgentStatus {
         let lowered = paneText.lowercased()
         if lowered.contains("esc to interrupt") || lowered.contains("compacting conversation") {
+            return .busy
+        }
+        if paneText.contains(/\p{L}…\s*\(\d+[hms]/) {
             return .busy
         }
         if paneText.contains("Do you want") {
@@ -53,11 +58,13 @@ public enum Tmux {
     }
 
     public static func listSessionsCommand() -> String {
-        "\(tmux) list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}'"
+        "\(tmux) list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_group}'"
     }
 
-    public static func attachCommand(session: String, windowIndex: Int?) -> String {
-        let attach = "\(tmux) -u attach-session -t \(shellQuote(session))"
+    public static func attachCommand(session: String, windowIndex: Int?, clientTag: String) -> String {
+        let clone = "\(session)-psh-\(clientTag)"
+        let attach = "\(tmux) -u new-session -t \(shellQuote(session)) -s \(shellQuote(clone))"
+            + " \\; set-option destroy-unattached on"
         guard let windowIndex else { return attach }
         return "\(attach) \\; select-window -t \(windowIndex)"
     }
@@ -122,13 +129,34 @@ public enum Tmux {
     public static func parseSessions(_ output: String) -> [TmuxSession] {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: "|", omittingEmptySubsequences: false)
-            guard parts.count >= 3,
-                  let windows = Int(parts[parts.count - 2]),
-                  let attachedClients = Int(parts.last!)
+            guard parts.count >= 4,
+                  let windows = Int(parts[parts.count - 3]),
+                  let attachedClients = Int(parts[parts.count - 2])
             else { return nil }
-            let name = parts[0..<(parts.count - 2)].joined(separator: "|")
-            return TmuxSession(name: name, windows: windows, attached: attachedClients > 0)
+            let name = parts[0..<(parts.count - 3)].joined(separator: "|")
+            let group = parts.last!.isEmpty ? nil : String(parts.last!)
+            return TmuxSession(name: name, windows: windows, attached: attachedClients > 0, group: group)
         }
+    }
+
+    public static func consolidateGroups(_ sessions: [TmuxSession]) -> [TmuxSession] {
+        var order: [String] = []
+        var merged: [String: TmuxSession] = [:]
+        for session in sessions {
+            let key = session.group ?? session.name
+            if var existing = merged[key] {
+                existing.attached = existing.attached || session.attached
+                if session.name == key {
+                    existing.name = session.name
+                    existing.windows = session.windows
+                }
+                merged[key] = existing
+            } else {
+                order.append(key)
+                merged[key] = session
+            }
+        }
+        return order.compactMap { merged[$0] }
     }
 
     public static let nextPaneKeys = "\u{02}o"

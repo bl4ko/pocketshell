@@ -51,6 +51,35 @@ import Testing
     #expect(AgentStatus.classify(pane) == .busy)
 }
 
+@Test func classifyBusyForOpencodeEscInterrupt() {
+    #expect(AgentStatus.classify("▄▀█▄  esc interrupt") == .busy)
+    #expect(AgentStatus.classify("esc again to interrupt") == .busy)
+}
+
+@Test func classifyWaitingForCodexApproval() {
+    let pane = """
+      Would you like to run the following command?
+
+      $ echo hello world
+
+    › 1. Yes, proceed (y)
+      2. Yes, and don't ask again for commands that start with `echo hello world` (p)
+      3. No, and tell Codex what to do differently (esc)
+
+      Press enter to confirm or esc to cancel
+    """
+    #expect(AgentStatus.classify(pane) == .waiting)
+}
+
+@Test func classifyWaitingForOpencodePermission() {
+    let pane = """
+    bash: kubectl get pods
+
+      Allow once    Allow always    Reject
+    """
+    #expect(AgentStatus.classify(pane) == .waiting)
+}
+
 @Test func classifyIdleForStatusLineParens() {
     let pane = """
     ❯ Yes recreate

@@ -35,15 +35,24 @@ public enum AgentStatus: Equatable, Sendable {
     case waiting
     case idle
 
+    static let waitingMarkers = [
+        "do you want",
+        "would you like to run",
+        "yes, proceed",
+        "allow once",
+        "allow always",
+        "press enter to confirm",
+    ]
+
     public static func classify(_ paneText: String) -> AgentStatus {
         let lowered = paneText.lowercased()
-        if lowered.contains("esc to interrupt") || lowered.contains("compacting conversation") {
+        if lowered.contains("compacting conversation") || lowered.contains(/esc\b.{0,12}interrupt/) {
             return .busy
         }
         if paneText.contains(/\p{L}…\s*\(\d+[hms]/) {
             return .busy
         }
-        if paneText.contains("Do you want") {
+        if waitingMarkers.contains(where: lowered.contains) {
             return .waiting
         }
         return .idle

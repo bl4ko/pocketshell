@@ -41,6 +41,32 @@ private let image = CGSize(width: 1600, height: 900)
     #expect(point == CGPoint(x: 800, y: 450))
 }
 
+private func near(_ point: CGPoint?, _ expected: CGPoint) -> Bool {
+    guard let point else { return false }
+    return abs(point.x - expected.x) < 0.001 && abs(point.y - expected.y) < 0.001
+}
+
+@Test func fillModeCenterTouchMapsToImageCenter() {
+    let point = VNCPointerMath.framebufferPoint(
+        touch: CGPoint(x: 200, y: 150), viewSize: view, imageSize: image, zoom: 1, offset: .zero, fill: true
+    )
+    #expect(near(point, CGPoint(x: 800, y: 450)))
+}
+
+@Test func fillModeTopEdgeTouchMapsToImageTopEdge() {
+    let point = VNCPointerMath.framebufferPoint(
+        touch: CGPoint(x: 200, y: 0), viewSize: view, imageSize: image, zoom: 1, offset: .zero, fill: true
+    )
+    #expect(near(point, CGPoint(x: 800, y: 0)))
+}
+
+@Test func fillModeLeftEdgeTouchMapsInsideCroppedImage() {
+    let point = VNCPointerMath.framebufferPoint(
+        touch: CGPoint(x: 0, y: 150), viewSize: view, imageSize: image, zoom: 1, offset: .zero, fill: true
+    )
+    #expect(near(point, CGPoint(x: 200, y: 450)))
+}
+
 @Test func clampedPixelStaysInsideFramebuffer() {
     let pixel = VNCPointerMath.clampedPixel(CGPoint(x: 1600, y: -3), imageSize: image)
     #expect(pixel.x == 1599)

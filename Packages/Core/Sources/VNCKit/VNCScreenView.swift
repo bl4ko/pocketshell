@@ -10,6 +10,11 @@ public struct VNCScreenView: View {
     @State private var offsetAtGestureStart: CGSize = .zero
     @State private var keyboardText = sentinel
     @State private var commandActive = false
+    @State private var fullscreen = false
+    @State private var fillScreen = false
+    @State private var addingShortcut = false
+    @State private var newShortcutText = ""
+    @AppStorage("pocketshell.vncCustomShortcuts") private var customShortcutsRaw = ""
     @FocusState private var keyboardFocused: Bool
 
     private static let sentinel = "\u{200b}"
@@ -26,7 +31,20 @@ public struct VNCScreenView: View {
             }
             .background(Color.black)
             .clipped()
+            .ignoresSafeArea(.container, edges: fullscreen ? .top : [])
             controlBar
+        }
+        .toolbar(fullscreen ? .hidden : .automatic, for: .navigationBar)
+        .statusBarHidden(fullscreen)
+        .animation(.easeInOut(duration: 0.2), value: fullscreen)
+        .alert("Add shortcut", isPresented: $addingShortcut) {
+            TextField("cmd+shift+4", text: $newShortcutText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Add") { addShortcut() }
+            Button("Cancel", role: .cancel) { newShortcutText = "" }
+        } message: {
+            Text("Modifiers: cmd, shift, ctrl, alt. Keys: letters, digits, space, tab, esc, return, arrows, f1-f19.")
         }
         .onDisappear {
             session.disconnect()
@@ -39,7 +57,8 @@ public struct VNCScreenView: View {
             if let image = session.image {
                 Image(decorative: image, scale: 1)
                     .resizable()
-                    .scaledToFit()
+                    .aspectRatio(contentMode: fillScreen ? .fill : .fit)
+                    .frame(width: viewSize.width, height: viewSize.height)
                     .scaleEffect(zoom)
                     .offset(offset)
             } else if session.phase == .connecting {
@@ -61,10 +80,7 @@ public struct VNCScreenView: View {
                 .onEnded { _ in
                     zoomAtGestureStart = zoom
                     if zoom <= 1.01 {
-                        zoom = 1
-                        offset = .zero
-                        offsetAtGestureStart = .zero
-                        zoomAtGestureStart = 1
+                        resetZoom()
                     }
                 }
         )
@@ -81,6 +97,13 @@ public struct VNCScreenView: View {
                     offsetAtGestureStart = offset
                 }
         )
+    }
+
+    private func resetZoom() {
+        zoom = 1
+        offset = .zero
+        offsetAtGestureStart = .zero
+        zoomAtGestureStart = 1
     }
 
     private func longPressRightClick(viewSize: CGSize) -> some Gesture {
@@ -100,7 +123,8 @@ public struct VNCScreenView: View {
             viewSize: viewSize,
             imageSize: session.framebufferSize,
             zoom: zoom,
-            offset: offset
+            offset: offset,
+            fill: fillScreen
         )
     }
 
@@ -130,11 +154,22 @@ public struct VNCScreenView: View {
     private var controlBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                controlButton("keyboard") {
+                controlButton(keyboardFocused ? "keyboard.chevron.compact.down" : "keyboard", active: keyboardFocused) {
                     keyboardFocused.toggle()
                 }
                 controlButton("command", active: commandActive) {
                     commandActive.toggle()
+                }
+                shortcutsMenu
+                controlButton("aspectratio", active: fillScreen) {
+                    fillScreen.toggle()
+                    resetZoom()
+                }
+                controlButton(
+                    fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                    active: fullscreen
+                ) {
+                    fullscreen.toggle()
                 }
                 controlButton("escape") { sendKey(.escape) }
                 controlButton("arrow.left") { sendKey(.leftArrow) }
@@ -158,7 +193,66 @@ public struct VNCScreenView: View {
                 .onChange(of: keyboardText) { oldValue, newValue in
                     handleKeyboardChange(from: oldValue, to: newValue)
                 }
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        keyboardAccessory
+                    }
+                }
         }
+    }
+
+    private var keyboardAccessory: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                controlButton("keyboard.chevron.compact.down") { keyboardFocused = false }
+                controlButton("command", active: commandActive) { commandActive.toggle() }
+                shortcutsMenu
+                controlButton("escape") { sendKey(.escape) }
+                controlButton("arrow.right.to.line") { sendKey(.tab) }
+                controlButton("arrow.left") { sendKey(.leftArrow) }
+                controlButton("arrow.up") { sendKey(.upArrow) }
+                controlButton("arrow.down") { sendKey(.downArrow) }
+                controlButton("arrow.right") { sendKey(.rightArrow) }
+            }
+        }
+    }
+
+    private var customShortcuts: [VNCKeyCombo] {
+        customShortcutsRaw
+            .split(separator: "\n")
+            .compactMap { VNCKeyCombo.parse(String($0)) }
+    }
+
+    private var shortcutsMenu: some View {
+        Menu {
+            ForEach(VNCKeyCombo.presets) { combo in
+                Button(combo.label) { sendCombo(combo) }
+            }
+            if !customShortcuts.isEmpty {
+                Divider()
+                ForEach(customShortcuts) { combo in
+                    Button(combo.label) { sendCombo(combo) }
+                }
+                Menu("Remove custom") {
+                    ForEach(customShortcuts) { combo in
+                        Button(combo.label, role: .destructive) { removeShortcut(combo) }
+                    }
+                }
+            }
+            Divider()
+            Button {
+                addingShortcut = true
+            } label: {
+                Label("Add custom…", systemImage: "plus")
+            }
+        } label: {
+            Image(systemName: "command.square")
+                .font(.system(size: 16))
+                .frame(width: 40, height: 32)
+                .background(Color.secondary.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
     }
 
     private func controlButton(_ systemImage: String, active: Bool = false, action: @escaping () -> Void) -> some View {
@@ -170,6 +264,26 @@ public struct VNCScreenView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
+    }
+
+    private func addShortcut() {
+        let text = newShortcutText.trimmingCharacters(in: .whitespaces)
+        newShortcutText = ""
+        guard let combo = VNCKeyCombo.parse(text),
+              !customShortcuts.contains(combo),
+              !VNCKeyCombo.presets.contains(combo) else { return }
+        customShortcutsRaw = (customShortcuts.isEmpty ? text : customShortcutsRaw + "\n" + text)
+    }
+
+    private func removeShortcut(_ combo: VNCKeyCombo) {
+        customShortcutsRaw = customShortcutsRaw
+            .split(separator: "\n")
+            .filter { VNCKeyCombo.parse(String($0)) != combo }
+            .joined(separator: "\n")
+    }
+
+    private func sendCombo(_ combo: VNCKeyCombo) {
+        session.sendKey(combo.key, modifiers: combo.modifiers)
     }
 
     private func sendKey(_ key: VNCKeyCode) {

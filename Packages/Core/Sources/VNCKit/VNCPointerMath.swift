@@ -6,12 +6,15 @@ public enum VNCPointerMath {
         viewSize: CGSize,
         imageSize: CGSize,
         zoom: CGFloat,
-        offset: CGSize
+        offset: CGSize,
+        fill: Bool = false
     ) -> CGPoint? {
         guard imageSize.width > 0, imageSize.height > 0, viewSize.width > 0, viewSize.height > 0 else {
             return nil
         }
-        let fitScale = min(viewSize.width / imageSize.width, viewSize.height / imageSize.height)
+        let widthScale = viewSize.width / imageSize.width
+        let heightScale = viewSize.height / imageSize.height
+        let fitScale = fill ? max(widthScale, heightScale) : min(widthScale, heightScale)
         let scale = fitScale * zoom
         guard scale > 0 else { return nil }
         let displayed = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)

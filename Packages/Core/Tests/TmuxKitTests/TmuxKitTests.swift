@@ -92,6 +92,17 @@ import Testing
     #expect(Tmux.previousWindowKeys == "\u{02}p")
 }
 
+@Test func newSessionCommandCreatesDetachedSession() {
+    #expect(Tmux.newSessionCommand(name: "agents")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux new-session -d -s 'agents'")
+}
+
+@Test func windowAndSplitKeysUsePrefix() {
+    #expect(Tmux.newWindowKeys == "\u{02}c")
+    #expect(Tmux.splitHorizontalKeys == "\u{02}%")
+    #expect(Tmux.splitVerticalKeys == "\u{02}\"")
+}
+
 @Test func parseSessionsAcceptsMultipleAttachedClients() {
     let sessions = Tmux.parseSessions("agents|4|2|\nidle|1|0|")
     #expect(sessions == [

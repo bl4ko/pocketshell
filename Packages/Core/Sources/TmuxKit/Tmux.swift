@@ -168,10 +168,17 @@ public enum Tmux {
         return order.compactMap { merged[$0] }
     }
 
+    public static func newSessionCommand(name: String) -> String {
+        "\(tmux) new-session -d -s \(shellQuote(name))"
+    }
+
     public static let nextPaneKeys = "\u{02}o"
     public static let zoomPaneKeys = "\u{02}z"
     public static let nextWindowKeys = "\u{02}n"
     public static let previousWindowKeys = "\u{02}p"
+    public static let newWindowKeys = "\u{02}c"
+    public static let splitHorizontalKeys = "\u{02}%"
+    public static let splitVerticalKeys = "\u{02}\""
 
     static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"

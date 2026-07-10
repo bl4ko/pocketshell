@@ -260,6 +260,8 @@ struct TmuxJumpSheet: View {
     @State private var windows: [WindowDashboardItem] = []
     @State private var windowsSession: String?
     @State private var loaded = false
+    @State private var namingSession = false
+    @State private var newSessionName = ""
 
     let controller: ConnectionController?
 
@@ -323,6 +325,24 @@ struct TmuxJumpSheet: View {
                             controller?.sendText(Tmux.zoomPaneKeys)
                             dismiss()
                         }
+                        Button("New window") {
+                            controller?.sendText(Tmux.newWindowKeys)
+                            dismiss()
+                        }
+                        Button("Split side by side") {
+                            controller?.sendText(Tmux.splitHorizontalKeys)
+                            dismiss()
+                        }
+                        Button("Split stacked") {
+                            controller?.sendText(Tmux.splitVerticalKeys)
+                            dismiss()
+                        }
+                    }
+                }
+                Section {
+                    Button("New session…") {
+                        newSessionName = ""
+                        namingSession = true
                     }
                 }
                 if loaded && sessions.isEmpty {
@@ -334,6 +354,17 @@ struct TmuxJumpSheet: View {
             .presentationDetents([.medium, .large])
             .task {
                 await load()
+            }
+            .alert("New tmux session", isPresented: $namingSession) {
+                TextField("name", text: $newSessionName)
+                Button("Create") {
+                    let name = newSessionName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    let controller = controller
+                    Task { await controller?.createTmuxSession(named: name) }
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
             }
             .themedScreen()
         }

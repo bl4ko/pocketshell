@@ -94,6 +94,12 @@ final class ConnectionController: ObservableObject {
         await openShellAndPump()
     }
 
+    func createTmuxSession(named name: String) async {
+        guard let connection else { return }
+        _ = try? await connection.exec(Tmux.newSessionCommand(name: name))
+        await jump(toSession: name)
+    }
+
     func tmuxSessions() async -> [TmuxSession] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""

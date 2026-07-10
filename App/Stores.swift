@@ -41,6 +41,7 @@ final class AppStore: ObservableObject {
     @Published var toolbarKeys: [ToolbarKey] { didSet { toolbarStore.save(toolbarKeys) } }
     @Published var importedKeys: [ImportedKey] { didSet { importedKeysStore.save(importedKeys) } }
     @Published var savedTabs: [String: [TabRecord]] { didSet { savedTabsStore.save(savedTabs) } }
+    @Published var sessionOrder: [String: [String]] { didSet { sessionOrderStore.save(sessionOrder) } }
 
     let keyStore = DeviceKeyStore()
     let knownHosts: KnownHostsStore
@@ -51,6 +52,7 @@ final class AppStore: ObservableObject {
     private let toolbarStore = JSONStore<[ToolbarKey]>(filename: "toolbar.json")
     private let importedKeysStore = JSONStore<[ImportedKey]>(filename: "imported-keys.json")
     private let savedTabsStore = JSONStore<[String: [TabRecord]]>(filename: "tabs.json")
+    private let sessionOrderStore = JSONStore<[String: [String]]>(filename: "session-order.json")
 
     init() {
         hosts = hostsStore.load() ?? []
@@ -59,6 +61,7 @@ final class AppStore: ObservableObject {
         toolbarKeys = toolbarStore.load() ?? ToolbarKey.defaults
         importedKeys = importedKeysStore.load() ?? []
         savedTabs = savedTabsStore.load() ?? [:]
+        sessionOrder = sessionOrderStore.load() ?? [:]
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("pocketshell", isDirectory: true)
         knownHosts = KnownHostsStore(fileURL: dir.appendingPathComponent("known-hosts.json"))
@@ -103,6 +106,24 @@ final class AppStore: ObservableObject {
     func deleteImportedKey(_ key: ImportedKey) {
         try? keyStore.delete(tag: key.tag)
         importedKeys.removeAll { $0.id == key.id }
+    }
+
+    func exportConfig() -> ConfigExport {
+        ConfigExport(
+            hosts: hosts,
+            vncHosts: vncHosts,
+            snippets: snippets,
+            toolbarKeys: toolbarKeys,
+            knownHosts: knownHosts.entries()
+        )
+    }
+
+    func applyConfig(_ config: ConfigExport) {
+        hosts = ConfigExport.mergeByID(existing: hosts, incoming: config.hosts)
+        vncHosts = ConfigExport.mergeByID(existing: vncHosts, incoming: config.vncHosts)
+        snippets = ConfigExport.mergeByID(existing: snippets, incoming: config.snippets)
+        toolbarKeys = ConfigExport.mergeByID(existing: toolbarKeys, incoming: config.toolbarKeys)
+        try? knownHosts.merge(config.knownHosts)
     }
 
     func setVNCPassword(_ password: String, for host: VNCHostConfig) {

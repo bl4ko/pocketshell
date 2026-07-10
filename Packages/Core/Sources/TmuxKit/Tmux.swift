@@ -87,8 +87,20 @@ public enum Tmux {
         "\(tmux) list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_group}'"
     }
 
+    public static func cloneName(session: String, clientTag: String) -> String {
+        "\(session)-psh-\(clientTag)"
+    }
+
+    public static func currentWindowCommand(clone: String) -> String {
+        "\(tmux) display-message -p -t \(shellQuote(clone)) '#{window_index}'"
+    }
+
+    public static func parseCurrentWindow(_ output: String) -> Int? {
+        Int(output.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     public static func attachCommand(session: String, windowIndex: Int?, clientTag: String) -> String {
-        let clone = "\(session)-psh-\(clientTag)"
+        let clone = cloneName(session: session, clientTag: clientTag)
         let attach = "\(tmux) -u new-session -t \(shellQuote(session)) -s \(shellQuote(clone))"
             + " \\; set-option destroy-unattached on"
         guard let windowIndex else { return attach }
@@ -199,6 +211,10 @@ public enum Tmux {
 
     public static func killSessionCommand(name: String) -> String {
         "\(tmux) kill-session -t \(shellQuote(name))"
+    }
+
+    public static func killWindowCommand(session: String, windowIndex: Int) -> String {
+        "\(tmux) kill-window -t \(shellQuote(session)):\(windowIndex)"
     }
 
     public static let nextPaneKeys = "\u{02}o"

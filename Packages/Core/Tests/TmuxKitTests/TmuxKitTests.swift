@@ -125,3 +125,25 @@ import Testing
     #expect(Tmux.killSessionCommand(name: "agents")
         == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux kill-session -t 'agents'")
 }
+
+@Test func killWindowCommandTargetsSessionAndIndex() {
+    #expect(Tmux.killWindowCommand(session: "agents", windowIndex: 2)
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux kill-window -t 'agents':2")
+}
+
+@Test func cloneNameMatchesAttachCommand() {
+    #expect(Tmux.cloneName(session: "claude", clientTag: "ab12cd") == "claude-psh-ab12cd")
+    #expect(Tmux.attachCommand(session: "claude", windowIndex: nil, clientTag: "ab12cd")
+        .contains("-s 'claude-psh-ab12cd'"))
+}
+
+@Test func currentWindowCommandTargetsClone() {
+    #expect(Tmux.currentWindowCommand(clone: "claude-psh-ab12cd")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux display-message -p -t 'claude-psh-ab12cd' '#{window_index}'")
+}
+
+@Test func parseCurrentWindowReadsIndex() {
+    #expect(Tmux.parseCurrentWindow("3\n") == 3)
+    #expect(Tmux.parseCurrentWindow("") == nil)
+    #expect(Tmux.parseCurrentWindow("can't find session\n") == nil)
+}

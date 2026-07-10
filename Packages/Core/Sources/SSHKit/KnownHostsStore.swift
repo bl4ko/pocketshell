@@ -27,6 +27,19 @@ public struct KnownHostsStore: Sendable {
         try data.write(to: fileURL, options: .atomic)
     }
 
+    public func entries() -> [String: String] {
+        read()
+    }
+
+    public func merge(_ incoming: [String: String]) throws {
+        var entries = read()
+        for (key, value) in incoming where entries[key] == nil {
+            entries[key] = value
+        }
+        let data = try JSONEncoder().encode(entries)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
     public static func fingerprint(publicKeyLine: String) -> String {
         let parts = publicKeyLine.split(separator: " ")
         let blob = parts.count > 1 ? Data(base64Encoded: String(parts[1])) ?? Data(publicKeyLine.utf8) : Data(publicKeyLine.utf8)

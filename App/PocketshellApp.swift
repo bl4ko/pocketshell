@@ -1,5 +1,24 @@
 import BackgroundTasks
 import SwiftUI
+import UIKit
+
+@MainActor
+final class BackgroundKeepAlive {
+    private var taskID: UIBackgroundTaskIdentifier = .invalid
+
+    func begin() {
+        end()
+        taskID = UIApplication.shared.beginBackgroundTask(withName: "pocketshell-connections") { [weak self] in
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard taskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(taskID)
+        taskID = .invalid
+    }
+}
 
 @main
 struct PocketshellApp: App {
@@ -7,6 +26,7 @@ struct PocketshellApp: App {
     @StateObject private var store: AppStore
     @StateObject private var lock = AppLockController()
     @StateObject private var monitor: SessionMonitor
+    private let keepAlive = BackgroundKeepAlive()
 
     init() {
         let store = AppStore()
@@ -45,8 +65,10 @@ struct PocketshellApp: App {
             lock.scenePhaseChanged(phase)
             switch phase {
             case .active:
+                keepAlive.end()
                 monitor.startPolling()
             case .background:
+                keepAlive.begin()
                 monitor.stopPolling()
                 if monitor.enabled {
                     SessionMonitor.scheduleBackgroundRefresh()

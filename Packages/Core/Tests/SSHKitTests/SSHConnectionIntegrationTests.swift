@@ -262,6 +262,45 @@ private func makeConnection(_ sshd: TestSSHD, knownHostsFile: URL? = nil) -> SSH
         await connection.disconnect()
     }
 
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["PS_REAL_HOST"] != nil))
+    func wrongKeyAgainstRealHostFailsQuickly() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let host = HostConfig(
+            name: "real",
+            hostname: env["PS_REAL_HOST"]!,
+            port: Int(env["PS_REAL_PORT"] ?? "22")!,
+            username: env["PS_REAL_USER"] ?? "nobody",
+            keyTag: "test"
+        )
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kh-\(UUID().uuidString).json")
+        let connection = SSHConnection(
+            host: host,
+            key: .software(P256.Signing.PrivateKey()),
+            knownHosts: KnownHostsStore(fileURL: file)
+        )
+        let outcome = await withTaskGroup(of: String.self) { group in
+            group.addTask {
+                do {
+                    try await connection.connect()
+                    return "connected"
+                } catch SSHError.authenticationFailed {
+                    return "authFailed"
+                } catch {
+                    return "error: \(error)"
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(15))
+                return "hung"
+            }
+            let first = await group.next()!
+            group.cancelAll()
+            return first
+        }
+        #expect(outcome == "authFailed")
+    }
+
     @Test func execReturnsExitStatusFailure() async throws {
         let sshd = try TestSSHD()
         defer { sshd.stop() }

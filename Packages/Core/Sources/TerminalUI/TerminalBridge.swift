@@ -17,6 +17,14 @@ public final class TerminalBridge: ObservableObject {
         view?.feed(byteArray: [UInt8](data)[...])
     }
 
+    public func visibleText() -> String {
+        guard let terminal = view?.getTerminal() else { return "" }
+        return (0..<terminal.rows)
+            .compactMap { terminal.getLine(row: $0)?.translateToString(trimRight: true) }
+            .joined(separator: "\n")
+            .replacingOccurrences(of: "\u{0}", with: " ")
+    }
+
     public func paste() {
         view?.paste(nil)
     }

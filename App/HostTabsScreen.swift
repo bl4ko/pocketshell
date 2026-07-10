@@ -1,6 +1,8 @@
 import Models
+import MonitorKit
 import SwiftUI
 import TmuxKit
+import UserNotifications
 
 struct TerminalTab: Identifiable {
     let id = UUID()
@@ -8,10 +10,21 @@ struct TerminalTab: Identifiable {
     var name: String?
 }
 
+struct TabJumpItem: Identifiable {
+    let id: UUID
+    let label: String
+    let status: AgentStatus
+    let preview: String
+    let selected: Bool
+}
+
 struct HostTabsScreen: View {
     @EnvironmentObject var store: AppStore
+    @Environment(\.dismiss) private var dismiss
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTab: UUID?
+    @State private var tabStatuses: [UUID: AgentStatus] = [:]
+    @State private var tabTracker = AgentActivityTracker()
     @State private var showSnippets = false
     @State private var showTmuxJump = false
     @State private var showFiles = false
@@ -81,7 +94,9 @@ struct HostTabsScreen: View {
             snippetPicker
         }
         .sheet(isPresented: $showTmuxJump) {
-            TmuxJumpSheet(controller: activeController)
+            TmuxJumpSheet(controller: activeController, tabItems: tabJumpItems) { id in
+                selectedTab = id
+            }
         }
         .sheet(isPresented: $showFiles) {
             FileBrowserView(controller: activeController)
@@ -91,12 +106,18 @@ struct HostTabsScreen: View {
         }
         .onAppear {
             if tabs.isEmpty {
-                addTab()
+                restoreTabs()
             }
         }
         .onDisappear {
             for tab in tabs {
                 Task { await tab.controller.stop() }
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                pollTabs()
             }
         }
         .themedScreen()
@@ -106,22 +127,104 @@ struct HostTabsScreen: View {
         tabs.first { $0.id == selectedTab }?.controller
     }
 
-    private func addTab() {
-        let controller = ConnectionController(
+    private var tabJumpItems: [TabJumpItem] {
+        tabs.enumerated().map { index, tab in
+            TabJumpItem(
+                id: tab.id,
+                label: tab.name ?? "tab \(index + 1)",
+                status: tabStatuses[tab.id] ?? .idle,
+                preview: Tmux.previewLines(tab.controller.bridge.visibleText(), count: 1),
+                selected: tab.id == selectedTab
+            )
+        }
+    }
+
+    private func makeController() -> ConnectionController {
+        ConnectionController(
             host: host,
             key: (try? store.key(for: host)) ?? .software(.init()),
             knownHosts: store.knownHosts
         )
-        let tab = TerminalTab(controller: controller)
-        tabs.append(tab)
-        selectedTab = tab.id
     }
 
-    private func closeTab(_ tab: TerminalTab) {
+    private func addTab() {
+        let controller = makeController()
+        let tab = TerminalTab(controller: controller)
+        controller.onExit = { closeTab(id: tab.id) }
+        tabs.append(tab)
+        selectedTab = tab.id
+        persistTabs()
+    }
+
+    private func restoreTabs() {
+        let records = store.savedTabs[host.id.uuidString] ?? []
+        guard !records.isEmpty else {
+            addTab()
+            return
+        }
+        for record in records {
+            let controller = makeController()
+            if let session = record.tmuxSession {
+                controller.preset(session: session, windowIndex: record.windowIndex)
+            } else {
+                controller.presetPlain()
+            }
+            let tab = TerminalTab(controller: controller, name: record.name)
+            controller.onExit = { closeTab(id: tab.id) }
+            tabs.append(tab)
+        }
+        selectedTab = tabs.first?.id
+    }
+
+    private func closeTab(id: UUID) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
         Task { await tab.controller.stop() }
-        tabs.removeAll { $0.id == tab.id }
-        if selectedTab == tab.id {
+        tabs.removeAll { $0.id == id }
+        tabStatuses[id] = nil
+        if selectedTab == id {
             selectedTab = tabs.last?.id
+        }
+        persistTabs()
+        if tabs.isEmpty {
+            dismiss()
+        }
+    }
+
+    private func persistTabs() {
+        let records = tabs.map { tab in
+            let target = tab.controller.tmuxTarget
+            return TabRecord(name: tab.name, tmuxSession: target?.session, windowIndex: target?.windowIndex)
+        }
+        if store.savedTabs[host.id.uuidString] != records {
+            store.savedTabs[host.id.uuidString] = records
+        }
+    }
+
+    private func pollTabs() {
+        var samples: [AgentActivityTracker.Sample] = []
+        for (index, tab) in tabs.enumerated() {
+            let status = AgentStatus.classify(tab.controller.bridge.visibleText())
+            tabStatuses[tab.id] = status
+            guard !tab.controller.isTmuxAttached else { continue }
+            samples.append(.init(
+                key: "tab-\(tab.id.uuidString)",
+                title: "\(host.name) \(tab.name ?? "tab \(index + 1)")",
+                status: status
+            ))
+        }
+        let transitions = tabTracker.update(samples)
+        persistTabs()
+        guard UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey) else { return }
+        for transition in transitions {
+            let content = UNMutableNotificationContent()
+            content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"
+            content.body = transition.title
+            content.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(
+                identifier: "\(transition.key)-\(Date().timeIntervalSince1970)",
+                content: content,
+                trigger: nil
+            ))
         }
     }
 
@@ -129,29 +232,34 @@ struct HostTabsScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                    Text(tab.name ?? "\(index + 1)")
-                        .font(.footnote.monospaced())
-                        .lineLimit(1)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(
-                            tab.id == selectedTab
-                                ? Color.accentColor.opacity(0.35)
-                                : Color.secondary.opacity(0.15)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .onTapGesture {
-                            selectedTab = tab.id
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(statusColor(tabStatuses[tab.id] ?? .idle))
+                            .frame(width: 6, height: 6)
+                        Text(tab.name ?? "\(index + 1)")
+                            .font(.footnote.monospaced())
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        tab.id == selectedTab
+                            ? Color.accentColor.opacity(0.35)
+                            : Color.secondary.opacity(0.15)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .onTapGesture {
+                        selectedTab = tab.id
+                    }
+                    .contextMenu {
+                        Button("Rename Tab") {
+                            renameText = tab.name ?? ""
+                            renamingTab = tab.id
                         }
-                        .contextMenu {
-                            Button("Rename Tab") {
-                                renameText = tab.name ?? ""
-                                renamingTab = tab.id
-                            }
-                            Button("Close Tab", role: .destructive) {
-                                closeTab(tab)
-                            }
+                        Button("Close Tab", role: .destructive) {
+                            closeTab(id: tab.id)
                         }
+                    }
                 }
             }
             .padding(.horizontal, 8)
@@ -178,6 +286,15 @@ struct HostTabsScreen: View {
         let trimmed = renameText.trimmingCharacters(in: .whitespaces)
         tabs[index].name = trimmed.isEmpty ? nil : trimmed
         renamingTab = nil
+        persistTabs()
+    }
+
+    private func statusColor(_ status: AgentStatus) -> Color {
+        switch status {
+        case .busy: .orange
+        case .waiting: .purple
+        case .idle: .green
+        }
     }
 
     private var snippetPicker: some View {
@@ -264,6 +381,8 @@ struct TmuxJumpSheet: View {
     @State private var newSessionName = ""
 
     let controller: ConnectionController?
+    var tabItems: [TabJumpItem] = []
+    var onSelectTab: ((UUID) -> Void)?
 
     private var attached: Bool {
         controller?.isTmuxAttached ?? false
@@ -272,6 +391,41 @@ struct TmuxJumpSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                if tabItems.count > 1 {
+                    Section("Tabs") {
+                        ForEach(tabItems) { item in
+                            Button {
+                                onSelectTab?(item.id)
+                                dismiss()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(tabStatusColor(item.status))
+                                            .frame(width: 8, height: 8)
+                                        Text(item.label)
+                                            .font(.subheadline.weight(.medium))
+                                        Text(item.status.label)
+                                            .font(.caption2)
+                                            .foregroundStyle(tabStatusColor(item.status))
+                                        if item.selected {
+                                            Spacer()
+                                            Image(systemName: "eye")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    if !item.preview.isEmpty {
+                                        Text(item.preview)
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if !sessions.isEmpty {
                     Section {
                         ForEach(sessions) { session in
@@ -381,6 +535,14 @@ struct TmuxJumpSheet: View {
         let controller = controller
         Task { await controller?.jump(toSession: windowsSession, windowIndex: index) }
         dismiss()
+    }
+
+    private func tabStatusColor(_ status: AgentStatus) -> Color {
+        switch status {
+        case .busy: .orange
+        case .waiting: .purple
+        case .idle: .green
+        }
     }
 
     private func load() async {

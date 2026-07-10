@@ -110,3 +110,18 @@ import Testing
         TmuxSession(name: "idle", windows: 1, attached: false, group: nil),
     ])
 }
+
+@Test func renameWindowCommandTargetsSessionAndIndex() {
+    #expect(Tmux.renameWindowCommand(session: "agents", windowIndex: 2, name: "new name")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux rename-window -t 'agents':2 'new name'")
+}
+
+@Test func renameSessionCommandQuotesBothNames() {
+    #expect(Tmux.renameSessionCommand(from: "agents", to: "work")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux rename-session -t 'agents' 'work'")
+}
+
+@Test func killSessionCommandTargetsName() {
+    #expect(Tmux.killSessionCommand(name: "agents")
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux kill-session -t 'agents'")
+}

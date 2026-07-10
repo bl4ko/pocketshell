@@ -44,6 +44,23 @@ public enum AgentStatus: Equatable, Sendable {
         "press enter to confirm",
     ]
 
+    static let agentMarkers = [
+        "? for shortcuts",
+        "bypass permissions",
+        "accept edits",
+        "plan mode on",
+        "shift+tab to cycle",
+        "esc to interrupt",
+        "compacting conversation",
+    ]
+
+    public static func detectAgent(_ paneText: String) -> AgentStatus? {
+        let status = classify(paneText)
+        if status != .idle { return status }
+        let lowered = paneText.lowercased()
+        return agentMarkers.contains(where: lowered.contains) ? .idle : nil
+    }
+
     public static func classify(_ paneText: String) -> AgentStatus {
         let lowered = paneText.lowercased()
         if lowered.contains("compacting conversation") || lowered.contains(/esc\b.{0,12}interrupt/) {
@@ -170,6 +187,18 @@ public enum Tmux {
 
     public static func newSessionCommand(name: String) -> String {
         "\(tmux) new-session -d -s \(shellQuote(name))"
+    }
+
+    public static func renameWindowCommand(session: String, windowIndex: Int, name: String) -> String {
+        "\(tmux) rename-window -t \(shellQuote(session)):\(windowIndex) \(shellQuote(name))"
+    }
+
+    public static func renameSessionCommand(from oldName: String, to newName: String) -> String {
+        "\(tmux) rename-session -t \(shellQuote(oldName)) \(shellQuote(newName))"
+    }
+
+    public static func killSessionCommand(name: String) -> String {
+        "\(tmux) kill-session -t \(shellQuote(name))"
     }
 
     public static let nextPaneKeys = "\u{02}o"

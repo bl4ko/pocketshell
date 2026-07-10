@@ -61,6 +61,7 @@ public struct VNCScreenView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 controlButton("keyboard") { keyboardVisible = true }
+                controlButton("doc.on.clipboard") { pasteClipboard() }
                 controlButton("command", active: commandActive) { commandActive.toggle() }
                 controlButton("control", active: controlActive) { controlActive.toggle() }
                 shortcutsMenu
@@ -78,7 +79,6 @@ public struct VNCScreenView: View {
                 controlButton("arrow.right") { sendKey(.rightArrow) }
                 controlButton("arrow.turn.down.left") { sendKey(.return) }
                 controlButton("delete.left") { sendKey(.delete) }
-                controlButton("doc.on.clipboard") { pasteClipboard() }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -90,6 +90,7 @@ public struct VNCScreenView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 controlButton("keyboard.chevron.compact.down") { keyboardVisible = false }
+                controlButton("doc.on.clipboard") { pasteClipboard() }
                 controlButton("command", active: commandActive) { commandActive.toggle() }
                 controlButton("control", active: controlActive) { controlActive.toggle() }
                 shortcutsMenu
@@ -99,7 +100,6 @@ public struct VNCScreenView: View {
                 controlButton("arrow.up") { sendKey(.upArrow) }
                 controlButton("arrow.down") { sendKey(.downArrow) }
                 controlButton("arrow.right") { sendKey(.rightArrow) }
-                controlButton("doc.on.clipboard") { pasteClipboard() }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)

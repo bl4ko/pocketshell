@@ -20,6 +20,7 @@ struct TabJumpItem: Identifiable {
 
 struct HostTabsScreen: View {
     @EnvironmentObject var store: AppStore
+    @ObservedObject private var router = NotificationRouter.shared
     @Environment(\.dismiss) private var dismiss
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTab: UUID?
@@ -94,7 +95,7 @@ struct HostTabsScreen: View {
             snippetPicker
         }
         .sheet(isPresented: $showTmuxJump) {
-            TmuxJumpSheet(controller: activeController, tabItems: tabJumpItems) { id in
+            TmuxJumpSheet(controller: activeController, tabItems: tabJumpItems, orderKey: host.id.uuidString) { id in
                 selectedTab = id
             }
         }
@@ -108,6 +109,10 @@ struct HostTabsScreen: View {
             if tabs.isEmpty {
                 restoreTabs()
             }
+            consumePendingTarget()
+        }
+        .onChange(of: router.pending) { _, _ in
+            consumePendingTarget()
         }
         .onDisappear {
             for tab in tabs {
@@ -176,6 +181,24 @@ struct HostTabsScreen: View {
         selectedTab = tabs.first?.id
     }
 
+    private func consumePendingTarget() {
+        guard let target = router.pending, target.hostID == host.id else { return }
+        router.pending = nil
+        guard let session = target.session else { return }
+        if let tab = tabs.first(where: { $0.controller.tmuxTarget?.session == session }) {
+            selectedTab = tab.id
+            Task { await tab.controller.jump(toSession: session, windowIndex: target.windowIndex) }
+        } else {
+            let controller = makeController()
+            controller.preset(session: session, windowIndex: target.windowIndex)
+            let tab = TerminalTab(controller: controller)
+            controller.onExit = { closeTab(id: tab.id) }
+            tabs.append(tab)
+            selectedTab = tab.id
+            persistTabs()
+        }
+    }
+
     private func closeTab(id: UUID) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
         Task { await tab.controller.stop() }
@@ -220,6 +243,7 @@ struct HostTabsScreen: View {
             content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"
             content.body = transition.title
             content.sound = .default
+            content.userInfo = ["hostID": host.id.uuidString]
             UNUserNotificationCenter.current().add(UNNotificationRequest(
                 identifier: "\(transition.key)-\(Date().timeIntervalSince1970)",
                 content: content,
@@ -396,6 +420,21 @@ struct TmuxJumpSheet: View {
         }
     }
 
+    private enum KillTarget {
+        case session(String)
+        case window(session: String, index: Int, name: String)
+
+        var confirmTitle: String {
+            switch self {
+            case .session(let name):
+                "Delete tmux session \(name)? Kills all its windows."
+            case .window(_, _, let name):
+                "Delete window \(name)? Kills its shell."
+            }
+        }
+    }
+
+    @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var sessions: [TmuxSession] = []
     @State private var windowsBySession: [String: [WindowDashboardItem]] = [:]
@@ -403,10 +442,12 @@ struct TmuxJumpSheet: View {
     @State private var loaded = false
     @State private var prompt: Prompt?
     @State private var promptText = ""
-    @State private var killTarget: String?
+    @State private var killTarget: KillTarget?
+    @State private var choosingRenameWindow = false
 
     let controller: ConnectionController?
     var tabItems: [TabJumpItem] = []
+    var orderKey: String?
     var onSelectTab: ((UUID) -> Void)?
 
     private var attached: Bool {
@@ -469,6 +510,27 @@ struct TmuxJumpSheet: View {
                                     } label: {
                                         DashboardRow(item: item)
                                     }
+                                    .contextMenu {
+                                        Button("Rename…") {
+                                            promptText = item.window.name
+                                            prompt = .renameWindow(session: session.name, index: item.window.index)
+                                        }
+                                        Button("Delete", role: .destructive) {
+                                            killTarget = .window(session: session.name, index: item.window.index, name: item.window.name)
+                                        }
+                                    }
+                                    .swipeActions(edge: .trailing) {
+                                        Button("Delete", role: .destructive) {
+                                            killTarget = .window(session: session.name, index: item.window.index, name: item.window.name)
+                                        }
+                                    }
+                                    .swipeActions(edge: .leading) {
+                                        Button("Rename") {
+                                            promptText = item.window.name
+                                            prompt = .renameWindow(session: session.name, index: item.window.index)
+                                        }
+                                        .tint(.blue)
+                                    }
                                 }
                             } label: {
                                 HStack(spacing: 6) {
@@ -492,15 +554,33 @@ struct TmuxJumpSheet: View {
                                         prompt = .renameSession(session.name)
                                     }
                                     Button("Delete", role: .destructive) {
-                                        killTarget = session.name
+                                        killTarget = .session(session.name)
                                     }
                                 }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button("Delete", role: .destructive) {
+                                    killTarget = .session(session.name)
+                                }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button("Rename") {
+                                    promptText = session.name
+                                    prompt = .renameSession(session.name)
+                                }
+                                .tint(.blue)
+                            }
+                        }
+                        .onMove { from, to in
+                            sessions.move(fromOffsets: from, toOffset: to)
+                            if let orderKey {
+                                store.sessionOrder[orderKey] = sessions.map(\.name)
                             }
                         }
                     } header: {
                         Text("Sessions")
                     } footer: {
-                        Text("Tapping a window re-attaches this tab. Long-press a session for rename/delete.")
+                        Text("Tap window re-attaches this tab. Swipe row to rename/delete, drag session to reorder.")
                     }
                 }
                 if attached {
@@ -534,19 +614,22 @@ struct TmuxJumpSheet: View {
                             dismiss()
                         }
                         Button("Rename window…") {
-                            guard let currentSession,
-                                  let active = (windowsBySession[currentSession] ?? []).first(where: { $0.window.active })
-                            else { return }
-                            promptText = active.window.name
-                            prompt = .renameWindow(session: currentSession, index: active.window.index)
+                            choosingRenameWindow = true
                         }
                         Button("Rename session…") {
                             guard let currentSession else { return }
                             promptText = currentSession
                             prompt = .renameSession(currentSession)
                         }
+                        Button("Delete window…", role: .destructive) {
+                            guard let currentSession,
+                                  let active = (windowsBySession[currentSession] ?? []).first(where: { $0.window.active })
+                            else { return }
+                            killTarget = .window(session: currentSession, index: active.window.index, name: active.window.name)
+                        }
                         Button("Delete session…", role: .destructive) {
-                            killTarget = currentSession
+                            guard let currentSession else { return }
+                            killTarget = .session(currentSession)
                         }
                     }
                 }
@@ -572,12 +655,25 @@ struct TmuxJumpSheet: View {
                 Button("Cancel", role: .cancel) { prompt = nil }
             }
             .confirmationDialog(
-                "Delete tmux session \(killTarget ?? "")? Kills all its windows.",
+                killTarget?.confirmTitle ?? "",
                 isPresented: killShown,
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) { applyKill() }
                 Button("Cancel", role: .cancel) { killTarget = nil }
+            }
+            .confirmationDialog(
+                "Rename which window?",
+                isPresented: $choosingRenameWindow,
+                titleVisibility: .visible
+            ) {
+                ForEach(windowsBySession[currentSession ?? ""] ?? []) { item in
+                    Button("\(item.window.index): \(item.window.name)\(item.window.active ? " (current)" : "")") {
+                        promptText = item.window.name
+                        prompt = .renameWindow(session: currentSession ?? "", index: item.window.index)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
             }
             .themedScreen()
         }
@@ -608,6 +704,10 @@ struct TmuxJumpSheet: View {
             Task { await controller?.createTmuxSession(named: name) }
             dismiss()
         case .renameSession(let old):
+            if let orderKey, var saved = store.sessionOrder[orderKey], let index = saved.firstIndex(of: old) {
+                saved[index] = name
+                store.sessionOrder[orderKey] = saved
+            }
             Task {
                 await controller?.renameTmuxSession(from: old, to: name)
                 await load()
@@ -624,12 +724,20 @@ struct TmuxJumpSheet: View {
         guard let killTarget else { return }
         self.killTarget = nil
         let controller = controller
-        let isCurrent = killTarget == currentSession
-        Task {
-            await controller?.killTmuxSession(named: killTarget)
-            if isCurrent {
-                dismiss()
-            } else {
+        switch killTarget {
+        case .session(let name):
+            let isCurrent = name == currentSession
+            Task {
+                await controller?.killTmuxSession(named: name)
+                if isCurrent {
+                    dismiss()
+                } else {
+                    await load()
+                }
+            }
+        case .window(let session, let index, _):
+            Task {
+                await controller?.killTmuxWindow(session: session, windowIndex: index)
                 await load()
             }
         }
@@ -667,7 +775,17 @@ struct TmuxJumpSheet: View {
             loaded = true
             return
         }
-        sessions = await controller.tmuxSessions()
+        var list = await controller.tmuxSessions()
+        if let orderKey, let saved = store.sessionOrder[orderKey], !saved.isEmpty {
+            let positions = Dictionary(uniqueKeysWithValues: saved.enumerated().map { ($1, $0) })
+            list = list.enumerated()
+                .sorted {
+                    (positions[$0.element.name] ?? saved.count + $0.offset)
+                        < (positions[$1.element.name] ?? saved.count + $1.offset)
+                }
+                .map(\.element)
+        }
+        sessions = list
         var map: [String: [WindowDashboardItem]] = [:]
         for session in sessions {
             map[session.name] = await controller.dashboardItems(session: session.name)

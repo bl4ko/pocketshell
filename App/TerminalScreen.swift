@@ -3,31 +3,65 @@ import SwiftUI
 import TerminalUI
 import TmuxKit
 import ToolbarUI
+import UIKit
+
+@MainActor
+final class KeyboardObserver: ObservableObject {
+    @Published var height: CGFloat = 0
+    nonisolated(unsafe) private var token: NSObjectProtocol?
+
+    init() {
+        token = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillChangeFrameNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            let height = max(0, UIScreen.main.bounds.height - end.origin.y)
+            Task { @MainActor [weak self] in
+                withAnimation(.interpolatingSpring(mass: 3, stiffness: 1000, damping: 500)) {
+                    self?.height = height
+                }
+            }
+        }
+    }
+
+    deinit {
+        if let token {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+}
 
 struct TerminalScreen: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var connection: ConnectionController
+    @StateObject private var keyboard = KeyboardObserver()
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
 
     let host: HostConfig
 
     var body: some View {
-        VStack(spacing: 0) {
-            statusBanner
-            SSHTerminalView(bridge: connection.bridge, theme: TerminalTheme.named(themeName))
-            TerminalToolbar(
-                keys: store.toolbarKeys,
-                ctrlActive: Binding(
-                    get: { connection.bridge.ctrlActive },
-                    set: { connection.bridge.ctrlActive = $0 }
-                ),
-                onKey: { connection.bridge.handleToolbar($0) },
-                onHideKeyboard: { connection.bridge.toggleKeyboard() },
-                onPaste: { connection.bridge.paste() },
-                onCopy: { connection.bridge.copySelection() }
-            )
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                statusBanner
+                SSHTerminalView(bridge: connection.bridge, theme: TerminalTheme.named(themeName))
+                TerminalToolbar(
+                    keys: store.toolbarKeys,
+                    ctrlActive: Binding(
+                        get: { connection.bridge.ctrlActive },
+                        set: { connection.bridge.ctrlActive = $0 }
+                    ),
+                    onKey: { connection.bridge.handleToolbar($0) },
+                    onHideKeyboard: { connection.bridge.toggleKeyboard() },
+                    onPaste: { connection.bridge.paste() },
+                    onCopy: { connection.bridge.copySelection() }
+                )
+            }
+            .padding(.bottom, max(0, keyboard.height - proxy.safeAreaInsets.bottom))
         }
+        .ignoresSafeArea(.keyboard)
         .sheet(isPresented: windowPickerShown) {
             windowPicker
         }

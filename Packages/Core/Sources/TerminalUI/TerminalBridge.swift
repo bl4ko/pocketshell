@@ -17,6 +17,14 @@ public final class TerminalBridge: ObservableObject {
         view?.feed(byteArray: [UInt8](data)[...])
     }
 
+    public func paste() {
+        view?.paste(nil)
+    }
+
+    public func copySelection() {
+        view?.copy(nil)
+    }
+
     public func toggleKeyboard() {
         guard let view else { return }
         if view.isFirstResponder {

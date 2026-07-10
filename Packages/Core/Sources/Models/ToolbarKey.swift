@@ -19,6 +19,17 @@ public struct ToolbarKey: Identifiable, Codable, Hashable, Sendable {
         self.action = action
     }
 
+    public static func scrollRow(from keys: [ToolbarKey]) -> [ToolbarKey] {
+        keys.filter { key in
+            switch key.action {
+            case .escape, .ctrlModifier, .arrowUp, .arrowDown, .arrowLeft, .arrowRight:
+                false
+            default:
+                true
+            }
+        }
+    }
+
     public static let defaults: [ToolbarKey] = [
         ToolbarKey(label: "esc", action: .escape),
         ToolbarKey(label: "ctrl", action: .ctrlModifier),

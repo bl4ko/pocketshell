@@ -25,6 +25,12 @@ struct JSONStore<T: Codable> {
     }
 }
 
+struct TabRecord: Codable, Equatable {
+    var name: String?
+    var tmuxSession: String?
+    var windowIndex: Int?
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     static let deviceKeyTag = "pocketshell-device-key"
@@ -34,6 +40,7 @@ final class AppStore: ObservableObject {
     @Published var snippets: [Snippet] { didSet { snippetsStore.save(snippets) } }
     @Published var toolbarKeys: [ToolbarKey] { didSet { toolbarStore.save(toolbarKeys) } }
     @Published var importedKeys: [ImportedKey] { didSet { importedKeysStore.save(importedKeys) } }
+    @Published var savedTabs: [String: [TabRecord]] { didSet { savedTabsStore.save(savedTabs) } }
 
     let keyStore = DeviceKeyStore()
     let knownHosts: KnownHostsStore
@@ -43,6 +50,7 @@ final class AppStore: ObservableObject {
     private let snippetsStore = JSONStore<[Snippet]>(filename: "snippets.json")
     private let toolbarStore = JSONStore<[ToolbarKey]>(filename: "toolbar.json")
     private let importedKeysStore = JSONStore<[ImportedKey]>(filename: "imported-keys.json")
+    private let savedTabsStore = JSONStore<[String: [TabRecord]]>(filename: "tabs.json")
 
     init() {
         hosts = hostsStore.load() ?? []
@@ -50,6 +58,7 @@ final class AppStore: ObservableObject {
         snippets = snippetsStore.load() ?? []
         toolbarKeys = toolbarStore.load() ?? ToolbarKey.defaults
         importedKeys = importedKeysStore.load() ?? []
+        savedTabs = savedTabsStore.load() ?? [:]
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("pocketshell", isDirectory: true)
         knownHosts = KnownHostsStore(fileURL: dir.appendingPathComponent("known-hosts.json"))

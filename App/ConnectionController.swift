@@ -16,10 +16,12 @@ final class ConnectionController: ObservableObject {
         case attached
         case reconnecting(String)
         case failed(String)
+        case exited
     }
 
     @Published var phase: Phase = .idle
     let bridge = TerminalBridge()
+    var onExit: (() -> Void)?
 
     private let host: HostConfig
     private let key: DeviceKeyMaterial
@@ -83,6 +85,21 @@ final class ConnectionController: ObservableObject {
     var isTmuxAttached: Bool {
         if case .tmux = pendingShell { return true }
         return false
+    }
+
+    var tmuxTarget: (session: String, windowIndex: Int?)? {
+        if case .tmux(let session, let windowIndex) = pendingShell {
+            return (session, windowIndex)
+        }
+        return nil
+    }
+
+    func preset(session: String, windowIndex: Int?) {
+        pendingShell = .tmux(session: session, windowIndex: windowIndex)
+    }
+
+    func presetPlain() {
+        pendingShell = .plain(host.onConnectCommand)
     }
 
     func jump(toSession session: String, windowIndex: Int? = nil) async {
@@ -259,6 +276,11 @@ final class ConnectionController: ObservableObject {
 
     private func handleStreamEnded(generation: Int) async {
         guard !stopped, generation == shellGeneration else { return }
+        if let connection, await connection.isConnected {
+            phase = .exited
+            onExit?()
+            return
+        }
         applyAction(machine.handle(.connectionLost))
     }
 

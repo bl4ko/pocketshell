@@ -1,6 +1,7 @@
 #if os(iOS)
 import RoyalVNCKit
 import SwiftUI
+import UIKit
 
 public struct VNCScreenView: View {
     private let session: VNCSessionController
@@ -77,6 +78,7 @@ public struct VNCScreenView: View {
                 controlButton("arrow.right") { sendKey(.rightArrow) }
                 controlButton("arrow.turn.down.left") { sendKey(.return) }
                 controlButton("delete.left") { sendKey(.delete) }
+                controlButton("doc.on.clipboard") { pasteClipboard() }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -97,11 +99,17 @@ public struct VNCScreenView: View {
                 controlButton("arrow.up") { sendKey(.upArrow) }
                 controlButton("arrow.down") { sendKey(.downArrow) }
                 controlButton("arrow.right") { sendKey(.rightArrow) }
+                controlButton("doc.on.clipboard") { pasteClipboard() }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
         }
         .background(.thinMaterial)
+    }
+
+    private func pasteClipboard() {
+        guard let text = UIPasteboard.general.string else { return }
+        session.sendText(text)
     }
 
     private var customShortcuts: [VNCKeyCombo] {

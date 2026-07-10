@@ -118,6 +118,40 @@ import Testing
     #expect(AgentStatus.classify(pane) == .busy)
 }
 
+@Test func detectAgentReturnsBusyForSpinner() {
+    #expect(AgentStatus.detectAgent("✻ Waddling… (6m 14s · ↓ 22.7k tokens)") == .busy)
+}
+
+@Test func detectAgentReturnsWaitingForPermissionPrompt() {
+    #expect(AgentStatus.detectAgent("Do you want to make this edit?\n> 1. Yes") == .waiting)
+}
+
+@Test func detectAgentReturnsIdleForAgentChrome() {
+    let pane = """
+    ⏺ Done refactoring auth module
+    ╭──────────────────────────╮
+    │ >                        │
+    ╰──────────────────────────╯
+      ? for shortcuts
+    """
+    #expect(AgentStatus.detectAgent(pane) == .idle)
+}
+
+@Test func detectAgentReturnsIdleForModeChrome() {
+    #expect(AgentStatus.detectAgent("⏵⏵ accept edits on (shift+tab to cycle)") == .idle)
+    #expect(AgentStatus.detectAgent("⏵⏵ bypass permissions on") == .idle)
+}
+
+@Test func detectAgentReturnsNilForPlainShell() {
+    let pane = """
+    bl4ko@mac-mini ~ % ls
+    Documents Downloads Projects
+    bl4ko@mac-mini ~ %
+    """
+    #expect(AgentStatus.detectAgent(pane) == nil)
+    #expect(AgentStatus.detectAgent("") == nil)
+}
+
 @Test func capturePanesCommandLoopsWindowsWithSentinel() {
     let cmd = Tmux.capturePanesCommand(session: "claude", lines: 6)
     #expect(cmd.contains("list-windows -t 'claude' -F '#{window_index}'"))

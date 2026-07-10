@@ -53,3 +53,22 @@ private let keyB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFhbnFTQb8zGKf22dBN9pd6G
     #expect(fingerprint.hasPrefix("SHA256:"))
     #expect(!fingerprint.hasSuffix("="))
 }
+
+@Test func entriesReturnsAllStoredFingerprints() throws {
+    let store = tempStore()
+    try store.trust(host: "a", port: 22, publicKeyLine: keyA)
+    try store.trust(host: "b", port: 2222, publicKeyLine: keyB)
+    let entries = store.entries()
+    #expect(entries.count == 2)
+    #expect(entries["a:22"] == KnownHostsStore.fingerprint(publicKeyLine: keyA))
+}
+
+@Test func mergeAddsWithoutOverwritingExisting() throws {
+    let store = tempStore()
+    try store.trust(host: "a", port: 22, publicKeyLine: keyA)
+    let existing = KnownHostsStore.fingerprint(publicKeyLine: keyA)
+    try store.merge(["a:22": "SHA256:other", "c:22": "SHA256:new"])
+    let entries = store.entries()
+    #expect(entries["a:22"] == existing)
+    #expect(entries["c:22"] == "SHA256:new")
+}

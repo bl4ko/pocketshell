@@ -117,6 +117,24 @@ final class ConnectionController: ObservableObject {
         await jump(toSession: name)
     }
 
+    func renameTmuxWindow(session: String, windowIndex: Int, name: String) async {
+        guard let connection else { return }
+        _ = try? await connection.exec(Tmux.renameWindowCommand(session: session, windowIndex: windowIndex, name: name))
+    }
+
+    func renameTmuxSession(from oldName: String, to newName: String) async {
+        guard let connection else { return }
+        _ = try? await connection.exec(Tmux.renameSessionCommand(from: oldName, to: newName))
+        if case .tmux(let session, let windowIndex) = pendingShell, session == oldName {
+            pendingShell = .tmux(session: newName, windowIndex: windowIndex)
+        }
+    }
+
+    func killTmuxSession(named name: String) async {
+        guard let connection else { return }
+        _ = try? await connection.exec(Tmux.killSessionCommand(name: name))
+    }
+
     func tmuxSessions() async -> [TmuxSession] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""

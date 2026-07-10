@@ -4,6 +4,8 @@ import SwiftUI
 
 struct HostsListView: View {
     @EnvironmentObject var store: AppStore
+    @ObservedObject private var router = NotificationRouter.shared
+    @State private var path = NavigationPath()
     @State private var editingHost: HostConfig?
     @State private var addingHost = false
     @State private var addingVNCHost = false
@@ -11,7 +13,7 @@ struct HostsListView: View {
     @State private var runningSnippet: SnippetRun?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 ForEach(groupedHosts, id: \.0) { group, hosts in
                     Section {
@@ -88,6 +90,11 @@ struct HostsListView: View {
                 }
             }
             .themedScreen()
+        }
+        .onChange(of: router.pending) { _, target in
+            guard let target, let host = store.hosts.first(where: { $0.id == target.hostID }) else { return }
+            path = NavigationPath()
+            path.append(host)
         }
     }
 

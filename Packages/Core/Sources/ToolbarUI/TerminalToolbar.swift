@@ -54,9 +54,10 @@ public struct TerminalToolbar: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
             }
+            .clipped()
             Divider()
-                .frame(height: 24)
-            HStack(spacing: 5) {
+                .frame(height: 20)
+            HStack(spacing: 4) {
                 arrowMenu(label: "↑", primary: .arrowUp)
                 arrowMenu(label: "↓", primary: .arrowDown)
                 Button {
@@ -82,6 +83,7 @@ public struct TerminalToolbar: View {
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
+            .background(.thinMaterial)
         }
         .background(.thinMaterial)
     }
@@ -105,22 +107,24 @@ public struct TerminalToolbar: View {
 
     private func keyLabel(_ text: String, background: Color? = nil) -> some View {
         Text(text)
-            .font(.system(.footnote, design: .monospaced))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .font(.system(.caption, design: .monospaced))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 6)
+            .frame(minWidth: 28)
             .background(background ?? Color.secondary.opacity(0.15))
             .foregroundStyle(.primary)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 
     private func keyLabel(icon: String, background: Color? = nil) -> some View {
         Image(systemName: icon)
-            .font(.footnote)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .font(.caption)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 6)
+            .frame(minWidth: 28)
             .background(background ?? Color.secondary.opacity(0.15))
             .foregroundStyle(.primary)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
 #endif

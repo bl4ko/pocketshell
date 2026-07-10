@@ -8,6 +8,18 @@ import TmuxKit
 import UserNotifications
 import WidgetKit
 
+struct SessionTarget: Equatable {
+    var hostID: UUID
+    var session: String?
+    var windowIndex: Int?
+}
+
+@MainActor
+final class NotificationRouter: ObservableObject {
+    static let shared = NotificationRouter()
+    @Published var pending: SessionTarget?
+}
+
 final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Sendable {
     static let shared = ForegroundNotificationDelegate()
 
@@ -17,6 +29,25 @@ final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDe
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound, .list])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let info = response.notification.request.content.userInfo
+        if let idString = info["hostID"] as? String, let hostID = UUID(uuidString: idString) {
+            let target = SessionTarget(
+                hostID: hostID,
+                session: info["session"] as? String,
+                windowIndex: info["windowIndex"] as? Int
+            )
+            Task { @MainActor in
+                NotificationRouter.shared.pending = target
+            }
+        }
+        completionHandler()
     }
 }
 
@@ -59,6 +90,7 @@ final class SessionMonitor: ObservableObject {
     func pollOnce() async {
         var samples: [AgentActivityTracker.Sample] = []
         var snapshots: [SessionSnapshot.Window] = []
+        var targets: [String: [String: Any]] = [:]
         for host in store.hosts {
             guard let session = host.tmuxSession else { continue }
             guard let connection = await connection(for: host) else { continue }
@@ -68,8 +100,10 @@ final class SessionMonitor: ObservableObject {
             for window in Tmux.parseWindows(windowsOutput) {
                 let text = captures[window.index] ?? ""
                 let status = AgentStatus.classify(text)
+                let key = "\(host.id):\(window.index)"
+                targets[key] = ["hostID": host.id.uuidString, "session": session, "windowIndex": window.index]
                 samples.append(.init(
-                    key: "\(host.id):\(window.index)",
+                    key: key,
                     title: "\(host.name) \(session):\(window.index) \(window.name)",
                     status: status
                 ))
@@ -89,7 +123,7 @@ final class SessionMonitor: ObservableObject {
         WidgetCenter.shared.reloadTimelines(ofKind: "pocketshell-sessions")
         WatchRelay.shared.push(snapshot)
         for transition in transitions {
-            notify(transition)
+            notify(transition, userInfo: targets[transition.key])
         }
     }
 
@@ -108,11 +142,14 @@ final class SessionMonitor: ObservableObject {
         return connection
     }
 
-    private func notify(_ transition: AgentActivityTracker.Transition) {
+    private func notify(_ transition: AgentActivityTracker.Transition, userInfo: [String: Any]?) {
         let content = UNMutableNotificationContent()
         content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"
         content.body = transition.title
         content.sound = .default
+        if let userInfo {
+            content.userInfo = userInfo
+        }
         let request = UNNotificationRequest(
             identifier: "agent-\(transition.key)-\(Date().timeIntervalSince1970)",
             content: content,

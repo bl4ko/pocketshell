@@ -25,20 +25,33 @@ public struct AgentActivityTracker: Sendable {
         }
     }
 
-    private var previous: [String: AgentStatus] = [:]
+    private struct State {
+        var confirmed: AgentStatus
+        var lastRaw: AgentStatus
+    }
+
+    private var states: [String: State] = [:]
 
     public init() {}
 
     public mutating func update(_ samples: [Sample]) -> [Transition] {
         var transitions: [Transition] = []
-        var current: [String: AgentStatus] = [:]
+        var next: [String: State] = [:]
         for sample in samples {
-            current[sample.key] = sample.status
-            if previous[sample.key] == .busy, sample.status != .busy {
-                transitions.append(Transition(key: sample.key, title: sample.title, status: sample.status))
+            guard var state = states[sample.key] else {
+                next[sample.key] = State(confirmed: sample.status, lastRaw: sample.status)
+                continue
             }
+            if sample.status != state.confirmed, sample.status == state.lastRaw {
+                if state.confirmed == .busy {
+                    transitions.append(Transition(key: sample.key, title: sample.title, status: sample.status))
+                }
+                state.confirmed = sample.status
+            }
+            state.lastRaw = sample.status
+            next[sample.key] = state
         }
-        previous = current
+        states = next
         return transitions
     }
 }

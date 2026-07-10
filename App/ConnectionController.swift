@@ -38,6 +38,7 @@ final class ConnectionController: ObservableObject {
 
     private var retryTask: Task<Void, Never>?
     private var pendingShell: PendingShell?
+    private var cloneTag: String?
     private var shellGeneration = 0
     private var stopped = false
 
@@ -130,6 +131,11 @@ final class ConnectionController: ObservableObject {
         }
     }
 
+    func killTmuxWindow(session: String, windowIndex: Int) async {
+        guard let connection else { return }
+        _ = try? await connection.exec(Tmux.killWindowCommand(session: session, windowIndex: windowIndex))
+    }
+
     func killTmuxSession(named name: String) async {
         guard let connection else { return }
         _ = try? await connection.exec(Tmux.killSessionCommand(name: name))
@@ -157,12 +163,28 @@ final class ConnectionController: ObservableObject {
         return try await connection.forwardPort(localPort: 0, remoteHost: remoteHost, remotePort: remotePort)
     }
 
+    func currentTmuxWindowIndex() async -> Int? {
+        guard let connection, let cloneTag,
+              case .tmux(let session, _) = pendingShell else { return nil }
+        let clone = Tmux.cloneName(session: session, clientTag: cloneTag)
+        let output = (try? await connection.exec(Tmux.currentWindowCommand(clone: clone))) ?? ""
+        return Tmux.parseCurrentWindow(output)
+    }
+
     func dashboardItems(session: String) async -> [WindowDashboardItem] {
         guard let connection else { return [] }
         let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
         let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session, lines: 8))) ?? ""
         let captures = Tmux.parsePaneCaptures(capturesOutput)
-        return Tmux.parseWindows(windowsOutput).map { window in
+        var windows = Tmux.parseWindows(windowsOutput)
+        if tmuxTarget?.session == session, let viewed = await currentTmuxWindowIndex() {
+            windows = windows.map { window in
+                var window = window
+                window.active = window.index == viewed
+                return window
+            }
+        }
+        return windows.map { window in
             let text = captures[window.index] ?? ""
             let preview = Tmux.previewLines(text, count: 3)
             return WindowDashboardItem(
@@ -251,17 +273,18 @@ final class ConnectionController: ObservableObject {
     private func openShellAndPump() async {
         guard let connection else { return }
         let size = bridge.currentSize
-        let command: String? = switch pendingShell {
+        let command: String?
+        switch pendingShell {
         case .tmux(let session, let windowIndex):
-            Tmux.attachCommand(
-                session: session,
-                windowIndex: windowIndex,
-                clientTag: String(UUID().uuidString.prefix(8)).lowercased()
-            )
+            let tag = String(UUID().uuidString.prefix(8)).lowercased()
+            cloneTag = tag
+            command = Tmux.attachCommand(session: session, windowIndex: windowIndex, clientTag: tag)
         case .plain(let plain):
-            plain
+            cloneTag = nil
+            command = plain
         case nil:
-            nil
+            cloneTag = nil
+            command = nil
         }
         do {
             let shell = try await connection.openShell(

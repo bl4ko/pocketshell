@@ -13,7 +13,7 @@ struct TerminalTab: Identifiable {
 struct TabJumpItem: Identifiable {
     let id: UUID
     let label: String
-    let status: AgentStatus
+    let status: AgentStatus?
     let preview: String
     let selected: Bool
 }
@@ -132,7 +132,7 @@ struct HostTabsScreen: View {
             TabJumpItem(
                 id: tab.id,
                 label: tab.name ?? "tab \(index + 1)",
-                status: tabStatuses[tab.id] ?? .idle,
+                status: tabStatuses[tab.id],
                 preview: Tmux.previewLines(tab.controller.bridge.visibleText(), count: 1),
                 selected: tab.id == selectedTab
             )
@@ -203,9 +203,9 @@ struct HostTabsScreen: View {
     private func pollTabs() {
         var samples: [AgentActivityTracker.Sample] = []
         for (index, tab) in tabs.enumerated() {
-            let status = AgentStatus.classify(tab.controller.bridge.visibleText())
+            let status = AgentStatus.detectAgent(tab.controller.bridge.visibleText())
             tabStatuses[tab.id] = status
-            guard !tab.controller.isTmuxAttached else { continue }
+            guard let status, !tab.controller.isTmuxAttached else { continue }
             samples.append(.init(
                 key: "tab-\(tab.id.uuidString)",
                 title: "\(host.name) \(tab.name ?? "tab \(index + 1)")",
@@ -233,9 +233,11 @@ struct HostTabsScreen: View {
             HStack(spacing: 4) {
                 ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                     HStack(spacing: 5) {
-                        Circle()
-                            .fill(statusColor(tabStatuses[tab.id] ?? .idle))
-                            .frame(width: 6, height: 6)
+                        if let status = tabStatuses[tab.id] {
+                            Circle()
+                                .fill(statusColor(status))
+                                .frame(width: 6, height: 6)
+                        }
                         Text(tab.name ?? "\(index + 1)")
                             .font(.footnote.monospaced())
                             .lineLimit(1)
@@ -372,13 +374,36 @@ struct HostTabsScreen: View {
 }
 
 struct TmuxJumpSheet: View {
+    private enum Prompt: Identifiable {
+        case newSession
+        case renameSession(String)
+        case renameWindow(session: String, index: Int)
+
+        var id: String {
+            switch self {
+            case .newSession: "new"
+            case .renameSession(let name): "rs-\(name)"
+            case .renameWindow(let session, let index): "rw-\(session)-\(index)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .newSession: "New tmux session"
+            case .renameSession: "Rename session"
+            case .renameWindow: "Rename window"
+            }
+        }
+    }
+
     @Environment(\.dismiss) private var dismiss
     @State private var sessions: [TmuxSession] = []
-    @State private var windows: [WindowDashboardItem] = []
-    @State private var windowsSession: String?
+    @State private var windowsBySession: [String: [WindowDashboardItem]] = [:]
+    @State private var expandedSessions: Set<String> = []
     @State private var loaded = false
-    @State private var namingSession = false
-    @State private var newSessionName = ""
+    @State private var prompt: Prompt?
+    @State private var promptText = ""
+    @State private var killTarget: String?
 
     let controller: ConnectionController?
     var tabItems: [TabJumpItem] = []
@@ -386,6 +411,10 @@ struct TmuxJumpSheet: View {
 
     private var attached: Bool {
         controller?.isTmuxAttached ?? false
+    }
+
+    private var currentSession: String? {
+        controller?.tmuxTarget?.session
     }
 
     var body: some View {
@@ -400,14 +429,18 @@ struct TmuxJumpSheet: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack(spacing: 6) {
-                                        Circle()
-                                            .fill(tabStatusColor(item.status))
-                                            .frame(width: 8, height: 8)
+                                        if let status = item.status {
+                                            Circle()
+                                                .fill(tabStatusColor(status))
+                                                .frame(width: 8, height: 8)
+                                        }
                                         Text(item.label)
                                             .font(.subheadline.weight(.medium))
-                                        Text(item.status.label)
-                                            .font(.caption2)
-                                            .foregroundStyle(tabStatusColor(item.status))
+                                        if let status = item.status {
+                                            Text(status.label)
+                                                .font(.caption2)
+                                                .foregroundStyle(tabStatusColor(status))
+                                        }
                                         if item.selected {
                                             Spacer()
                                             Image(systemName: "eye")
@@ -429,17 +462,37 @@ struct TmuxJumpSheet: View {
                 if !sessions.isEmpty {
                     Section {
                         ForEach(sessions) { session in
-                            Button {
-                                jump(toSession: session.name)
+                            DisclosureGroup(isExpanded: expandedBinding(session.name)) {
+                                ForEach(windowsBySession[session.name] ?? []) { item in
+                                    Button {
+                                        jump(toSession: session.name, windowIndex: item.window.index)
+                                    } label: {
+                                        DashboardRow(item: item)
+                                    }
+                                }
                             } label: {
-                                HStack {
+                                HStack(spacing: 6) {
                                     Text(session.name)
+                                        .font(.subheadline.weight(.medium))
                                     Text("\(session.windows)w")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     if session.attached {
-                                        Spacer()
-                                        Image(systemName: "eye").foregroundStyle(.secondary)
+                                        Image(systemName: "eye")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .contextMenu {
+                                    Button("Attach") {
+                                        jump(toSession: session.name, windowIndex: nil)
+                                    }
+                                    Button("Rename…") {
+                                        promptText = session.name
+                                        prompt = .renameSession(session.name)
+                                    }
+                                    Button("Delete", role: .destructive) {
+                                        killTarget = session.name
                                     }
                                 }
                             }
@@ -447,18 +500,7 @@ struct TmuxJumpSheet: View {
                     } header: {
                         Text("Sessions")
                     } footer: {
-                        Text("Tapping re-attaches this tab to the target.")
-                    }
-                }
-                if !windows.isEmpty {
-                    Section("Windows") {
-                        ForEach(windows) { item in
-                            Button {
-                                jump(toWindow: item.window.index)
-                            } label: {
-                                DashboardRow(item: item)
-                            }
-                        }
+                        Text("Tapping a window re-attaches this tab. Long-press a session for rename/delete.")
                     }
                 }
                 if attached {
@@ -491,12 +533,27 @@ struct TmuxJumpSheet: View {
                             controller?.sendText(Tmux.splitVerticalKeys)
                             dismiss()
                         }
+                        Button("Rename window…") {
+                            guard let currentSession,
+                                  let active = (windowsBySession[currentSession] ?? []).first(where: { $0.window.active })
+                            else { return }
+                            promptText = active.window.name
+                            prompt = .renameWindow(session: currentSession, index: active.window.index)
+                        }
+                        Button("Rename session…") {
+                            guard let currentSession else { return }
+                            promptText = currentSession
+                            prompt = .renameSession(currentSession)
+                        }
+                        Button("Delete session…", role: .destructive) {
+                            killTarget = currentSession
+                        }
                     }
                 }
                 Section {
                     Button("New session…") {
-                        newSessionName = ""
-                        namingSession = true
+                        promptText = ""
+                        prompt = .newSession
                     }
                 }
                 if loaded && sessions.isEmpty {
@@ -509,31 +566,78 @@ struct TmuxJumpSheet: View {
             .task {
                 await load()
             }
-            .alert("New tmux session", isPresented: $namingSession) {
-                TextField("name", text: $newSessionName)
-                Button("Create") {
-                    let name = newSessionName.trimmingCharacters(in: .whitespaces)
-                    guard !name.isEmpty else { return }
-                    let controller = controller
-                    Task { await controller?.createTmuxSession(named: name) }
-                    dismiss()
-                }
-                Button("Cancel", role: .cancel) {}
+            .alert(prompt?.title ?? "", isPresented: promptShown) {
+                TextField("name", text: $promptText)
+                Button("OK") { applyPrompt() }
+                Button("Cancel", role: .cancel) { prompt = nil }
+            }
+            .confirmationDialog(
+                "Delete tmux session \(killTarget ?? "")? Kills all its windows.",
+                isPresented: killShown,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) { applyKill() }
+                Button("Cancel", role: .cancel) { killTarget = nil }
             }
             .themedScreen()
         }
     }
 
-    private func jump(toSession session: String) {
-        let controller = controller
-        Task { await controller?.jump(toSession: session) }
-        dismiss()
+    private var promptShown: Binding<Bool> {
+        Binding(
+            get: { prompt != nil },
+            set: { if !$0 { prompt = nil } }
+        )
     }
 
-    private func jump(toWindow index: Int) {
-        guard let windowsSession else { return }
+    private var killShown: Binding<Bool> {
+        Binding(
+            get: { killTarget != nil },
+            set: { if !$0 { killTarget = nil } }
+        )
+    }
+
+    private func applyPrompt() {
+        guard let prompt else { return }
+        self.prompt = nil
+        let name = promptText.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
         let controller = controller
-        Task { await controller?.jump(toSession: windowsSession, windowIndex: index) }
+        switch prompt {
+        case .newSession:
+            Task { await controller?.createTmuxSession(named: name) }
+            dismiss()
+        case .renameSession(let old):
+            Task {
+                await controller?.renameTmuxSession(from: old, to: name)
+                await load()
+            }
+        case .renameWindow(let session, let index):
+            Task {
+                await controller?.renameTmuxWindow(session: session, windowIndex: index, name: name)
+                await load()
+            }
+        }
+    }
+
+    private func applyKill() {
+        guard let killTarget else { return }
+        self.killTarget = nil
+        let controller = controller
+        let isCurrent = killTarget == currentSession
+        Task {
+            await controller?.killTmuxSession(named: killTarget)
+            if isCurrent {
+                dismiss()
+            } else {
+                await load()
+            }
+        }
+    }
+
+    private func jump(toSession session: String, windowIndex: Int?) {
+        let controller = controller
+        Task { await controller?.jump(toSession: session, windowIndex: windowIndex) }
         dismiss()
     }
 
@@ -545,16 +649,35 @@ struct TmuxJumpSheet: View {
         }
     }
 
+    private func expandedBinding(_ name: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedSessions.contains(name) },
+            set: { expanded in
+                if expanded {
+                    expandedSessions.insert(name)
+                } else {
+                    expandedSessions.remove(name)
+                }
+            }
+        )
+    }
+
     private func load() async {
         guard let controller else {
             loaded = true
             return
         }
         sessions = await controller.tmuxSessions()
-        let current = sessions.first { $0.attached } ?? sessions.first
-        if let current {
-            windows = await controller.dashboardItems(session: current.name)
-            windowsSession = current.name
+        var map: [String: [WindowDashboardItem]] = [:]
+        for session in sessions {
+            map[session.name] = await controller.dashboardItems(session: session.name)
+        }
+        windowsBySession = map
+        if expandedSessions.isEmpty {
+            let initial = currentSession ?? sessions.first { $0.attached }?.name ?? sessions.first?.name
+            if let initial {
+                expandedSessions = [initial]
+            }
         }
         loaded = true
     }

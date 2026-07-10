@@ -23,7 +23,9 @@ struct TerminalScreen: View {
                     set: { connection.bridge.ctrlActive = $0 }
                 ),
                 onKey: { connection.bridge.handleToolbar($0) },
-                onHideKeyboard: { connection.bridge.toggleKeyboard() }
+                onHideKeyboard: { connection.bridge.toggleKeyboard() },
+                onPaste: { connection.bridge.paste() },
+                onCopy: { connection.bridge.copySelection() }
             )
         }
         .sheet(isPresented: windowPickerShown) {

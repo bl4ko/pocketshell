@@ -69,3 +69,16 @@ import Testing
     let decoded = try JSONDecoder().decode(ImportedKey.self, from: data)
     #expect(decoded == key)
 }
+
+@Test func pinnedActionsExcludedFromScrollRow() {
+    let scroll = ToolbarKey.scrollRow(from: ToolbarKey.defaults)
+    let actions = scroll.map(\.action)
+    #expect(!actions.contains(.escape))
+    #expect(!actions.contains(.ctrlModifier))
+    #expect(!actions.contains(.arrowUp))
+    #expect(!actions.contains(.arrowDown))
+    #expect(!actions.contains(.arrowLeft))
+    #expect(!actions.contains(.arrowRight))
+    #expect(actions.contains(.tab))
+    #expect(actions.contains(.sequence("\u{03}")))
+}

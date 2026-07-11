@@ -182,3 +182,17 @@ import Testing
     let output = "noise\n@@pane:2@@\nok"
     #expect(Tmux.parsePaneCaptures(output) == [2: "ok"])
 }
+
+@Test func dropStatusLineRemovesLastLine() {
+    let text = "⏺ Done refactoring\n│ > │\nagents-psh-d30a951e 1<2 claude-homeops-1"
+    #expect(Tmux.dropStatusLine(text) == "⏺ Done refactoring\n│ > │")
+}
+
+@Test func dropStatusLineIgnoresTrailingBlankLines() {
+    #expect(Tmux.dropStatusLine("output\nstatus bar\n\n  \n") == "output")
+}
+
+@Test func dropStatusLineEmptyOrSingleLineReturnsEmpty() {
+    #expect(Tmux.dropStatusLine("") == "")
+    #expect(Tmux.dropStatusLine("only status") == "")
+}

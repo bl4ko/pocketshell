@@ -95,9 +95,19 @@ struct HostTabsScreen: View {
             snippetPicker
         }
         .sheet(isPresented: $showTmuxJump) {
-            TmuxJumpSheet(controller: activeController, tabItems: tabJumpItems, orderKey: host.id.uuidString) { id in
-                selectedTab = id
-            }
+            TmuxJumpSheet(
+                controller: activeController,
+                tabItems: tabJumpItems,
+                orderKey: host.id.uuidString,
+                onSelectTab: { id in selectedTab = id },
+                onRenameTab: { id, name in renameTab(id: id, name: name) },
+                onCloseTab: { id in closeTab(id: id) },
+                onMoveTab: { from, to in
+                    guard from.allSatisfy({ $0 < tabs.count }) else { return }
+                    tabs.move(fromOffsets: from, toOffset: min(to, tabs.count))
+                    persistTabs()
+                }
+            )
         }
         .sheet(isPresented: $showFiles) {
             FileBrowserView(controller: activeController)
@@ -139,11 +149,13 @@ struct HostTabsScreen: View {
 
     private var tabJumpItems: [TabJumpItem] {
         tabs.enumerated().map { index, tab in
-            TabJumpItem(
+            let text = tab.controller.bridge.visibleText()
+            let content = tab.controller.isTmuxAttached ? Tmux.dropStatusLine(text) : text
+            return TabJumpItem(
                 id: tab.id,
                 label: tab.name ?? "tab \(index + 1)",
                 status: tabStatuses[tab.id],
-                preview: Tmux.previewLines(tab.controller.bridge.visibleText(), count: 1),
+                preview: Tmux.previewLines(content, count: 3),
                 selected: tab.id == selectedTab
             )
         }
@@ -311,6 +323,13 @@ struct HostTabsScreen: View {
         )
     }
 
+    private func renameTab(id: UUID, name: String) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        tabs[index].name = trimmed.isEmpty ? nil : trimmed
+        persistTabs()
+    }
+
     private func applyRename() {
         guard let id = renamingTab,
               let index = tabs.firstIndex(where: { $0.id == id }) else { return }
@@ -407,12 +426,14 @@ struct TmuxJumpSheet: View {
         case newSession
         case renameSession(String)
         case renameWindow(session: String, index: Int)
+        case renameTab(UUID)
 
         var id: String {
             switch self {
             case .newSession: "new"
             case .renameSession(let name): "rs-\(name)"
             case .renameWindow(let session, let index): "rw-\(session)-\(index)"
+            case .renameTab(let id): "rt-\(id.uuidString)"
             }
         }
 
@@ -421,6 +442,7 @@ struct TmuxJumpSheet: View {
             case .newSession: "New tmux session"
             case .renameSession: "Rename session"
             case .renameWindow: "Rename window"
+            case .renameTab: "Rename tab"
             }
         }
     }
@@ -428,6 +450,7 @@ struct TmuxJumpSheet: View {
     private enum KillTarget {
         case session(String)
         case window(session: String, index: Int, name: String)
+        case tab(id: UUID, label: String)
 
         var confirmTitle: String {
             switch self {
@@ -435,6 +458,8 @@ struct TmuxJumpSheet: View {
                 "Delete tmux session \(name)? Kills all its windows."
             case .window(_, _, let name):
                 "Delete window \(name)? Kills its shell."
+            case .tab(_, let label):
+                "Close tab \(label)?"
             }
         }
     }
@@ -453,6 +478,9 @@ struct TmuxJumpSheet: View {
     var tabItems: [TabJumpItem] = []
     var orderKey: String?
     var onSelectTab: ((UUID) -> Void)?
+    var onRenameTab: ((UUID, String) -> Void)?
+    var onCloseTab: ((UUID) -> Void)?
+    var onMoveTab: ((IndexSet, Int) -> Void)?
 
     private var attached: Bool {
         controller?.isTmuxAttached ?? false
@@ -497,10 +525,36 @@ struct TmuxJumpSheet: View {
                                         Text(item.preview)
                                             .font(.caption2.monospaced())
                                             .foregroundStyle(.secondary)
-                                            .lineLimit(1)
+                                            .lineLimit(3)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                 }
                             }
+                            .contextMenu {
+                                Button("Rename…") {
+                                    promptText = item.label
+                                    prompt = .renameTab(item.id)
+                                }
+                                Button("Close", role: .destructive) {
+                                    killTarget = .tab(id: item.id, label: item.label)
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button("Close", role: .destructive) {
+                                    killTarget = .tab(id: item.id, label: item.label)
+                                }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button("Rename") {
+                                    promptText = item.label
+                                    prompt = .renameTab(item.id)
+                                }
+                                .tint(.blue)
+                            }
+                        }
+                        .onMove { from, to in
+                            guard from.allSatisfy({ $0 < tabItems.count }) else { return }
+                            onMoveTab?(from, min(to, tabItems.count))
                         }
                     }
                 }
@@ -694,6 +748,8 @@ struct TmuxJumpSheet: View {
                 await controller?.renameTmuxWindow(session: session, windowIndex: index, name: name)
                 await load()
             }
+        case .renameTab(let id):
+            onRenameTab?(id, name)
         }
     }
 
@@ -717,6 +773,8 @@ struct TmuxJumpSheet: View {
                 await controller?.killTmuxWindow(session: session, windowIndex: index)
                 await load()
             }
+        case .tab(let id, _):
+            onCloseTab?(id)
         }
     }
 

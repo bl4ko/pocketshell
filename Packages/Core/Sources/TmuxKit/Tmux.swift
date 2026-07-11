@@ -179,6 +179,14 @@ public enum Tmux {
         return result
     }
 
+    public static func dropStatusLine(_ text: String) -> String {
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        while lines.last?.allSatisfy(\.isWhitespace) == true { lines.removeLast() }
+        guard !lines.isEmpty else { return "" }
+        lines.removeLast()
+        return lines.joined(separator: "\n")
+    }
+
     public static func previewLines(_ text: String, count: Int) -> String {
         text.split(separator: "\n")
             .filter { line in line.contains { $0.isLetter || $0.isNumber } }

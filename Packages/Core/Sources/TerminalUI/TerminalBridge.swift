@@ -10,14 +10,41 @@ public final class TerminalBridge: ObservableObject {
     public var sendToHost: ((Data) -> Void)?
     public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
     weak var view: TerminalView?
+    private var gate = FeedGate()
+    private var flushTask: Task<Void, Never>?
 
     public init() {}
 
     public func feed(_ data: Data) {
-        view?.feed(byteArray: [UInt8](data)[...])
+        if let out = gate.ingest(data) {
+            view?.feed(byteArray: [UInt8](out)[...])
+        } else if flushTask == nil {
+            flushTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                self?.flushPending()
+            }
+        }
+    }
+
+    public func setLive(_ live: Bool) {
+        flushTask?.cancel()
+        flushTask = nil
+        if let out = gate.setLive(live) {
+            view?.feed(byteArray: [UInt8](out)[...])
+        }
+    }
+
+    private func flushPending() {
+        flushTask = nil
+        if let out = gate.drain() {
+            view?.feed(byteArray: [UInt8](out)[...])
+        }
     }
 
     public func visibleText() -> String {
+        flushTask?.cancel()
+        flushPending()
         guard let terminal = view?.getTerminal() else { return "" }
         return (0..<terminal.rows)
             .compactMap { terminal.getLine(row: $0)?.translateToString(trimRight: true) }

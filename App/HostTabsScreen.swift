@@ -114,6 +114,11 @@ struct HostTabsScreen: View {
         .onChange(of: router.pending) { _, _ in
             consumePendingTarget()
         }
+        .onChange(of: selectedTab, initial: true) { _, _ in
+            for tab in tabs {
+                tab.controller.bridge.setLive(tab.id == selectedTab)
+            }
+        }
         .onDisappear {
             for tab in tabs {
                 Task { await tab.controller.stop() }

@@ -95,7 +95,7 @@ final class SessionMonitor: ObservableObject {
             guard let session = host.tmuxSession else { continue }
             guard let connection = await connection(for: host) else { continue }
             let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
-            let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session, lines: 8))) ?? ""
+            let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
             let captures = Tmux.parsePaneCaptures(capturesOutput)
             for window in Tmux.parseWindows(windowsOutput) {
                 let text = captures[window.index] ?? ""

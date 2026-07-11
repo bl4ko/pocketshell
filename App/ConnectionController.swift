@@ -131,6 +131,13 @@ final class ConnectionController: ObservableObject {
         }
     }
 
+    func reorderTmuxWindows(session: String, indexes: [Int], fromOffset: Int, toOffset: Int) async {
+        guard let connection,
+              let command = Tmux.reorderWindowsCommand(session: session, indexes: indexes, fromOffset: fromOffset, toOffset: toOffset)
+        else { return }
+        _ = try? await connection.exec(command)
+    }
+
     func killTmuxWindow(session: String, windowIndex: Int) async {
         guard let connection else { return }
         _ = try? await connection.exec(Tmux.killWindowCommand(session: session, windowIndex: windowIndex))
@@ -174,7 +181,7 @@ final class ConnectionController: ObservableObject {
     func dashboardItems(session: String) async -> [WindowDashboardItem] {
         guard let connection else { return [] }
         let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
-        let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session, lines: 8))) ?? ""
+        let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
         let captures = Tmux.parsePaneCaptures(capturesOutput)
         var windows = Tmux.parseWindows(windowsOutput)
         if tmuxTarget?.session == session, let viewed = await currentTmuxWindowIndex() {

@@ -147,3 +147,52 @@ import Testing
     #expect(Tmux.parseCurrentWindow("") == nil)
     #expect(Tmux.parseCurrentWindow("can't find session\n") == nil)
 }
+
+@Test func reorderWindowsCommandSwapsDownward() {
+    #expect(Tmux.reorderWindowsCommand(session: "agents", indexes: [0, 1, 2, 3, 4], fromOffset: 0, toOffset: 3)
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux swap-window -d -s 'agents':0 -t 'agents':1 \\; swap-window -d -s 'agents':1 -t 'agents':2")
+}
+
+@Test func reorderWindowsCommandSwapsUpward() {
+    #expect(Tmux.reorderWindowsCommand(session: "agents", indexes: [0, 2, 5], fromOffset: 2, toOffset: 0)
+        == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux swap-window -d -s 'agents':5 -t 'agents':2 \\; swap-window -d -s 'agents':2 -t 'agents':0")
+}
+
+@Test func reorderWindowsCommandNoopOrInvalidReturnsNil() {
+    #expect(Tmux.reorderWindowsCommand(session: "agents", indexes: [0, 1, 2], fromOffset: 1, toOffset: 1) == nil)
+    #expect(Tmux.reorderWindowsCommand(session: "agents", indexes: [0, 1, 2], fromOffset: 1, toOffset: 2) == nil)
+    #expect(Tmux.reorderWindowsCommand(session: "agents", indexes: [0, 1, 2], fromOffset: 5, toOffset: 0) == nil)
+    #expect(Tmux.reorderWindowsCommand(session: "agents", indexes: [0, 1, 2], fromOffset: 0, toOffset: 9) == nil)
+}
+
+@Test func capturePanesCommandCapturesVisibleOnly() {
+    let command = Tmux.capturePanesCommand(session: "agents")
+    #expect(!command.contains("-S -"))
+    #expect(command.contains("capture-pane -p -t 'agents':$w"))
+}
+
+@Test func classifyIgnoresStaleSpinnerAboveTail() {
+    let stale = "✻ Cooking… (39s · esc to interrupt)"
+    let transcript = (1...20).map { "transcript line \($0)" }.joined(separator: "\n")
+    let footer = "› \n▶▶ auto mode on (shift+tab to cycle)"
+    #expect(AgentStatus.classify([stale, transcript, footer].joined(separator: "\n")) == .idle)
+}
+
+@Test func classifyDetectsSpinnerInTail() {
+    #expect(AgentStatus.classify("transcript\n✻ Cooking… (39s · esc to interrupt)") == .busy)
+}
+
+@Test func classifyIgnoresTrailingBlankLines() {
+    let text = "✻ Cooking… (39s · esc to interrupt)\n" + String(repeating: "\n", count: 30)
+    #expect(AgentStatus.classify(text) == .busy)
+}
+
+@Test func orderSessionsAppliesSavedOrderUnknownLast() {
+    let sessions = [
+        TmuxSession(name: "a", windows: 1, attached: false, group: nil),
+        TmuxSession(name: "b", windows: 1, attached: false, group: nil),
+        TmuxSession(name: "c", windows: 1, attached: false, group: nil),
+    ]
+    #expect(Tmux.orderSessions(sessions, by: ["c", "a"]).map(\.name) == ["c", "a", "b"])
+    #expect(Tmux.orderSessions(sessions, by: [String]()).map(\.name) == ["a", "b", "c"])
+}

@@ -1,5 +1,7 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
+
+let strict: [SwiftSetting] = [.treatAllWarnings(as: .error)]
 
 let package = Package(
     name: "Core",
@@ -25,14 +27,14 @@ let package = Package(
         .package(url: "https://github.com/royalapplications/royalvnc.git", revision: "92d4427c73817d8f849bb289ff190aa4b40c44ea"),
     ],
     targets: [
-        .target(name: "Models"),
-        .target(name: "LockKit"),
-        .target(name: "MonitorKit", dependencies: ["TmuxKit"]),
-        .target(name: "SFTPKit"),
+        .target(name: "Models", swiftSettings: strict),
+        .target(name: "LockKit", swiftSettings: strict),
+        .target(name: "MonitorKit", dependencies: ["TmuxKit"], swiftSettings: strict),
+        .target(name: "SFTPKit", swiftSettings: strict),
         .target(name: "KeyKit", dependencies: [
             "Models",
             .product(name: "Crypto", package: "swift-crypto"),
-        ]),
+        ], swiftSettings: strict),
         .target(name: "SSHKit", dependencies: [
             "Models",
             "KeyKit",
@@ -40,29 +42,29 @@ let package = Package(
             .product(name: "NIOSSH", package: "swift-nio-ssh"),
             .product(name: "NIOCore", package: "swift-nio"),
             .product(name: "NIOPosix", package: "swift-nio"),
-        ]),
-        .target(name: "ReconnectKit", dependencies: ["Models"]),
-        .target(name: "TmuxKit", dependencies: ["Models"]),
+        ], swiftSettings: strict),
+        .target(name: "ReconnectKit", dependencies: ["Models"], swiftSettings: strict),
+        .target(name: "TmuxKit", dependencies: ["Models"], swiftSettings: strict),
         .target(name: "TerminalUI", dependencies: [
             "Models",
             "ToolbarUI",
             .product(name: "SwiftTerm", package: "SwiftTerm"),
-        ]),
-        .target(name: "ToolbarUI", dependencies: ["Models"]),
+        ], swiftSettings: strict),
+        .target(name: "ToolbarUI", dependencies: ["Models"], swiftSettings: strict),
         .target(name: "VNCKit", dependencies: [
             "Models",
             .product(name: "RoyalVNCKit", package: "royalvnc"),
-        ]),
-        .testTarget(name: "ModelsTests", dependencies: ["Models"]),
-        .testTarget(name: "LockKitTests", dependencies: ["LockKit"]),
-        .testTarget(name: "MonitorKitTests", dependencies: ["MonitorKit"]),
-        .testTarget(name: "SFTPKitTests", dependencies: ["SFTPKit"]),
-        .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"]),
-        .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"]),
-        .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"]),
-        .testTarget(name: "TmuxKitTests", dependencies: ["TmuxKit"]),
-        .testTarget(name: "ToolbarUITests", dependencies: ["ToolbarUI"]),
-        .testTarget(name: "TerminalUITests", dependencies: ["TerminalUI"]),
-        .testTarget(name: "VNCKitTests", dependencies: ["VNCKit"]),
+        ], swiftSettings: strict),
+        .testTarget(name: "ModelsTests", dependencies: ["Models"], swiftSettings: strict),
+        .testTarget(name: "LockKitTests", dependencies: ["LockKit"], swiftSettings: strict),
+        .testTarget(name: "MonitorKitTests", dependencies: ["MonitorKit"], swiftSettings: strict),
+        .testTarget(name: "SFTPKitTests", dependencies: ["SFTPKit"], swiftSettings: strict),
+        .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"], swiftSettings: strict),
+        .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"], swiftSettings: strict),
+        .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"], swiftSettings: strict),
+        .testTarget(name: "TmuxKitTests", dependencies: ["TmuxKit"], swiftSettings: strict),
+        .testTarget(name: "ToolbarUITests", dependencies: ["ToolbarUI"], swiftSettings: strict),
+        .testTarget(name: "TerminalUITests", dependencies: ["TerminalUI"], swiftSettings: strict),
+        .testTarget(name: "VNCKitTests", dependencies: ["VNCKit"], swiftSettings: strict),
     ]
 )

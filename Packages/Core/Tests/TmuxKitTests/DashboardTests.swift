@@ -153,10 +153,10 @@ import Testing
 }
 
 @Test func capturePanesCommandLoopsWindowsWithSentinel() {
-    let cmd = Tmux.capturePanesCommand(session: "claude", lines: 6)
+    let cmd = Tmux.capturePanesCommand(session: "claude")
     #expect(cmd.contains("list-windows -t 'claude' -F '#{window_index}'"))
     #expect(cmd.contains("@@pane:$w@@"))
-    #expect(cmd.contains("capture-pane -p -t 'claude':$w -S -6"))
+    #expect(cmd.contains("capture-pane -p -t 'claude':$w; done"))
 }
 
 @Test func parsePaneCapturesSplitsBySentinel() {

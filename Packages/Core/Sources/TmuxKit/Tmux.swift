@@ -62,11 +62,16 @@ public enum AgentStatus: Equatable, Sendable {
     }
 
     public static func classify(_ paneText: String) -> AgentStatus {
-        let lowered = paneText.lowercased()
+        var lines = paneText.split(separator: "\n", omittingEmptySubsequences: false)
+        while lines.last?.allSatisfy(\.isWhitespace) == true {
+            lines.removeLast()
+        }
+        let tail = lines.suffix(15).joined(separator: "\n")
+        let lowered = tail.lowercased()
         if lowered.contains("compacting conversation") || lowered.contains(/esc\b.{0,12}interrupt/) {
             return .busy
         }
-        if paneText.contains(/\p{L}…\s*\(\d+[hms]/) {
+        if tail.contains(/\p{L}…\s*\(\d+[hms]/) {
             return .busy
         }
         if waitingMarkers.contains(where: lowered.contains) {
@@ -114,9 +119,38 @@ public enum Tmux {
         return "\(send) \\; send-keys -t \(target) Enter"
     }
 
-    public static func capturePanesCommand(session: String, lines: Int) -> String {
+    public static func capturePanesCommand(session: String) -> String {
         let target = shellQuote(session)
-        return "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w -S -\(lines); done"
+        return "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w; done"
+    }
+
+    public static func reorderWindowsCommand(session: String, indexes: [Int], fromOffset: Int, toOffset: Int) -> String? {
+        guard fromOffset >= 0, fromOffset < indexes.count, toOffset >= 0, toOffset <= indexes.count else { return nil }
+        let dest = toOffset > fromOffset ? toOffset - 1 : toOffset
+        guard dest != fromOffset else { return nil }
+        let target = shellQuote(session)
+        var swaps: [String] = []
+        if dest > fromOffset {
+            for position in fromOffset..<dest {
+                swaps.append("swap-window -d -s \(target):\(indexes[position]) -t \(target):\(indexes[position + 1])")
+            }
+        } else {
+            for position in stride(from: fromOffset, to: dest, by: -1) {
+                swaps.append("swap-window -d -s \(target):\(indexes[position]) -t \(target):\(indexes[position - 1])")
+            }
+        }
+        return "\(tmux) " + swaps.joined(separator: " \\; ")
+    }
+
+    public static func orderSessions(_ sessions: [TmuxSession], by saved: [String]) -> [TmuxSession] {
+        guard !saved.isEmpty else { return sessions }
+        let positions = Dictionary(saved.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return sessions.enumerated()
+            .sorted {
+                (positions[$0.element.name] ?? saved.count + $0.offset)
+                    < (positions[$1.element.name] ?? saved.count + $1.offset)
+            }
+            .map(\.element)
     }
 
     public static func parsePaneCaptures(_ output: String) -> [Int: String] {

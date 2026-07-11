@@ -128,33 +128,40 @@ struct TerminalScreen: View {
 }
 
 struct WindowDashboardSheet: View {
+    @EnvironmentObject var store: AppStore
     @ObservedObject var connection: ConnectionController
-    @State private var items: [WindowDashboardItem] = []
+    @State private var sessions: [TmuxSession] = []
+    @State private var windowsBySession: [String: [WindowDashboardItem]] = [:]
 
     let host: HostConfig
 
     var body: some View {
         NavigationStack {
             List {
-                if items.isEmpty, case .pickingWindow(let windows) = connection.phase {
-                    ForEach(windows) { window in
-                        Button {
-                            Task { await connection.selectWindow(window) }
-                        } label: {
-                            Text("\(window.index): \(window.name)")
-                        }
-                    }
-                } else {
-                    ForEach(items) { item in
-                        Button {
-                            Task { await connection.selectWindow(item.window) }
-                        } label: {
-                            DashboardRow(item: item)
+                Button("Plain shell") {
+                    Task { await connection.openPlainShell() }
+                }
+                if sessions.isEmpty, case .pickingWindow(let windows) = connection.phase {
+                    Section(host.tmuxSession ?? "tmux") {
+                        ForEach(windows) { window in
+                            Button {
+                                Task { await connection.selectWindow(window) }
+                            } label: {
+                                Text("\(window.index): \(window.name)")
+                            }
                         }
                     }
                 }
-                Button("Plain shell") {
-                    Task { await connection.openPlainShell() }
+                ForEach(sessions) { session in
+                    Section(session.name) {
+                        ForEach(windowsBySession[session.name] ?? []) { item in
+                            Button {
+                                Task { await connection.jump(toSession: session.name, windowIndex: item.window.index) }
+                            } label: {
+                                DashboardRow(item: item)
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("Sessions")
@@ -171,7 +178,15 @@ struct WindowDashboardSheet: View {
     }
 
     private func refresh() async {
-        guard let session = host.tmuxSession else { return }
-        items = await connection.dashboardItems(session: session)
+        var list = await connection.tmuxSessions()
+        if let saved = store.sessionOrder[host.id.uuidString] {
+            list = Tmux.orderSessions(list, by: saved)
+        }
+        var map: [String: [WindowDashboardItem]] = [:]
+        for session in list {
+            map[session.name] = await connection.dashboardItems(session: session.name)
+        }
+        sessions = list
+        windowsBySession = map
     }
 }

@@ -188,7 +188,8 @@ public struct SSHTerminalView: UIViewRepresentable {
         public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
         public func scrolled(source: TerminalView, position: Double) {}
         public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-            if let url = URL(string: link) {
+            guard let url = URL(string: link) else { return }
+            MainActor.assumeIsolated {
                 UIApplication.shared.open(url)
             }
         }

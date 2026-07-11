@@ -17,8 +17,11 @@ final class KeyboardObserver: ObservableObject {
             queue: .main
         ) { note in
             guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-            let height = max(0, UIScreen.main.bounds.height - end.origin.y)
             Task { @MainActor [weak self] in
+                let screenHeight = UIApplication.shared.connectedScenes
+                    .compactMap { ($0 as? UIWindowScene)?.screen.bounds.height }
+                    .max() ?? 0
+                let height = max(0, screenHeight - end.origin.y)
                 withAnimation(.interpolatingSpring(mass: 3, stiffness: 1000, damping: 500)) {
                     self?.height = height
                 }

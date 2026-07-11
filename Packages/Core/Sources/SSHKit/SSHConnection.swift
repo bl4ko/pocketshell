@@ -49,14 +49,15 @@ public actor SSHConnection {
         let bootstrap = ClientBootstrap(group: MultiThreadedEventLoopGroup.singleton)
             .connectTimeout(.seconds(10))
             .channelInitializer { channel in
-                let config = SSHClientConfiguration(userAuthDelegate: userAuth, serverAuthDelegate: serverAuth)
-                let sshHandler = NIOSSHHandler(
-                    role: .client(config),
-                    allocator: channel.allocator,
-                    inboundChildChannelInitializer: nil
-                )
-                return channel.pipeline.addHandler(sshHandler).flatMap {
-                    channel.pipeline.addHandler(handshake)
+                channel.eventLoop.makeCompletedFuture {
+                    let config = SSHClientConfiguration(userAuthDelegate: userAuth, serverAuthDelegate: serverAuth)
+                    let sshHandler = NIOSSHHandler(
+                        role: .client(config),
+                        allocator: channel.allocator,
+                        inboundChildChannelInitializer: nil
+                    )
+                    try channel.pipeline.syncOperations.addHandler(sshHandler)
+                    try channel.pipeline.syncOperations.addHandler(handshake)
                 }
             }
 

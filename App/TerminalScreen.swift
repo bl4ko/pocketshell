@@ -21,10 +21,7 @@ final class KeyboardObserver: ObservableObject {
                 let screenHeight = UIApplication.shared.connectedScenes
                     .compactMap { ($0 as? UIWindowScene)?.screen.bounds.height }
                     .max() ?? 0
-                let height = max(0, screenHeight - end.origin.y)
-                withAnimation(.interpolatingSpring(mass: 3, stiffness: 1000, damping: 500)) {
-                    self?.height = height
-                }
+                self?.height = max(0, screenHeight - end.origin.y)
             }
         }
     }
@@ -44,6 +41,7 @@ struct TerminalScreen: View {
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
 
     let host: HostConfig
+    var isActive = true
 
     var body: some View {
         GeometryReader { proxy in
@@ -62,7 +60,7 @@ struct TerminalScreen: View {
                     onCopy: { connection.bridge.copySelection() }
                 )
             }
-            .padding(.bottom, max(0, keyboard.height - proxy.safeAreaInsets.bottom))
+            .padding(.bottom, isActive ? max(0, keyboard.height - proxy.safeAreaInsets.bottom) : 0)
         }
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: windowPickerShown) {

@@ -196,3 +196,16 @@ import Testing
     #expect(Tmux.dropStatusLine("") == "")
     #expect(Tmux.dropStatusLine("only status") == "")
 }
+
+@Test func detectAgentIdleForCodexFooter() {
+    let pane = """
+    › run /review on my current changes
+
+    gpt-5.5 medium · ~/Projects/github · main · Approve for me · Context 0% used
+    """
+    #expect(AgentStatus.detectAgent(pane) == .idle)
+}
+
+@Test func detectAgentIdleForCodexContextLeftVariant() {
+    #expect(AgentStatus.detectAgent("gpt-5.5 codex · 97% context left") == .idle)
+}

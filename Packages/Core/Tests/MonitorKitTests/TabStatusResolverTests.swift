@@ -86,6 +86,21 @@ Update available! Run: brew upgrade claude-code
     #expect(resolver.resolve(key: "t1", text: idleScreen, userTyped: true) == .idle)
 }
 
+@Test func transientBlankFrameHoldsStatus() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: idleScreen)
+    _ = resolver.resolve(key: "t1", text: idleScreen)
+    #expect(resolver.resolve(key: "t1", text: "mid-redraw garbage") == .idle)
+    #expect(resolver.resolve(key: "t1", text: idleScreen) == .idle)
+}
+
+@Test func persistentBlankFramesClearStatus() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: idleScreen)
+    _ = resolver.resolve(key: "t1", text: "$ ")
+    #expect(resolver.resolve(key: "t1", text: "$ ") == nil)
+}
+
 @Test func forgetDropsState() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)

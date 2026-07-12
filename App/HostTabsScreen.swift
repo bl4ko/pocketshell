@@ -45,7 +45,7 @@ struct HostTabsScreen: View {
             }
             ZStack {
                 ForEach(tabs) { tab in
-                    TerminalScreen(connection: tab.controller, host: host)
+                    TerminalScreen(connection: tab.controller, host: host, isActive: tab.id == selectedTab)
                         .opacity(tab.id == selectedTab ? 1 : 0)
                         .allowsHitTesting(tab.id == selectedTab)
                 }
@@ -126,14 +126,11 @@ struct HostTabsScreen: View {
             consumePendingTarget()
         }
         .onChange(of: selectedTab, initial: true) { _, _ in
-            let keyboardWasUp = tabs.contains { $0.controller.bridge.isTerminalFocused }
             for tab in tabs {
                 tab.controller.bridge.setLive(tab.id == selectedTab)
-                if tab.id != selectedTab {
-                    tab.controller.bridge.setTerminalFocused(false)
-                }
             }
-            if keyboardWasUp {
+            let focusedElsewhere = tabs.contains { $0.id != selectedTab && $0.controller.bridge.isTerminalFocused }
+            if focusedElsewhere {
                 tabs.first { $0.id == selectedTab }?.controller.bridge.setTerminalFocused(true)
             }
         }

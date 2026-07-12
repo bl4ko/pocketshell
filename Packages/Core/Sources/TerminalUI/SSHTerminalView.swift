@@ -171,15 +171,27 @@ public struct SSHTerminalView: UIViewRepresentable {
             min(max(value, 0), max(limit, 0))
         }
 
+        private func onMain(_ work: @escaping @MainActor @Sendable () -> Void) {
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { work() }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { work() }
+                }
+            }
+        }
+
         public func send(source: TerminalView, data: ArraySlice<UInt8>) {
             let payload = Data(data)
-            MainActor.assumeIsolated {
+            let bridge = bridge
+            onMain {
                 bridge.processOutgoing(payload)
             }
         }
 
         public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-            MainActor.assumeIsolated {
+            let bridge = bridge
+            onMain {
                 bridge.resizeHost?(newCols, newRows)
             }
         }
@@ -189,7 +201,7 @@ public struct SSHTerminalView: UIViewRepresentable {
         public func scrolled(source: TerminalView, position: Double) {}
         public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
             guard let url = URL(string: link) else { return }
-            MainActor.assumeIsolated {
+            onMain {
                 UIApplication.shared.open(url)
             }
         }

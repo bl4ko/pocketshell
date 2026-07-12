@@ -58,7 +58,9 @@ public enum AgentStatus: Equatable, Sendable {
         let status = classify(paneText)
         if status != .idle { return status }
         let lowered = paneText.lowercased()
-        return agentMarkers.contains(where: lowered.contains) ? .idle : nil
+        if agentMarkers.contains(where: lowered.contains) { return .idle }
+        if lowered.contains(/\d+% (context left|used)/) { return .idle }
+        return nil
     }
 
     public static func classify(_ paneText: String) -> AgentStatus {

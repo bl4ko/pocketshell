@@ -26,6 +26,7 @@ struct HostTabsScreen: View {
     @State private var selectedTab: UUID?
     @State private var tabStatuses: [UUID: AgentStatus] = [:]
     @State private var tabTracker = AgentActivityTracker()
+    @State private var tabResolver = TabStatusResolver()
     @State private var showSnippets = false
     @State private var showTmuxJump = false
     @State private var showFiles = false
@@ -221,6 +222,7 @@ struct HostTabsScreen: View {
         Task { await tab.controller.stop() }
         tabs.removeAll { $0.id == id }
         tabStatuses[id] = nil
+        tabResolver.forget(key: id.uuidString)
         if selectedTab == id {
             selectedTab = tabs.last?.id
         }
@@ -243,7 +245,9 @@ struct HostTabsScreen: View {
     private func pollTabs() {
         var samples: [AgentActivityTracker.Sample] = []
         for (index, tab) in tabs.enumerated() {
-            let status = AgentStatus.detectAgent(tab.controller.bridge.visibleText())
+            let raw = tab.controller.bridge.visibleText()
+            let text = tab.controller.isTmuxAttached ? Tmux.dropStatusLine(raw) : raw
+            let status = tabResolver.resolve(key: tab.id.uuidString, text: text)
             tabStatuses[tab.id] = status
             guard let status, !tab.controller.isTmuxAttached else { continue }
             samples.append(.init(

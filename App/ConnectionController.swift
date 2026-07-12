@@ -306,6 +306,9 @@ final class ConnectionController: ObservableObject {
             bridge.resizeHost = { cols, rows in
                 Task { try? await shell.resize(cols, rows) }
             }
+            bridge.imagePaste = { [weak self] data in
+                Task { await self?.uploadPastedImage(data) }
+            }
             _ = machine.handle(.established)
             lastErrorMessage = nil
             phase = .attached
@@ -320,6 +323,15 @@ final class ConnectionController: ObservableObject {
         } catch {
             handleConnectFailure("\(error)")
         }
+    }
+
+    private func uploadPastedImage(_ data: Data) async {
+        guard let connection else { return }
+        let path = RemoteFileUpload.remotePath()
+        for command in RemoteFileUpload.commands(base64: data.base64EncodedString(), remotePath: path) {
+            guard (try? await connection.exec(command)) != nil else { return }
+        }
+        bridge.sendToHost?(Data("\(path) ".utf8))
     }
 
     private func handleStreamEnded(generation: Int) async {

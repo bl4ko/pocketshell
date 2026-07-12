@@ -3,12 +3,14 @@ import Foundation
 import Models
 import SwiftTerm
 import ToolbarUI
+import UIKit
 
 @MainActor
 public final class TerminalBridge: ObservableObject {
     @Published public var ctrlActive = false
     public var sendToHost: ((Data) -> Void)?
     public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
+    public var imagePaste: ((Data) -> Void)?
     weak var view: TerminalView?
     private var gate = FeedGate()
     private var flushTask: Task<Void, Never>?
@@ -53,6 +55,13 @@ public final class TerminalBridge: ObservableObject {
     }
 
     public func paste() {
+        let pasteboard = UIPasteboard.general
+        if let imagePaste, !pasteboard.hasStrings,
+           let image = pasteboard.image,
+           let data = image.jpegData(compressionQuality: 0.85) {
+            imagePaste(data)
+            return
+        }
         view?.paste(nil)
     }
 

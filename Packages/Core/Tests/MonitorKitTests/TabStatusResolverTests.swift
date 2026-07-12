@@ -66,6 +66,26 @@ Update available! Run: brew upgrade claude-code
     #expect(resolver.resolve(key: "t2", text: idleScreen + "\nnew output") == .busy)
 }
 
+@Test func typingWhileIdleStaysIdle() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: idleScreen)
+    _ = resolver.resolve(key: "t1", text: idleScreen)
+    #expect(resolver.resolve(key: "t1", text: idleScreen + "\n❯ fix bug", userTyped: true) == .idle)
+    #expect(resolver.resolve(key: "t1", text: idleScreen + "\n❯ fix bug") == .idle)
+}
+
+@Test func typingWhileBusyStaysBusy() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: busyScreen)
+    _ = resolver.resolve(key: "t1", text: busyScreen + "\noutput")
+    #expect(resolver.resolve(key: "t1", text: busyScreen + "\noutput more", userTyped: true) == .busy)
+}
+
+@Test func typingOnFirstSampleUsesMarkers() {
+    var resolver = TabStatusResolver()
+    #expect(resolver.resolve(key: "t1", text: idleScreen, userTyped: true) == .idle)
+}
+
 @Test func forgetDropsState() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)

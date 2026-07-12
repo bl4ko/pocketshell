@@ -14,6 +14,7 @@ public final class TerminalBridge: ObservableObject {
     weak var view: TerminalView?
     private var gate = FeedGate()
     private var flushTask: Task<Void, Never>?
+    private var userInputPending = false
 
     public init() {}
 
@@ -69,6 +70,24 @@ public final class TerminalBridge: ObservableObject {
         view?.copy(nil)
     }
 
+    public func consumeUserInput() -> Bool {
+        defer { userInputPending = false }
+        return userInputPending
+    }
+
+    public var isTerminalFocused: Bool {
+        view?.isFirstResponder ?? false
+    }
+
+    public func setTerminalFocused(_ focused: Bool) {
+        guard let view else { return }
+        if focused {
+            _ = view.becomeFirstResponder()
+        } else if view.isFirstResponder {
+            _ = view.resignFirstResponder()
+        }
+    }
+
     public func toggleKeyboard() {
         guard let view else { return }
         if view.isFirstResponder {
@@ -84,11 +103,13 @@ public final class TerminalBridge: ObservableObject {
             return
         }
         if let data = ToolbarKeyEncoder.data(for: action) {
+            userInputPending = true
             sendToHost?(data)
         }
     }
 
     public func processOutgoing(_ data: Data) {
+        userInputPending = true
         if ctrlActive,
            let text = String(data: data, encoding: .utf8),
            text.count == 1,

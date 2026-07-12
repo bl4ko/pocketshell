@@ -126,8 +126,15 @@ struct HostTabsScreen: View {
             consumePendingTarget()
         }
         .onChange(of: selectedTab, initial: true) { _, _ in
+            let keyboardWasUp = tabs.contains { $0.controller.bridge.isTerminalFocused }
             for tab in tabs {
                 tab.controller.bridge.setLive(tab.id == selectedTab)
+                if tab.id != selectedTab {
+                    tab.controller.bridge.setTerminalFocused(false)
+                }
+            }
+            if keyboardWasUp {
+                tabs.first { $0.id == selectedTab }?.controller.bridge.setTerminalFocused(true)
             }
         }
         .onDisappear {
@@ -247,7 +254,8 @@ struct HostTabsScreen: View {
         for (index, tab) in tabs.enumerated() {
             let raw = tab.controller.bridge.visibleText()
             let text = tab.controller.isTmuxAttached ? Tmux.dropStatusLine(raw) : raw
-            let status = tabResolver.resolve(key: tab.id.uuidString, text: text)
+            let typed = tab.controller.bridge.consumeUserInput()
+            let status = tabResolver.resolve(key: tab.id.uuidString, text: text, userTyped: typed)
             tabStatuses[tab.id] = status
             guard let status, !tab.controller.isTmuxAttached else { continue }
             samples.append(.init(

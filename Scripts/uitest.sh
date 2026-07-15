@@ -4,7 +4,9 @@ set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 DIR=$(mktemp -d)
 PORT=${PS_TEST_PORT:-24222}
-trap 'kill "$SSHD_PID" 2>/dev/null || true; rm -rf "$DIR"' EXIT
+SIM=${PS_TEST_SIM:-iPhone 17}
+TMUX_SESSION="psh-uitest-$$"
+trap 'kill "$SSHD_PID" 2>/dev/null || true; tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true; rm -rf "$DIR"' EXIT
 
 swift "$REPO/Scripts/gen-test-key.swift" > "$DIR/key.txt"
 RAW=$(sed -n 1p "$DIR/key.txt")
@@ -29,15 +31,25 @@ EOF
 
 /usr/sbin/sshd -D -f "$DIR/sshd_config" &
 SSHD_PID=$!
-sleep 1
+for _ in $(seq 1 50); do
+    nc -z 127.0.0.1 "$PORT" 2>/dev/null && break
+    sleep 0.2
+done
+
+tmux new-session -d -s "$TMUX_SESSION" -n pshwin
 
 cd "$REPO"
-xcrun simctl boot "iPhone 17" 2>/dev/null || true
-xcrun simctl uninstall "iPhone 17" com.bl4ko.pocketshell 2>/dev/null || true
+if ! xcrun simctl list devices available | grep -q "$SIM ("; then
+    SIM=$(xcrun simctl list devices available | sed -n 's/^ *\(iPhone[^(]*[^ (]\) *(.*/\1/p' | head -1)
+    echo "PS_TEST_SIM not available, using: $SIM"
+fi
+xcrun simctl boot "$SIM" 2>/dev/null || true
+xcrun simctl uninstall "$SIM" com.bl4ko.pocketshell 2>/dev/null || true
 TEST_RUNNER_PS_TEST_KEY="$RAW" \
 TEST_RUNNER_PS_TEST_PORT="$PORT" \
 TEST_RUNNER_PS_TEST_USER="$(whoami)" \
+TEST_RUNNER_PS_TEST_TMUX="$TMUX_SESSION" \
 xcodebuild test \
   -scheme pocketshell \
-  -destination "platform=iOS Simulator,name=iPhone 17" \
+  -destination "platform=iOS Simulator,name=$SIM" \
   -only-testing:pocketshellUITests "$@"

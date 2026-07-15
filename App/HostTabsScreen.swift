@@ -60,6 +60,7 @@ struct HostTabsScreen: View {
                 } label: {
                     Image(systemName: "rectangle.split.3x1")
                 }
+                .accessibilityIdentifier("tmux-sessions")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -255,11 +256,12 @@ struct HostTabsScreen: View {
             let status = tabResolver.resolve(key: tab.id.uuidString, text: text, userTyped: typed)
             tabStatuses[tab.id] = status
             guard let status, !tab.controller.isTmuxAttached else { continue }
-            samples.append(.init(
-                key: "tab-\(tab.id.uuidString)",
-                title: "\(host.name) \(tab.name ?? "tab \(index + 1)")",
-                status: status
-            ))
+            samples.append(
+                .init(
+                    key: "tab-\(tab.id.uuidString)",
+                    title: "\(host.name) \(tab.name ?? "tab \(index + 1)")",
+                    status: status
+                ))
         }
         let transitions = tabTracker.update(samples)
         persistTabs()
@@ -270,11 +272,12 @@ struct HostTabsScreen: View {
             content.body = transition.title
             content.sound = .default
             content.userInfo = ["hostID": host.id.uuidString]
-            UNUserNotificationCenter.current().add(UNNotificationRequest(
-                identifier: "\(transition.key)-\(Date().timeIntervalSince1970)",
-                content: content,
-                trigger: nil
-            ))
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(
+                    identifier: "\(transition.key)-\(Date().timeIntervalSince1970)",
+                    content: content,
+                    trigger: nil
+                ))
         }
     }
 
@@ -341,7 +344,8 @@ struct HostTabsScreen: View {
 
     private func applyRename() {
         guard let id = renamingTab,
-              let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+            let index = tabs.firstIndex(where: { $0.id == id })
+        else { return }
         let trimmed = renameText.trimmingCharacters(in: .whitespaces)
         tabs[index].name = trimmed.isEmpty ? nil : trimmed
         renamingTab = nil
@@ -583,12 +587,14 @@ struct TmuxJumpSheet: View {
                                             prompt = .renameWindow(session: session.name, index: item.window.index)
                                         }
                                         Button("Delete", role: .destructive) {
-                                            killTarget = .window(session: session.name, index: item.window.index, name: item.window.name)
+                                            killTarget = .window(
+                                                session: session.name, index: item.window.index, name: item.window.name)
                                         }
                                     }
                                     .swipeActions(edge: .trailing) {
                                         Button("Delete", role: .destructive) {
-                                            killTarget = .window(session: session.name, index: item.window.index, name: item.window.name)
+                                            killTarget = .window(
+                                                session: session.name, index: item.window.index, name: item.window.name)
                                         }
                                     }
                                     .swipeActions(edge: .leading) {

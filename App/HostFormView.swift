@@ -46,7 +46,9 @@ struct HostFormView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } footer: {
-                    Text("With a tmux session set, connecting lists its windows for one-tap attach. Otherwise the on-connect command (or a plain shell) runs.")
+                    Text(
+                        "With a tmux session set, connecting lists its windows for one-tap attach. Otherwise the on-connect command (or a plain shell) runs."
+                    )
                 }
             }
             .navigationTitle(host == nil ? "Add Host" : "Edit Host")
@@ -80,7 +82,8 @@ struct HostFormView: View {
         updated.hostname = hostname
         updated.port = port
         updated.username = username
-        updated.group = group.trimmingCharacters(in: .whitespaces).isEmpty
+        updated.group =
+            group.trimmingCharacters(in: .whitespaces).isEmpty
             ? nil
             : group.trimmingCharacters(in: .whitespaces)
         updated.keyTag = keyTag

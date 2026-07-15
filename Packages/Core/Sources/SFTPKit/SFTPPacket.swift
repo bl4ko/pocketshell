@@ -152,8 +152,8 @@ public struct SFTPFraming: Sendable {
             var entries: [SFTPName] = []
             for _ in 0..<count {
                 guard let filename = reader.readString(),
-                      let longname = reader.readString(),
-                      let attrs = reader.readAttributes()
+                    let longname = reader.readString(),
+                    let attrs = reader.readAttributes()
                 else { return nil }
                 entries.append(SFTPName(filename: filename, longname: longname, attributes: attrs))
             }

@@ -1,6 +1,7 @@
 import Crypto
 import Foundation
 import Testing
+
 @testable import KeyKit
 
 private let fixedKey = try! P256.Signing.PrivateKey(rawRepresentation: Data(repeating: 1, count: 32))
@@ -34,24 +35,24 @@ private let fixedKey = try! P256.Signing.PrivateKey(rawRepresentation: Data(repe
 }
 
 #if os(macOS)
-@Test func sshKeygenAcceptsGeneratedPublicKey() throws {
-    let line = OpenSSHPublicKey.line(for: fixedKey.publicKey, comment: "pocketshell@test")
-    let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("pocketshell-\(UUID().uuidString).pub")
-    try (line + "\n").write(to: url, atomically: true, encoding: .utf8)
-    defer { try? FileManager.default.removeItem(at: url) }
+    @Test func sshKeygenAcceptsGeneratedPublicKey() throws {
+        let line = OpenSSHPublicKey.line(for: fixedKey.publicKey, comment: "pocketshell@test")
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pocketshell-\(UUID().uuidString).pub")
+        try (line + "\n").write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-keygen")
-    process.arguments = ["-l", "-f", url.path]
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    try process.run()
-    process.waitUntilExit()
-    let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-keygen")
+        process.arguments = ["-l", "-f", url.path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        process.waitUntilExit()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
-    #expect(process.terminationStatus == 0)
-    #expect(output.contains("ECDSA"))
-    #expect(output.contains("pocketshell@test"))
-}
+        #expect(process.terminationStatus == 0)
+        #expect(output.contains("ECDSA"))
+        #expect(output.contains("pocketshell@test"))
+    }
 #endif

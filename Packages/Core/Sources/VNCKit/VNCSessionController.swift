@@ -148,7 +148,10 @@ extension VNCSessionController: VNCConnectionDelegate {
         }
     }
 
-    public func connection(_ connection: VNCConnection, credentialFor authenticationType: VNCAuthenticationType, completion: @escaping (VNCCredential?) -> Void) {
+    public func connection(
+        _ connection: VNCConnection, credentialFor authenticationType: VNCAuthenticationType,
+        completion: @escaping (VNCCredential?) -> Void
+    ) {
         if authenticationType.requiresUsername {
             completion(VNCUsernamePasswordCredential(username: username, password: password))
         } else {
@@ -168,7 +171,10 @@ extension VNCSessionController: VNCConnectionDelegate {
         scheduleRender(framebuffer)
     }
 
-    public func connection(_ connection: VNCConnection, didUpdateFramebuffer framebuffer: VNCFramebuffer, x: UInt16, y: UInt16, width: UInt16, height: UInt16) {
+    public func connection(
+        _ connection: VNCConnection, didUpdateFramebuffer framebuffer: VNCFramebuffer, x: UInt16, y: UInt16,
+        width: UInt16, height: UInt16
+    ) {
         scheduleRender(framebuffer)
     }
 

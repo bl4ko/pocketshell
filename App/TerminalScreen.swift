@@ -18,7 +18,8 @@ final class KeyboardObserver: ObservableObject {
         ) { note in
             guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
             Task { @MainActor [weak self] in
-                let screenHeight = UIApplication.shared.connectedScenes
+                let screenHeight =
+                    UIApplication.shared.connectedScenes
                     .compactMap { ($0 as? UIWindowScene)?.screen.bounds.height }
                     .max() ?? 0
                 self?.height = max(0, screenHeight - end.origin.y)

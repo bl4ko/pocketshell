@@ -38,7 +38,8 @@ public struct SnapshotStore: Sendable {
     }
 
     public static var shared: SnapshotStore {
-        let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+        let dir =
+            FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return SnapshotStore(directory: dir)
     }

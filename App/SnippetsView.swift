@@ -114,11 +114,13 @@ struct SnippetFormView: View {
     }
 
     private func save() {
-        var updated = snippet ?? Snippet(
-            name: "",
-            command: "",
-            sortOrder: (store.snippets.map(\.sortOrder).max() ?? -1) + 1
-        )
+        var updated =
+            snippet
+            ?? Snippet(
+                name: "",
+                command: "",
+                sortOrder: (store.snippets.map(\.sortOrder).max() ?? -1) + 1
+            )
         updated.name = name
         updated.command = command
         updated.runMode = runMode

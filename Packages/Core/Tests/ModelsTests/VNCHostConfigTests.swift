@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import Models
 
 @Test func vncHostConfigDefaultsPort5900AndRoundTrips() throws {

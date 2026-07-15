@@ -108,7 +108,8 @@ public enum Tmux {
 
     public static func attachCommand(session: String, windowIndex: Int?, clientTag: String) -> String {
         let clone = cloneName(session: session, clientTag: clientTag)
-        let attach = "\(tmux) -u new-session -t \(shellQuote(session)) -s \(shellQuote(clone))"
+        let attach =
+            "\(tmux) -u new-session -t \(shellQuote(session)) -s \(shellQuote(clone))"
             + " \\; set-option destroy-unattached on"
         guard let windowIndex else { return attach }
         return "\(attach) \\; select-window -t \(windowIndex)"
@@ -123,10 +124,12 @@ public enum Tmux {
 
     public static func capturePanesCommand(session: String) -> String {
         let target = shellQuote(session)
-        return "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w; done"
+        return
+            "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w; done"
     }
 
-    public static func reorderWindowsCommand(session: String, indexes: [Int], fromOffset: Int, toOffset: Int) -> String? {
+    public static func reorderWindowsCommand(session: String, indexes: [Int], fromOffset: Int, toOffset: Int) -> String?
+    {
         guard fromOffset >= 0, fromOffset < indexes.count, toOffset >= 0, toOffset <= indexes.count else { return nil }
         let dest = toOffset > fromOffset ? toOffset - 1 : toOffset
         guard dest != fromOffset else { return nil }
@@ -169,7 +172,8 @@ public enum Tmux {
         }
         for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
             if line.hasPrefix("@@pane:"), line.hasSuffix("@@"),
-               let index = Int(line.dropFirst(7).dropLast(2)) {
+                let index = Int(line.dropFirst(7).dropLast(2))
+            {
                 flush()
                 current = index
                 lines = []
@@ -200,8 +204,8 @@ public enum Tmux {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: "|", omittingEmptySubsequences: false)
             guard parts.count >= 3,
-                  let index = Int(parts[0]),
-                  let active = flag(parts.last!)
+                let index = Int(parts[0]),
+                let active = flag(parts.last!)
             else { return nil }
             let name = parts[1..<(parts.count - 1)].joined(separator: "|")
             return TmuxWindow(index: index, name: name, active: active)
@@ -212,8 +216,8 @@ public enum Tmux {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: "|", omittingEmptySubsequences: false)
             guard parts.count >= 4,
-                  let windows = Int(parts[parts.count - 3]),
-                  let attachedClients = Int(parts[parts.count - 2])
+                let windows = Int(parts[parts.count - 3]),
+                let attachedClients = Int(parts[parts.count - 2])
             else { return nil }
             let name = parts[0..<(parts.count - 3)].joined(separator: "|")
             let group = parts.last!.isEmpty ? nil : String(parts.last!)

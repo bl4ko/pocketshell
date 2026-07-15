@@ -73,7 +73,8 @@ final class AppStore: ObservableObject {
         if let cachedKey { return cachedKey }
         let key: DeviceKeyMaterial
         if let injected = ProcessInfo.processInfo.environment["PS_TEST_KEY"],
-           let raw = Data(base64Encoded: injected) {
+            let raw = Data(base64Encoded: injected)
+        {
             key = .software(try P256.Signing.PrivateKey(rawRepresentation: raw))
         } else {
             key = try keyStore.loadOrCreate(tag: Self.deviceKeyTag)

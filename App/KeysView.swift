@@ -98,7 +98,8 @@ struct ImportKeyView: View {
                 } header: {
                     Text("OpenSSH private key")
                 } footer: {
-                    Text("ed25519 or ECDSA P-256 key (-----BEGIN OPENSSH PRIVATE KEY-----). RSA keys are not supported.")
+                    Text(
+                        "ed25519 or ECDSA P-256 key (-----BEGIN OPENSSH PRIVATE KEY-----). RSA keys are not supported.")
                 }
                 Section {
                     SecureField("Passphrase (if protected)", text: $passphrase)
@@ -132,14 +133,15 @@ struct ImportKeyView: View {
             )
             dismiss()
         } catch let parseError as OpenSSHPrivateKey.ParseError {
-            error = switch parseError {
-            case .notOpenSSHKey: "not an OpenSSH private key (needs BEGIN OPENSSH PRIVATE KEY)"
-            case .encrypted: "key is passphrase-protected — enter the passphrase below"
-            case .wrongPassphrase: "wrong passphrase"
-            case .unsupportedCipher(let cipher): "unsupported cipher \(cipher)"
-            case .unsupportedKeyType(let type): "unsupported key type \(type) — use ed25519 or ECDSA P-256"
-            case .malformed: "key data is malformed"
-            }
+            error =
+                switch parseError {
+                case .notOpenSSHKey: "not an OpenSSH private key (needs BEGIN OPENSSH PRIVATE KEY)"
+                case .encrypted: "key is passphrase-protected — enter the passphrase below"
+                case .wrongPassphrase: "wrong passphrase"
+                case .unsupportedCipher(let cipher): "unsupported cipher \(cipher)"
+                case .unsupportedKeyType(let type): "unsupported key type \(type) — use ed25519 or ECDSA P-256"
+                case .malformed: "key data is malformed"
+                }
         } catch {
             self.error = "\(error)"
         }

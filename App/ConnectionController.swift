@@ -133,7 +133,8 @@ final class ConnectionController: ObservableObject {
 
     func reorderTmuxWindows(session: String, indexes: [Int], fromOffset: Int, toOffset: Int) async {
         guard let connection,
-              let command = Tmux.reorderWindowsCommand(session: session, indexes: indexes, fromOffset: fromOffset, toOffset: toOffset)
+            let command = Tmux.reorderWindowsCommand(
+                session: session, indexes: indexes, fromOffset: fromOffset, toOffset: toOffset)
         else { return }
         _ = try? await connection.exec(command)
     }
@@ -172,7 +173,8 @@ final class ConnectionController: ObservableObject {
 
     func currentTmuxWindowIndex() async -> Int? {
         guard let connection, let cloneTag,
-              case .tmux(let session, _) = pendingShell else { return nil }
+            case .tmux(let session, _) = pendingShell
+        else { return nil }
         let clone = Tmux.cloneName(session: session, clientTag: cloneTag)
         let output = (try? await connection.exec(Tmux.currentWindowCommand(clone: clone))) ?? ""
         return Tmux.parseCurrentWindow(output)
@@ -217,7 +219,9 @@ final class ConnectionController: ObservableObject {
             try await connection.connect()
         } catch let error as SSHError {
             if case .hostKeyMismatch(let stored, let presented) = error {
-                phase = .failed("HOST KEY CHANGED\nstored: \(stored)\npresented: \(presented)\nRemove host trust only if this is expected.")
+                phase = .failed(
+                    "HOST KEY CHANGED\nstored: \(stored)\npresented: \(presented)\nRemove host trust only if this is expected."
+                )
                 _ = machine.handle(.userDisconnect)
                 return
             }

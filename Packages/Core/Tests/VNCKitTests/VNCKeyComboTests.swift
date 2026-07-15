@@ -1,5 +1,6 @@
 import RoyalVNCKit
 import Testing
+
 @testable import VNCKit
 
 @Test func parsesCommandLetter() {

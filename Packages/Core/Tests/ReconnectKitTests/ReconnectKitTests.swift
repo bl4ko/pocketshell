@@ -1,4 +1,5 @@
 import Testing
+
 @testable import ReconnectKit
 
 @Test func startsIdle() {

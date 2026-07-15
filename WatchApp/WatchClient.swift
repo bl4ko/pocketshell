@@ -52,7 +52,8 @@ final class WatchClient: NSObject, ObservableObject {
 
     private func handleReply(_ reply: [String: Any]) {
         if let data = reply["snapshot"] as? Data,
-           let decoded = try? JSONDecoder().decode(SessionSnapshot.self, from: data) {
+            let decoded = try? JSONDecoder().decode(SessionSnapshot.self, from: data)
+        {
             snapshot = decoded
             statusMessage = nil
         } else {
@@ -76,7 +77,8 @@ extension WatchClient: WCSessionDelegate {
         let data = context["snapshot"] as? Data
         Task { @MainActor in
             guard let data,
-                  let decoded = try? JSONDecoder().decode(SessionSnapshot.self, from: data) else { return }
+                let decoded = try? JSONDecoder().decode(SessionSnapshot.self, from: data)
+            else { return }
             self.snapshot = decoded
         }
     }

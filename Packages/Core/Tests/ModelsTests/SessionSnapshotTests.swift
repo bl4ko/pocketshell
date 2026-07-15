@@ -5,7 +5,8 @@ import Testing
 @Test func snapshotCodableRoundtrip() throws {
     let snapshot = SessionSnapshot(
         windows: [
-            .init(host: "mac-mini", session: "claude", index: 0, name: "0: homeops", status: "busy", lastLine: "$ make"),
+            .init(
+                host: "mac-mini", session: "claude", index: 0, name: "0: homeops", status: "busy", lastLine: "$ make"),
             .init(host: "mac-mini", session: "claude", index: 1, name: "1: slocar", status: "idle", lastLine: ""),
         ],
         updatedAt: Date(timeIntervalSince1970: 1000)

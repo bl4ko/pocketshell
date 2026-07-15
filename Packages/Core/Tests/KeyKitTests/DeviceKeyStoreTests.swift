@@ -1,6 +1,7 @@
 import Crypto
 import Foundation
 import Testing
+
 @testable import KeyKit
 
 @Test func loadOrCreatePersistsSameKeyAcrossCalls() throws {

@@ -19,7 +19,7 @@ public enum OpenSSHPrivateKey {
     public static func parse(_ text: String, passphrase: String? = nil) throws -> DeviceKeyMaterial {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let headerRange = trimmed.range(of: header),
-              let footerRange = trimmed.range(of: footer)
+            let footerRange = trimmed.range(of: footer)
         else { throw ParseError.notOpenSSHKey }
         let base64 = trimmed[headerRange.upperBound..<footerRange.lowerBound]
             .components(separatedBy: .whitespacesAndNewlines)
@@ -31,9 +31,9 @@ public enum OpenSSHPrivateKey {
             throw ParseError.notOpenSSHKey
         }
         guard let cipher = reader.readString(),
-              let kdfName = reader.readString(),
-              let kdfOptions = reader.readData(),
-              let keyCount = reader.readUInt32()
+            let kdfName = reader.readString(),
+            let kdfOptions = reader.readData(),
+            let keyCount = reader.readUInt32()
         else { throw ParseError.malformed }
         guard keyCount == 1 else { throw ParseError.malformed }
         guard reader.readData() != nil, var privateSection = reader.readData() else {
@@ -64,8 +64,8 @@ public enum OpenSSHPrivateKey {
         switch keyType {
         case "ssh-ed25519":
             guard section.readData() != nil,
-                  let privateBlob = section.readData(),
-                  privateBlob.count == 64
+                let privateBlob = section.readData(),
+                privateBlob.count == 64
             else { throw ParseError.malformed }
             let seed = privateBlob.prefix(32)
             guard let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: seed) else {
@@ -74,8 +74,8 @@ public enum OpenSSHPrivateKey {
             return .ed25519(key)
         case "ecdsa-sha2-nistp256":
             guard section.readString() == "nistp256",
-                  section.readData() != nil,
-                  var scalar = section.readData()
+                section.readData() != nil,
+                var scalar = section.readData()
             else { throw ParseError.malformed }
             while scalar.first == 0 { scalar.removeFirst() }
             guard scalar.count <= 32 else { throw ParseError.malformed }
@@ -96,14 +96,15 @@ public enum OpenSSHPrivateKey {
         kdfOptions: Data,
         passphrase: String
     ) throws -> Data {
-        let (keyLength, mode): (Int, CCMode) = switch cipher {
-        case "aes256-ctr": (32, CCMode(kCCModeCTR))
-        case "aes192-ctr": (24, CCMode(kCCModeCTR))
-        case "aes128-ctr": (16, CCMode(kCCModeCTR))
-        case "aes256-cbc": (32, CCMode(kCCModeCBC))
-        case "aes128-cbc": (16, CCMode(kCCModeCBC))
-        default: throw ParseError.unsupportedCipher(cipher)
-        }
+        let (keyLength, mode): (Int, CCMode) =
+            switch cipher {
+            case "aes256-ctr": (32, CCMode(kCCModeCTR))
+            case "aes192-ctr": (24, CCMode(kCCModeCTR))
+            case "aes128-ctr": (16, CCMode(kCCModeCTR))
+            case "aes256-cbc": (32, CCMode(kCCModeCBC))
+            case "aes128-cbc": (16, CCMode(kCCModeCBC))
+            default: throw ParseError.unsupportedCipher(cipher)
+            }
         guard kdfName == "bcrypt" else { throw ParseError.unsupportedCipher("\(cipher)/\(kdfName)") }
 
         var options = WireReader(kdfOptions)

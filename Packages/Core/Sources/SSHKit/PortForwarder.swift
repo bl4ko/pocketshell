@@ -30,11 +30,12 @@ extension SSHConnection {
                     switch result {
                     case .success(let handler):
                         let originator = try? SocketAddress(ipAddress: "127.0.0.1", port: 0)
-                        let channelType = SSHChannelType.directTCPIP(.init(
-                            targetHost: remoteHost,
-                            targetPort: remotePort,
-                            originatorAddress: originator ?? local.remoteAddress!
-                        ))
+                        let channelType = SSHChannelType.directTCPIP(
+                            .init(
+                                targetHost: remoteHost,
+                                targetPort: remotePort,
+                                originatorAddress: originator ?? local.remoteAddress!
+                            ))
                         handler.createChannel(promise, channelType: channelType) { ssh, _ in
                             ssh.setOption(ChannelOptions.allowRemoteHalfClosure, value: true).flatMap {
                                 ssh.pipeline.addHandler(SSHToLocalGlue(peer: local))

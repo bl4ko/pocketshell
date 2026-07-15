@@ -17,7 +17,8 @@ public struct VNCKeyCombo: Equatable, Identifiable, Sendable {
     ].compactMap(parse)
 
     public static func parse(_ text: String) -> VNCKeyCombo? {
-        let tokens = text
+        let tokens =
+            text
             .lowercased()
             .split(whereSeparator: { $0 == "+" || $0 == "-" })
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -81,7 +82,8 @@ public struct VNCKeyCombo: Equatable, Identifiable, Sendable {
             return named
         }
         guard token.count == 1,
-              let code = VNCKeyCode.keyCodesFrom(characters: token).first else {
+            let code = VNCKeyCode.keyCodesFrom(characters: token).first
+        else {
             return nil
         }
         return (code, token.uppercased())

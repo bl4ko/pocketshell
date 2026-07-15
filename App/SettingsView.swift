@@ -59,7 +59,9 @@ struct SettingsView: View {
             } header: {
                 Text("Agents")
             } footer: {
-                Text("Polls tmux windows on hosts with a tmux session and notifies when a busy agent goes idle or needs input.")
+                Text(
+                    "Polls tmux windows on hosts with a tmux session and notifies when a busy agent goes idle or needs input."
+                )
             }
             Section {
                 Button("Export config…") {
@@ -75,7 +77,9 @@ struct SettingsView: View {
             } header: {
                 Text("Config")
             } footer: {
-                Text("Hosts, desktops, snippets, toolbar and host fingerprints. Keys and passwords stay on device — install this device's public key from the Keys screen after import.")
+                Text(
+                    "Hosts, desktops, snippets, toolbar and host fingerprints. Keys and passwords stay on device — install this device's public key from the Keys screen after import."
+                )
             }
             Section("Terminal theme") {
                 ForEach(TerminalTheme.all) { theme in
@@ -113,12 +117,14 @@ struct SettingsView: View {
                 }
             }
             guard let data = try? Data(contentsOf: url),
-                  let config = try? JSONDecoder().decode(ConfigExport.self, from: data) else {
+                let config = try? JSONDecoder().decode(ConfigExport.self, from: data)
+            else {
                 importResult = "Import failed — not a pocketshell config file."
                 return
             }
             store.applyConfig(config)
-            importResult = "Imported \(config.hosts.count) hosts, \(config.vncHosts.count) desktops, \(config.snippets.count) snippets."
+            importResult =
+                "Imported \(config.hosts.count) hosts, \(config.vncHosts.count) desktops, \(config.snippets.count) snippets."
         }
         .alert(importResult ?? "", isPresented: importAlertShown) {
             Button("OK") { importResult = nil }

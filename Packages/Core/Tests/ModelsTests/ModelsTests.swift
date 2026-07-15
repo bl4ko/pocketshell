@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import Models
 
 @Test func hostConfigCodableRoundTrip() throws {
@@ -23,7 +24,9 @@ import Testing
     let decoded = try JSONDecoder().decode(HostConfig.self, from: data)
     #expect(decoded.group == "homelab")
 
-    let legacy = Data(#"{"id":"00000000-0000-0000-0000-000000000001","name":"a","hostname":"b","port":22,"username":"c","keyTag":"d"}"#.utf8)
+    let legacy = Data(
+        #"{"id":"00000000-0000-0000-0000-000000000001","name":"a","hostname":"b","port":22,"username":"c","keyTag":"d"}"#
+            .utf8)
     let old = try JSONDecoder().decode(HostConfig.self, from: legacy)
     #expect(old.group == nil)
 }

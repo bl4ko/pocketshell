@@ -46,15 +46,15 @@ public struct ReconnectMachine: Equatable, Sendable {
             return .none
 
         case (.connecting(let failures), .connectFailed),
-             (.connecting(let failures), .connectionLost):
+            (.connecting(let failures), .connectionLost):
             return scheduleRetry(failures: failures + 1)
 
         case (.connected, .connectionLost):
             return scheduleRetry(failures: 1)
 
         case (.waitingToReconnect(let failures, _), .retryTimerFired),
-             (.waitingToReconnect(let failures, _), .pathChanged),
-             (.waitingToReconnect(let failures, _), .appForegrounded):
+            (.waitingToReconnect(let failures, _), .pathChanged),
+            (.waitingToReconnect(let failures, _), .appForegrounded):
             state = .connecting(failures: failures)
             return .connect
 

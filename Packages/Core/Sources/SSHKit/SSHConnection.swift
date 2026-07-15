@@ -220,16 +220,18 @@ final class KeyAuthDelegate: NIOSSHClientUserAuthenticationDelegate, @unchecked 
             return
         }
         offered = true
-        let privateKey: NIOSSHPrivateKey = switch key {
-        case .enclave(let key): NIOSSHPrivateKey(secureEnclaveP256Key: key)
-        case .software(let key): NIOSSHPrivateKey(p256Key: key)
-        case .ed25519(let key): NIOSSHPrivateKey(ed25519Key: key)
-        }
-        nextChallengePromise.succeed(NIOSSHUserAuthenticationOffer(
-            username: username,
-            serviceName: "",
-            offer: .privateKey(.init(privateKey: privateKey))
-        ))
+        let privateKey: NIOSSHPrivateKey =
+            switch key {
+            case .enclave(let key): NIOSSHPrivateKey(secureEnclaveP256Key: key)
+            case .software(let key): NIOSSHPrivateKey(p256Key: key)
+            case .ed25519(let key): NIOSSHPrivateKey(ed25519Key: key)
+            }
+        nextChallengePromise.succeed(
+            NIOSSHUserAuthenticationOffer(
+                username: username,
+                serviceName: "",
+                offer: .privateKey(.init(privateKey: privateKey))
+            ))
     }
 }
 

@@ -41,7 +41,9 @@ struct VNCHostFormView: View {
                         .autocorrectionDisabled()
                     SecureField(existing == nil ? "Password" : "Password (unchanged if empty)", text: $password)
                 } footer: {
-                    Text("For macOS Screen Sharing use your macOS login. Leave username empty for plain VNC password auth.")
+                    Text(
+                        "For macOS Screen Sharing use your macOS login. Leave username empty for plain VNC password auth."
+                    )
                 }
             }
             .navigationTitle(existing == nil ? "Add Desktop" : "Edit Desktop")

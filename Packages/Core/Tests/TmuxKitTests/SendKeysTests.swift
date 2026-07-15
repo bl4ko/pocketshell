@@ -1,4 +1,5 @@
 import Testing
+
 @testable import TmuxKit
 
 @Test func sendKeysTypesLiteralText() {
@@ -8,7 +9,10 @@ import Testing
 
 @Test func sendKeysWithEnterAppendsEnterKey() {
     let cmd = Tmux.sendKeysCommand(session: "claude", windowIndex: 0, text: "proceed", pressEnter: true)
-    #expect(cmd == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux send-keys -t 'claude':0 -l 'proceed' \\; send-keys -t 'claude':0 Enter")
+    #expect(
+        cmd
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux send-keys -t 'claude':0 -l 'proceed' \\; send-keys -t 'claude':0 Enter"
+    )
 }
 
 @Test func sendKeysEscapesSingleQuotes() {

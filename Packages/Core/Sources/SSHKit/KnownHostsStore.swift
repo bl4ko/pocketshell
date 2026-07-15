@@ -42,7 +42,9 @@ public struct KnownHostsStore: Sendable {
 
     public static func fingerprint(publicKeyLine: String) -> String {
         let parts = publicKeyLine.split(separator: " ")
-        let blob = parts.count > 1 ? Data(base64Encoded: String(parts[1])) ?? Data(publicKeyLine.utf8) : Data(publicKeyLine.utf8)
+        let blob =
+            parts.count > 1
+            ? Data(base64Encoded: String(parts[1])) ?? Data(publicKeyLine.utf8) : Data(publicKeyLine.utf8)
         let digest = SHA256.hash(data: blob)
         let base64 = Data(digest).base64EncodedString()
         return "SHA256:" + base64.trimmingCharacters(in: CharacterSet(charactersIn: "="))

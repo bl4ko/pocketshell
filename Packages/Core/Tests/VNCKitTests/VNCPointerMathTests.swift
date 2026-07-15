@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+
 @testable import VNCKit
 
 private let view = CGSize(width: 400, height: 300)

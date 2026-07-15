@@ -3,29 +3,29 @@ import Testing
 import TmuxKit
 
 private let busyScreen = """
-✶ Crunching… (12s · esc to interrupt)
-⏵⏵ auto mode on (shift+tab to cycle)
-"""
+    ✶ Crunching… (12s · esc to interrupt)
+    ⏵⏵ auto mode on (shift+tab to cycle)
+    """
 
 private let idleScreen = """
-❯
-ctx: 7% used / 93% left
-⏵⏵ auto mode on (shift+tab to cycle)
-"""
+    ❯
+    ctx: 7% used / 93% left
+    ⏵⏵ auto mode on (shift+tab to cycle)
+    """
 
 private let waitingScreen = """
-Do you want to proceed?
-❯ 1. Yes
-  2. No
-⏵⏵ auto mode on (shift+tab to cycle)
-"""
+    Do you want to proceed?
+    ❯ 1. Yes
+      2. No
+    ⏵⏵ auto mode on (shift+tab to cycle)
+    """
 
 private let compactingTail = """
-❯
-ctx: 17% used / 83% left
-⏵⏵ auto mode on (shift+tab to cycle)
-Update available! Run: brew upgrade claude-code
-"""
+    ❯
+    ctx: 17% used / 83% left
+    ⏵⏵ auto mode on (shift+tab to cycle)
+    Update available! Run: brew upgrade claude-code
+    """
 
 @Test func firstSampleUsesMarkerClassification() {
     var resolver = TabStatusResolver()

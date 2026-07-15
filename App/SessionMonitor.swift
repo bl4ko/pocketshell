@@ -102,19 +102,21 @@ final class SessionMonitor: ObservableObject {
                 let status = AgentStatus.classify(text)
                 let key = "\(host.id):\(window.index)"
                 targets[key] = ["hostID": host.id.uuidString, "session": session, "windowIndex": window.index]
-                samples.append(.init(
-                    key: key,
-                    title: "\(host.name) \(session):\(window.index) \(window.name)",
-                    status: status
-                ))
-                snapshots.append(.init(
-                    host: host.name,
-                    session: session,
-                    index: window.index,
-                    name: "\(window.index): \(window.name)",
-                    status: status.label,
-                    lastLine: Tmux.previewLines(text, count: 1)
-                ))
+                samples.append(
+                    .init(
+                        key: key,
+                        title: "\(host.name) \(session):\(window.index) \(window.name)",
+                        status: status
+                    ))
+                snapshots.append(
+                    .init(
+                        host: host.name,
+                        session: session,
+                        index: window.index,
+                        name: "\(window.index): \(window.name)",
+                        status: status.label,
+                        lastLine: Tmux.previewLines(text, count: 1)
+                    ))
             }
         }
         let transitions = tracker.update(samples)

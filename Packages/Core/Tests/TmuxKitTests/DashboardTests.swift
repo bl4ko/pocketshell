@@ -1,19 +1,20 @@
 import Testing
+
 @testable import TmuxKit
 
 @Test func classifyBusyWhenEscToInterruptVisible() {
     let pane = """
-    * Reticulating splines… (esc to interrupt)
-    """
+        * Reticulating splines… (esc to interrupt)
+        """
     #expect(AgentStatus.classify(pane) == .busy)
 }
 
 @Test func classifyWaitingOnPermissionPrompt() {
     let pane = """
-    Do you want to make this edit to main.swift?
-    > 1. Yes
-      2. No
-    """
+        Do you want to make this edit to main.swift?
+        > 1. Yes
+          2. No
+        """
     #expect(AgentStatus.classify(pane) == .waiting)
 }
 
@@ -40,14 +41,14 @@ import Testing
 
 @Test func classifyBusySpinnerInsideFullPane() {
     let pane = """
-      … +53 lines (ctrl+o to expand)
+          … +53 lines (ctrl+o to expand)
 
-    ✻ Waddling… (6m 14s · ↓ 22.7k tokens · almost done thinking)
+        ✻ Waddling… (6m 14s · ↓ 22.7k tokens · almost done thinking)
 
-    ● How is Claude doing this session? (optional)
-      1: Bad    2: Fine   3: Good   0: Dismiss
-      ctx: 12% used / 88% left  [Opus 4.8 (1M context)]
-    """
+        ● How is Claude doing this session? (optional)
+          1: Bad    2: Fine   3: Good   0: Dismiss
+          ctx: 12% used / 88% left  [Opus 4.8 (1M context)]
+        """
     #expect(AgentStatus.classify(pane) == .busy)
 }
 
@@ -58,44 +59,44 @@ import Testing
 
 @Test func classifyWaitingForCodexApproval() {
     let pane = """
-      Would you like to run the following command?
+          Would you like to run the following command?
 
-      $ echo hello world
+          $ echo hello world
 
-    › 1. Yes, proceed (y)
-      2. Yes, and don't ask again for commands that start with `echo hello world` (p)
-      3. No, and tell Codex what to do differently (esc)
+        › 1. Yes, proceed (y)
+          2. Yes, and don't ask again for commands that start with `echo hello world` (p)
+          3. No, and tell Codex what to do differently (esc)
 
-      Press enter to confirm or esc to cancel
-    """
+          Press enter to confirm or esc to cancel
+        """
     #expect(AgentStatus.classify(pane) == .waiting)
 }
 
 @Test func classifyWaitingForOpencodePermission() {
     let pane = """
-    bash: kubectl get pods
+        bash: kubectl get pods
 
-      Allow once    Allow always    Reject
-    """
+          Allow once    Allow always    Reject
+        """
     #expect(AgentStatus.classify(pane) == .waiting)
 }
 
 @Test func classifyIdleForStatusLineParens() {
     let pane = """
-    ❯ Yes recreate
-      ctx: 9% used / 91% left  [Opus 4.8 (1M context)]
-      ⏵⏵ auto mode on (shift+tab to cycle)
-    """
+        ❯ Yes recreate
+          ctx: 9% used / 91% left  [Opus 4.8 (1M context)]
+          ⏵⏵ auto mode on (shift+tab to cycle)
+        """
     #expect(AgentStatus.classify(pane) == .idle)
 }
 
 @Test func previewLinesDropsDecorationOnlyLines() {
     let pane = """
-    ⏺ Done refactoring auth module
-    ╭──────────────────────────╮
-    │ >                        │
-    ╰──────────────────────────╯
-    """
+        ⏺ Done refactoring auth module
+        ╭──────────────────────────╮
+        │ >                        │
+        ╰──────────────────────────╯
+        """
     #expect(Tmux.previewLines(pane, count: 3) == "⏺ Done refactoring auth module")
 }
 
@@ -128,12 +129,12 @@ import Testing
 
 @Test func detectAgentReturnsIdleForAgentChrome() {
     let pane = """
-    ⏺ Done refactoring auth module
-    ╭──────────────────────────╮
-    │ >                        │
-    ╰──────────────────────────╯
-      ? for shortcuts
-    """
+        ⏺ Done refactoring auth module
+        ╭──────────────────────────╮
+        │ >                        │
+        ╰──────────────────────────╯
+          ? for shortcuts
+        """
     #expect(AgentStatus.detectAgent(pane) == .idle)
 }
 
@@ -144,10 +145,10 @@ import Testing
 
 @Test func detectAgentReturnsNilForPlainShell() {
     let pane = """
-    bl4ko@mac-mini ~ % ls
-    Documents Downloads Projects
-    bl4ko@mac-mini ~ %
-    """
+        bl4ko@mac-mini ~ % ls
+        Documents Downloads Projects
+        bl4ko@mac-mini ~ %
+        """
     #expect(AgentStatus.detectAgent(pane) == nil)
     #expect(AgentStatus.detectAgent("") == nil)
 }
@@ -161,13 +162,13 @@ import Testing
 
 @Test func parsePaneCapturesSplitsBySentinel() {
     let output = """
-    @@pane:0@@
-    line a
-    line b
-    @@pane:3@@
-    $ echo hi
-    hi
-    """
+        @@pane:0@@
+        line a
+        line b
+        @@pane:3@@
+        $ echo hi
+        hi
+        """
     let captures = Tmux.parsePaneCaptures(output)
     #expect(captures[0] == "line a\nline b")
     #expect(captures[3] == "$ echo hi\nhi")
@@ -199,10 +200,10 @@ import Testing
 
 @Test func detectAgentIdleForCodexFooter() {
     let pane = """
-    › run /review on my current changes
+        › run /review on my current changes
 
-    gpt-5.5 medium · ~/Projects/github · main · Approve for me · Context 0% used
-    """
+        gpt-5.5 medium · ~/Projects/github · main · Approve for me · Context 0% used
+        """
     #expect(AgentStatus.detectAgent(pane) == .idle)
 }
 

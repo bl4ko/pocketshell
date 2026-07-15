@@ -33,9 +33,9 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
             replyStatus(replyHandler)
         case "send":
             guard let host = message["host"] as? String,
-                  let tmuxSession = message["session"] as? String,
-                  let index = message["window"] as? Int,
-                  let text = message["text"] as? String
+                let tmuxSession = message["session"] as? String,
+                let index = message["window"] as? Int,
+                let text = message["text"] as? String
             else {
                 replyHandler(["error": "bad request"])
                 return
@@ -56,7 +56,8 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
 
     private func replyStatus(_ replyHandler: @escaping ([String: Any]) -> Void) {
         if let snapshot = SnapshotStore.shared.load(),
-           let data = try? JSONEncoder().encode(snapshot) {
+            let data = try? JSONEncoder().encode(snapshot)
+        {
             replyHandler(["snapshot": data])
         } else {
             replyHandler(["error": "no data"])
@@ -82,8 +83,8 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
         let replyHandler = SendableReply(handler: replyHandler)
         Task { @MainActor in
             guard let store = self.store,
-                  let host = store.hosts.first(where: { $0.name == hostName }),
-                  let key = try? store.key(for: host)
+                let host = store.hosts.first(where: { $0.name == hostName }),
+                let key = try? store.key(for: host)
             else {
                 replyHandler(["error": "unknown host"])
                 return
@@ -91,12 +92,13 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
             let connection = SSHConnection(host: host, key: key, knownHosts: store.knownHosts)
             do {
                 try await connection.connect()
-                _ = try await connection.exec(Tmux.sendKeysCommand(
-                    session: session,
-                    windowIndex: windowIndex,
-                    text: text,
-                    pressEnter: pressEnter
-                ))
+                _ = try await connection.exec(
+                    Tmux.sendKeysCommand(
+                        session: session,
+                        windowIndex: windowIndex,
+                        text: text,
+                        pressEnter: pressEnter
+                    ))
                 await connection.disconnect()
                 replyHandler(["ok": true])
             } catch {

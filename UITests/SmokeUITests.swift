@@ -1,9 +1,10 @@
 import XCTest
 
+@MainActor
 final class SmokeUITests: XCTestCase {
     var app: XCUIApplication!
 
-    override func setUp() {
+    override func setUp() async throws {
         continueAfterFailure = false
         app = XCUIApplication()
         if let key = ProcessInfo.processInfo.environment["PS_TEST_KEY"] {
@@ -84,17 +85,68 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(escKey.waitForExistence(timeout: 10))
         sleep(3)
 
-        XCTAssertFalse(app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS 'HOST KEY'")
-        ).firstMatch.exists)
-        XCTAssertFalse(app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS 'retrying'")
-        ).firstMatch.exists)
+        XCTAssertFalse(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS 'HOST KEY'")
+            ).firstMatch.exists)
+        XCTAssertFalse(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS 'retrying'")
+            ).firstMatch.exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "terminal-screen"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testTmuxSessionListedAndAttaches() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard env["PS_TEST_PORT"] != nil, let session = env["PS_TEST_TMUX"] else {
+            throw XCTSkip("PS_TEST_TMUX not set; tmux e2e skipped")
+        }
+
+        let hostRow = app.staticTexts["localbox"].firstMatch
+        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
+        hostRow.tap()
+
+        XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["tmux-sessions"].firstMatch.tap()
+
+        let sessionRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", session)
+        ).firstMatch
+        XCTAssertTrue(app.staticTexts["Sessions"].firstMatch.waitForExistence(timeout: 10))
+        var swipes = 0
+        while !sessionRow.exists && swipes < 8 {
+            app.swipeUp()
+            swipes += 1
+        }
+        if !sessionRow.waitForExistence(timeout: 5) {
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = "tmux-sheet"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            XCTFail("tmux session \(session) not listed")
+        }
+
+        let windowRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS 'pshwin'")
+        ).firstMatch
+        if !windowRow.waitForExistence(timeout: 2) {
+            sessionRow.tap()
+        }
+        XCTAssertTrue(windowRow.waitForExistence(timeout: 5))
+        if !windowRow.isHittable {
+            app.swipeUp()
+        }
+        windowRow.tap()
+
+        XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS 'HOST KEY'")
+            ).firstMatch.exists)
     }
 
     func testKeysScreenShowsDevicePublicKey() {

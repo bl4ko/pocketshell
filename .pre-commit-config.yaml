@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-yaml
+  - repo: local
+    hooks:
+      - id: swift-format
+        name: swift format
+        entry: swift format --in-place
+        language: system
+        types: [swift]
+      - id: swift-format-lint
+        name: swift format lint
+        entry: swift format lint --strict
+        language: system
+        types: [swift]
+      - id: swift-test
+        name: swift test (Core)
+        entry: swift test --package-path Packages/Core
+        language: system
+        files: ^Packages/Core/
+        pass_filenames: false

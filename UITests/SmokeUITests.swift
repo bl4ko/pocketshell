@@ -136,7 +136,12 @@ final class SmokeUITests: XCTestCase {
         if !windowRow.waitForExistence(timeout: 2) {
             sessionRow.tap()
         }
-        XCTAssertTrue(windowRow.waitForExistence(timeout: 5))
+        swipes = 0
+        while !windowRow.waitForExistence(timeout: 2) && swipes < 4 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(windowRow.exists)
         if !windowRow.isHittable {
             app.swipeUp()
         }

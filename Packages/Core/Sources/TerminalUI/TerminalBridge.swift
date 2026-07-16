@@ -15,12 +15,15 @@
         private var gate = FeedGate()
         private var flushTask: Task<Void, Never>?
         private var userInputPending = false
+        private var feedingView = false
+        private static let focusIn = Data("\u{1b}[I".utf8)
+        private static let focusOut = Data("\u{1b}[O".utf8)
 
         public init() {}
 
         public func feed(_ data: Data) {
             if let out = gate.ingest(data) {
-                view?.feed(byteArray: [UInt8](out)[...])
+                feedView(out)
             } else if flushTask == nil {
                 flushTask = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(1))
@@ -34,15 +37,22 @@
             flushTask?.cancel()
             flushTask = nil
             if let out = gate.setLive(live) {
-                view?.feed(byteArray: [UInt8](out)[...])
+                feedView(out)
             }
         }
 
         private func flushPending() {
             flushTask = nil
             if let out = gate.drain() {
-                view?.feed(byteArray: [UInt8](out)[...])
+                feedView(out)
             }
+        }
+
+        // Auto-replies emitted synchronously during feed must not count as user typing.
+        private func feedView(_ out: Data) {
+            feedingView = true
+            view?.feed(byteArray: [UInt8](out)[...])
+            feedingView = false
         }
 
         public func visibleText() -> String {
@@ -110,7 +120,9 @@
         }
 
         public func processOutgoing(_ data: Data) {
-            userInputPending = true
+            if !feedingView, data != Self.focusIn, data != Self.focusOut {
+                userInputPending = true
+            }
             if ctrlActive,
                 let text = String(data: data, encoding: .utf8),
                 text.count == 1,

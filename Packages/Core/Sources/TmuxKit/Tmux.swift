@@ -42,6 +42,7 @@ public enum AgentStatus: Equatable, Sendable {
         "allow once",
         "allow always",
         "press enter to confirm",
+        "enter to select",
     ]
 
     static let agentMarkers = [

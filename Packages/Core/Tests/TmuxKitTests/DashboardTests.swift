@@ -72,6 +72,27 @@ import Testing
     #expect(AgentStatus.classify(pane) == .waiting)
 }
 
+@Test func classifyWaitingOnSelectDialog() {
+    let pane = """
+        What "workspace" mean — where add pocketshell + corpus?
+        ❯ 1. VS Code .code-workspace
+          2. CLAUDE.md registry
+          6. Chat about this
+        Enter to select · ↑/↓ to navigate · Esc to cancel
+        """
+    #expect(AgentStatus.classify(pane) == .waiting)
+    #expect(AgentStatus.detectAgent(pane) == .waiting)
+}
+
+@Test func classifyTaskOverlayNotWaiting() {
+    let pane = """
+        ▣ main                          ↑/↓ to select · Enter to view
+        ○ github-checker   GitHub repos check   2m 23s
+        ⏵⏵ auto mode on (shift+tab to cycle)
+        """
+    #expect(AgentStatus.classify(pane) == .idle)
+}
+
 @Test func classifyWaitingForOpencodePermission() {
     let pane = """
         bash: kubectl get pods

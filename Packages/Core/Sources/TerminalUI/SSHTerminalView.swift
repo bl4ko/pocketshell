@@ -117,7 +117,7 @@
             let view = controller.terminalView
             view.accessibilityIdentifier = "terminal.view"
             view.terminalDelegate = context.coordinator
-            view.allowMouseReporting = false
+            view.allowMouseReporting = true
             view.inputAccessoryView = nil
             view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }

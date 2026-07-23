@@ -117,7 +117,7 @@
             let view = controller.terminalView
             view.accessibilityIdentifier = "terminal.view"
             view.terminalDelegate = context.coordinator
-            view.allowMouseReporting = true
+            view.allowMouseReporting = false
             view.inputAccessoryView = nil
             view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
@@ -137,6 +137,13 @@
             pan.delegate = gestureDelegate
             context.coordinator.gestureDelegate = gestureDelegate
             view.addGestureRecognizer(pan)
+            let tap = UITapGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handleMouseTap(_:))
+            )
+            tap.cancelsTouchesInView = false
+            tap.delegate = gestureDelegate
+            view.addGestureRecognizer(tap)
             let pinch = UIPinchGestureRecognizer(
                 target: context.coordinator,
                 action: #selector(Coordinator.handlePinch(_:))
@@ -201,6 +208,31 @@
             @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
                 MainActor.assumeIsolated {
                     handlePinchOnMain(gesture)
+                }
+            }
+
+            @objc func handleMouseTap(_ gesture: UITapGestureRecognizer) {
+                MainActor.assumeIsolated {
+                    guard gesture.state == .ended, let view = gesture.view as? TerminalView else { return }
+                    let terminal = view.getTerminal()
+                    guard terminal.mouseMode != .off else { return }
+                    let location = gesture.location(in: view)
+                    let col = clamp(
+                        Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
+                    let row = clamp(
+                        Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                    terminal.sendEvent(
+                        buttonFlags: terminal.encodeButton(
+                            button: 1, release: false, shift: false, meta: false, control: false),
+                        x: col,
+                        y: row
+                    )
+                    terminal.sendEvent(
+                        buttonFlags: terminal.encodeButton(
+                            button: 1, release: true, shift: false, meta: false, control: false),
+                        x: col,
+                        y: row
+                    )
                 }
             }
 

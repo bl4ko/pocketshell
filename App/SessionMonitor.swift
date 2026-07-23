@@ -55,6 +55,8 @@ final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDe
 final class SessionMonitor: ObservableObject {
     static let refreshTaskID = "com.bl4ko.pocketshell.refresh"
 
+    @Published private(set) var snapshot: SessionSnapshot?
+
     private let store: AppStore
     private var tracker = AgentActivityTracker()
     private var pollTask: Task<Void, Never>?
@@ -62,6 +64,7 @@ final class SessionMonitor: ObservableObject {
 
     init(store: AppStore) {
         self.store = store
+        snapshot = SnapshotStore.shared.load()
     }
 
     var enabled: Bool {
@@ -92,35 +95,39 @@ final class SessionMonitor: ObservableObject {
         var snapshots: [SessionSnapshot.Window] = []
         var targets: [String: [String: Any]] = [:]
         for host in store.hosts {
-            guard let session = host.tmuxSession else { continue }
+            let sessions = store.tmuxSessions(for: host)
+            guard !sessions.isEmpty else { continue }
             guard let connection = await connection(for: host) else { continue }
-            let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
-            let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
-            let captures = Tmux.parsePaneCaptures(capturesOutput)
-            for window in Tmux.parseWindows(windowsOutput) {
-                let text = captures[window.index] ?? ""
-                let status = AgentStatus.classify(text)
-                let key = "\(host.id):\(window.index)"
-                targets[key] = ["hostID": host.id.uuidString, "session": session, "windowIndex": window.index]
-                samples.append(
-                    .init(
-                        key: key,
-                        title: "\(host.name) \(session):\(window.index) \(window.name)",
-                        status: status
-                    ))
-                snapshots.append(
-                    .init(
-                        host: host.name,
-                        session: session,
-                        index: window.index,
-                        name: "\(window.index): \(window.name)",
-                        status: status.label,
-                        lastLine: Tmux.previewLines(text, count: 1)
-                    ))
+            for session in sessions {
+                let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
+                let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
+                let captures = Tmux.parsePaneCaptures(capturesOutput)
+                for window in Tmux.parseWindows(windowsOutput) {
+                    let text = captures[window.index] ?? ""
+                    let status = AgentStatus.classify(text)
+                    let key = "\(host.id):\(session):\(window.index)"
+                    targets[key] = ["hostID": host.id.uuidString, "session": session, "windowIndex": window.index]
+                    samples.append(
+                        .init(
+                            key: key,
+                            title: "\(host.name) \(session):\(window.index) \(window.name)",
+                            status: status
+                        ))
+                    snapshots.append(
+                        .init(
+                            host: host.name,
+                            session: session,
+                            index: window.index,
+                            name: "\(window.index): \(window.name)",
+                            status: status.label,
+                            lastLine: Tmux.previewLines(text, count: 12)
+                        ))
+                }
             }
         }
         let transitions = tracker.update(samples)
         let snapshot = SessionSnapshot(windows: snapshots, updatedAt: Date())
+        self.snapshot = snapshot
         SnapshotStore.save(snapshot)
         WidgetCenter.shared.reloadTimelines(ofKind: "pocketshell-sessions")
         WatchRelay.shared.push(snapshot)

@@ -71,11 +71,13 @@ final class ConnectionController: ObservableObject {
     func selectWindow(_ window: TmuxWindow?) async {
         guard let session = host.tmuxSession else { return }
         pendingShell = .tmux(session: session, windowIndex: window?.index)
+        phase = .connecting
         await openShellAndPump()
     }
 
     func openPlainShell() async {
         pendingShell = .plain(host.onConnectCommand)
+        phase = .connecting
         await openShellAndPump()
     }
 
@@ -105,6 +107,7 @@ final class ConnectionController: ObservableObject {
 
     func jump(toSession session: String, windowIndex: Int? = nil) async {
         pendingShell = .tmux(session: session, windowIndex: windowIndex)
+        phase = .connecting
         shellGeneration += 1
         let old = shell
         shell = nil
@@ -112,10 +115,14 @@ final class ConnectionController: ObservableObject {
         await openShellAndPump()
     }
 
-    func createTmuxSession(named name: String) async {
+    func createTmuxSession(named name: String) async -> Bool {
+        guard let connection else { return false }
+        return (try? await connection.exec(Tmux.newSessionCommand(name: name))) != nil
+    }
+
+    func createTmuxWindow(in session: String) async {
         guard let connection else { return }
-        _ = try? await connection.exec(Tmux.newSessionCommand(name: name))
-        await jump(toSession: name)
+        _ = try? await connection.exec(Tmux.newWindowCommand(session: session))
     }
 
     func renameTmuxWindow(session: String, windowIndex: Int, name: String) async {
@@ -123,9 +130,16 @@ final class ConnectionController: ObservableObject {
         _ = try? await connection.exec(Tmux.renameWindowCommand(session: session, windowIndex: windowIndex, name: name))
     }
 
-    func renameTmuxSession(from oldName: String, to newName: String) async {
-        guard let connection else { return }
-        _ = try? await connection.exec(Tmux.renameSessionCommand(from: oldName, to: newName))
+    func renameTmuxSession(from oldName: String, to newName: String) async -> Bool {
+        guard let connection else { return false }
+        guard (try? await connection.exec(Tmux.renameSessionCommand(from: oldName, to: newName))) != nil else {
+            return false
+        }
+        sessionRenamed(from: oldName, to: newName)
+        return true
+    }
+
+    func sessionRenamed(from oldName: String, to newName: String) {
         if case .tmux(let session, let windowIndex) = pendingShell, session == oldName {
             pendingShell = .tmux(session: newName, windowIndex: windowIndex)
         }
@@ -178,6 +192,17 @@ final class ConnectionController: ObservableObject {
         let clone = Tmux.cloneName(session: session, clientTag: cloneTag)
         let output = (try? await connection.exec(Tmux.currentWindowCommand(clone: clone))) ?? ""
         return Tmux.parseCurrentWindow(output)
+    }
+
+    func currentTmuxPaneSnapshot() async -> TmuxPaneSnapshot? {
+        guard let connection, let cloneTag,
+            case .tmux(let session, _) = pendingShell
+        else { return nil }
+        guard
+            let output = try? await connection.exec(
+                Tmux.capturePaneSnapshotCommand(target: Tmux.cloneName(session: session, clientTag: cloneTag)))
+        else { return nil }
+        return Tmux.parsePaneSnapshot(output)
     }
 
     func dashboardItems(session: String) async -> [WindowDashboardItem] {
@@ -243,7 +268,7 @@ final class ConnectionController: ObservableObject {
         if let ssh = error as? SSHError {
             switch ssh {
             case .authenticationFailed:
-                return "auth failed — device key installed on host? (Keys screen)"
+                return "auth failed — selected SSH key authorized on host? (Keys screen)"
             case .connectionClosed:
                 return "connection closed during handshake"
             case .notConnected:

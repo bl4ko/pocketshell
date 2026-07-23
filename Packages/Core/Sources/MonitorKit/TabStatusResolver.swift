@@ -1,42 +1,36 @@
 import TmuxKit
 
 public struct TabStatusResolver: Sendable {
-    private var lastText: [String: String] = [:]
     private var lastStatus: [String: AgentStatus] = [:]
     private var blankStreak: [String: Int] = [:]
 
     public init() {}
 
-    public mutating func resolve(key: String, text: String, userTyped: Bool = false) -> AgentStatus? {
-        guard let detected = AgentStatus.detectAgent(text) else {
-            let streak = blankStreak[key, default: 0]
-            blankStreak[key] = streak + 1
-            if streak == 0, let held = lastStatus[key] {
-                return held
-            }
-            lastText[key] = nil
-            lastStatus[key] = nil
+    public mutating func resolve(key: String, text: String, agentRunning: Bool? = nil) -> AgentStatus? {
+        if let detected = AgentStatus.detectAgent(text) {
+            blankStreak[key] = 0
+            lastStatus[key] = detected
+            return detected
+        }
+
+        if agentRunning == true {
+            return lastStatus[key]
+        }
+        if agentRunning == false {
+            forget(key: key)
             return nil
         }
-        blankStreak[key] = 0
-        let previous = lastText[key]
-        lastText[key] = text
-        let status: AgentStatus
-        if detected == .waiting {
-            status = .waiting
-        } else if previous == nil {
-            status = detected
-        } else if userTyped {
-            status = lastStatus[key] ?? detected
-        } else {
-            status = previous != text ? .busy : .idle
+
+        let streak = blankStreak[key, default: 0]
+        blankStreak[key] = streak + 1
+        if streak == 0 {
+            return lastStatus[key]
         }
-        lastStatus[key] = status
-        return status
+        forget(key: key)
+        return nil
     }
 
     public mutating func forget(key: String) {
-        lastText[key] = nil
         lastStatus[key] = nil
         blankStreak[key] = nil
     }

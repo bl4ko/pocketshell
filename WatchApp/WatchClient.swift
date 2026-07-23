@@ -17,19 +17,30 @@ final class WatchClient: NSObject, ObservableObject {
     func refresh() {
         guard WCSession.default.activationState == .activated else { return }
         statusMessage = "refreshing…"
+        requestSnapshot()
+    }
+
+    nonisolated private func requestSnapshot() {
         WCSession.default.sendMessage(["type": "status"]) { [weak self] reply in
+            let data = reply["snapshot"] as? Data
+            let message = reply["error"] as? String
             Task { @MainActor in
-                self?.handleReply(reply)
+                self?.handleReply(data: data, error: message)
             }
         } errorHandler: { [weak self] error in
+            let message = error.localizedDescription
             Task { @MainActor in
-                self?.statusMessage = error.localizedDescription
+                self?.statusMessage = message
             }
         }
     }
 
     func send(window: SessionSnapshot.Window, text: String, pressEnter: Bool) {
         statusMessage = "sending…"
+        sendMessage(window: window, text: text, pressEnter: pressEnter)
+    }
+
+    nonisolated private func sendMessage(window: SessionSnapshot.Window, text: String, pressEnter: Bool) {
         let message: [String: Any] = [
             "type": "send",
             "host": window.host,
@@ -39,25 +50,27 @@ final class WatchClient: NSObject, ObservableObject {
             "enter": pressEnter,
         ]
         WCSession.default.sendMessage(message) { [weak self] reply in
+            let message = reply["ok"] != nil ? "sent" : (reply["error"] as? String ?? "failed")
             Task { @MainActor in
-                self?.statusMessage = reply["ok"] != nil ? "sent" : (reply["error"] as? String ?? "failed")
+                self?.statusMessage = message
                 self?.refresh()
             }
         } errorHandler: { [weak self] error in
+            let message = error.localizedDescription
             Task { @MainActor in
-                self?.statusMessage = error.localizedDescription
+                self?.statusMessage = message
             }
         }
     }
 
-    private func handleReply(_ reply: [String: Any]) {
-        if let data = reply["snapshot"] as? Data,
+    private func handleReply(data: Data?, error: String?) {
+        if let data,
             let decoded = try? JSONDecoder().decode(SessionSnapshot.self, from: data)
         {
             snapshot = decoded
             statusMessage = nil
         } else {
-            statusMessage = reply["error"] as? String ?? "no data"
+            statusMessage = error ?? "no data"
         }
     }
 }

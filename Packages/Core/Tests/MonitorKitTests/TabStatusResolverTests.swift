@@ -34,16 +34,16 @@ private let compactingTail = """
     #expect(resolver2.resolve(key: "t1", text: idleScreen) == .idle)
 }
 
-@Test func frozenBusyFrameResolvesIdle() {
+@Test func unchangedBusyMarkerStaysBusy() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)
-    #expect(resolver.resolve(key: "t1", text: busyScreen) == .idle)
+    #expect(resolver.resolve(key: "t1", text: busyScreen) == .busy)
 }
 
-@Test func changingScreenWithAgentMarkersResolvesBusy() {
+@Test func changingIdleScreenStaysIdle() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: compactingTail)
-    #expect(resolver.resolve(key: "t1", text: compactingTail + "\nprogress 64%") == .busy)
+    #expect(resolver.resolve(key: "t1", text: compactingTail + "\nbackground notification") == .idle)
 }
 
 @Test func staticWaitingScreenResolvesWaiting() {
@@ -62,31 +62,25 @@ private let compactingTail = """
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)
     _ = resolver.resolve(key: "t2", text: idleScreen)
-    #expect(resolver.resolve(key: "t1", text: busyScreen) == .idle)
-    #expect(resolver.resolve(key: "t2", text: idleScreen + "\nnew output") == .busy)
+    #expect(resolver.resolve(key: "t1", text: busyScreen) == .busy)
+    #expect(resolver.resolve(key: "t2", text: idleScreen + "\nnew output") == .idle)
 }
 
-@Test func typingWhileIdleStaysIdle() {
+@Test func markerlessFramesHoldWhileAgentRuns() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: idleScreen)
-    _ = resolver.resolve(key: "t1", text: idleScreen)
-    #expect(resolver.resolve(key: "t1", text: idleScreen + "\n❯ fix bug", userTyped: true) == .idle)
-    #expect(resolver.resolve(key: "t1", text: idleScreen + "\n❯ fix bug") == .idle)
+    for frame in 1...10 {
+        #expect(resolver.resolve(key: "t1", text: "redraw \(frame)", agentRunning: true) == .idle)
+    }
 }
 
-@Test func typingWhileBusyStaysBusy() {
+@Test func shellForegroundClearsStatusImmediately() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)
-    _ = resolver.resolve(key: "t1", text: busyScreen + "\noutput")
-    #expect(resolver.resolve(key: "t1", text: busyScreen + "\noutput more", userTyped: true) == .busy)
+    #expect(resolver.resolve(key: "t1", text: "$ ", agentRunning: false) == nil)
 }
 
-@Test func typingOnFirstSampleUsesMarkers() {
-    var resolver = TabStatusResolver()
-    #expect(resolver.resolve(key: "t1", text: idleScreen, userTyped: true) == .idle)
-}
-
-@Test func transientBlankFrameHoldsStatus() {
+@Test func transientBlankFrameWithoutProcessInfoHoldsStatus() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: idleScreen)
     _ = resolver.resolve(key: "t1", text: idleScreen)
@@ -94,7 +88,7 @@ private let compactingTail = """
     #expect(resolver.resolve(key: "t1", text: idleScreen) == .idle)
 }
 
-@Test func persistentBlankFramesClearStatus() {
+@Test func persistentBlankFramesWithoutProcessInfoClearStatus() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: idleScreen)
     _ = resolver.resolve(key: "t1", text: "$ ")

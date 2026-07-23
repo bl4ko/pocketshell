@@ -16,15 +16,19 @@ struct TabJumpItem: Identifiable {
     let status: AgentStatus?
     let preview: String
     let selected: Bool
+    let session: String?
+    let windowIndex: Int?
 }
 
 struct HostTabsScreen: View {
     @EnvironmentObject var store: AppStore
     @ObservedObject private var router = NotificationRouter.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTab: UUID?
     @State private var tabStatuses: [UUID: AgentStatus] = [:]
+    @State private var tabQuickReplies: [UUID: [Int]] = [:]
     @State private var tabTracker = AgentActivityTracker()
     @State private var tabResolver = TabStatusResolver()
     @State private var showSnippets = false
@@ -45,21 +49,42 @@ struct HostTabsScreen: View {
             }
             ZStack {
                 ForEach(tabs) { tab in
-                    TerminalScreen(connection: tab.controller, host: host, isActive: tab.id == selectedTab)
-                        .opacity(tab.id == selectedTab ? 1 : 0)
-                        .allowsHitTesting(tab.id == selectedTab)
+                    TerminalScreen(
+                        connection: tab.controller,
+                        host: host,
+                        isActive: tab.id == selectedTab,
+                        quickReplyOptions: tabQuickReplies[tab.id] ?? []
+                    )
+                    .opacity(tab.id == selectedTab ? 1 : 0)
+                    .allowsHitTesting(tab.id == selectedTab)
                 }
             }
         }
-        .navigationTitle(host.name)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbarBackground(PocketshellTheme.paper, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 7) {
+                    Text(host.name)
+                        .font(PocketshellTheme.mono(14, weight: .bold))
+                        .foregroundStyle(PocketshellTheme.ink)
+                    Circle()
+                        .fill(connectionColor)
+                        .frame(width: 7, height: 7)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showTmuxJump = true
                 } label: {
                     Image(systemName: "rectangle.split.3x1")
                 }
+                #if targetEnvironment(macCatalyst)
+                    .keyboardShortcut("k", modifiers: .command)
+                #endif
                 .accessibilityIdentifier("tmux-sessions")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -90,7 +115,9 @@ struct HostTabsScreen: View {
                     addTab()
                 } label: {
                     Image(systemName: "plus.square.on.square")
+                        .foregroundStyle(PocketshellTheme.accent)
                 }
+                .accessibilityIdentifier("new-tab")
             }
         }
         .sheet(isPresented: $showSnippets) {
@@ -100,8 +127,12 @@ struct HostTabsScreen: View {
             TmuxJumpSheet(
                 controller: activeController,
                 tabItems: tabJumpItems,
+                hostName: host.name,
                 orderKey: host.id.uuidString,
                 onSelectTab: { id in selectedTab = id },
+                onAddTab: addTab,
+                onOpenWindowInNewTab: openWindowInNewTab,
+                onRenameSession: renameSessionReferences,
                 onRenameTab: { id, name in renameTab(id: id, name: name) },
                 onCloseTab: { id in closeTab(id: id) },
                 onMoveTab: { from, to in
@@ -140,13 +171,15 @@ struct HostTabsScreen: View {
                 Task { await tab.controller.stop() }
             }
         }
-        .task {
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            try? await Task.sleep(for: .seconds(1))
             while !Task.isCancelled {
+                await pollTabs()
                 try? await Task.sleep(for: .seconds(5))
-                pollTabs()
             }
         }
-        .themedScreen()
+        .paperScreen()
     }
 
     private var activeController: ConnectionController? {
@@ -156,21 +189,23 @@ struct HostTabsScreen: View {
     private var tabJumpItems: [TabJumpItem] {
         tabs.enumerated().map { index, tab in
             let text = tab.controller.bridge.visibleText()
-            let content = tab.controller.isTmuxAttached ? Tmux.dropStatusLine(text) : text
             return TabJumpItem(
                 id: tab.id,
                 label: tab.name ?? "tab \(index + 1)",
                 status: tabStatuses[tab.id],
-                preview: Tmux.previewLines(content, count: 3),
-                selected: tab.id == selectedTab
+                preview: Tmux.previewLines(text, count: 3),
+                selected: tab.id == selectedTab,
+                session: tab.controller.tmuxTarget?.session,
+                windowIndex: tab.controller.tmuxTarget?.windowIndex
             )
         }
     }
 
     private func makeController() -> ConnectionController {
-        ConnectionController(
-            host: host,
-            key: (try? store.key(for: host)) ?? .software(.init()),
+        let currentHost = store.hosts.first { $0.id == host.id } ?? host
+        return ConnectionController(
+            host: currentHost,
+            key: (try? store.key(for: currentHost)) ?? .software(.init()),
             knownHosts: store.knownHosts
         )
     }
@@ -184,7 +219,47 @@ struct HostTabsScreen: View {
         persistTabs()
     }
 
+    private func openWindowInNewTab(session: String, windowIndex: Int?) {
+        let controller = makeController()
+        controller.preset(session: session, windowIndex: windowIndex)
+        let tab = TerminalTab(controller: controller)
+        controller.onExit = { closeTab(id: tab.id) }
+        tabs.append(tab)
+        selectedTab = tab.id
+        persistTabs()
+    }
+
+    private func renameSessionReferences(from oldName: String, to newName: String) {
+        for tab in tabs {
+            tab.controller.sessionRenamed(from: oldName, to: newName)
+        }
+        if let index = store.hosts.firstIndex(where: { $0.id == host.id }),
+            store.hosts[index].tmuxSession == oldName
+        {
+            store.hosts[index].tmuxSession = newName
+        }
+        persistTabs()
+    }
+
     private func restoreTabs() {
+        if ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1" {
+            let fixtures = [
+                ("stable", ProcessInfo.processInfo.environment["PS_TEST_STATUS_STABLE"]),
+                ("churn", ProcessInfo.processInfo.environment["PS_TEST_STATUS_CHURN"]),
+                ("gap", ProcessInfo.processInfo.environment["PS_TEST_STATUS_GAP"]),
+            ].compactMap { name, session in session.map { (name, $0) } }
+            if fixtures.count == 3 {
+                for (name, session) in fixtures {
+                    let controller = makeController()
+                    controller.preset(session: session, windowIndex: 0)
+                    let tab = TerminalTab(controller: controller, name: name)
+                    controller.onExit = { closeTab(id: tab.id) }
+                    tabs.append(tab)
+                }
+                selectedTab = tabs.first?.id
+                return
+            }
+        }
         let records = store.savedTabs[host.id.uuidString] ?? []
         guard !records.isEmpty else {
             addTab()
@@ -247,14 +322,22 @@ struct HostTabsScreen: View {
         }
     }
 
-    private func pollTabs() {
+    private func pollTabs() async {
         var samples: [AgentActivityTracker.Sample] = []
         for (index, tab) in tabs.enumerated() {
-            let raw = tab.controller.bridge.visibleText()
-            let text = tab.controller.isTmuxAttached ? Tmux.dropStatusLine(raw) : raw
-            let typed = tab.controller.bridge.consumeUserInput()
-            let status = tabResolver.resolve(key: tab.id.uuidString, text: text, userTyped: typed)
+            let text: String
+            let agentRunning: Bool?
+            if tab.controller.isTmuxAttached {
+                guard let snapshot = await tab.controller.currentTmuxPaneSnapshot() else { continue }
+                text = snapshot.text
+                agentRunning = !Tmux.isInteractiveShell(snapshot.command)
+            } else {
+                text = tab.controller.bridge.visibleText()
+                agentRunning = nil
+            }
+            let status = tabResolver.resolve(key: tab.id.uuidString, text: text, agentRunning: agentRunning)
             tabStatuses[tab.id] = status
+            tabQuickReplies[tab.id] = status == .waiting ? AgentQuickReply.options(in: text) : []
             guard let status, !tab.controller.isTmuxAttached else { continue }
             samples.append(
                 .init(
@@ -272,7 +355,7 @@ struct HostTabsScreen: View {
             content.body = transition.title
             content.sound = .default
             content.userInfo = ["hostID": host.id.uuidString]
-            UNUserNotificationCenter.current().add(
+            try? await UNUserNotificationCenter.current().add(
                 UNNotificationRequest(
                     identifier: "\(transition.key)-\(Date().timeIntervalSince1970)",
                     content: content,
@@ -299,10 +382,24 @@ struct HostTabsScreen: View {
                     .padding(.vertical, 6)
                     .background(
                         tab.id == selectedTab
-                            ? Color.accentColor.opacity(0.35)
-                            : Color.secondary.opacity(0.15)
+                            ? PocketshellTheme.accentTint
+                            : PocketshellTheme.surface
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(
+                        tab.id == selectedTab ? PocketshellTheme.accentDark : PocketshellTheme.secondary
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(
+                                tab.id == selectedTab ? PocketshellTheme.accentBorder : PocketshellTheme.border
+                            )
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(
+                        "\(tab.name ?? "tab \(index + 1)"), \(tabStatuses[tab.id]?.label ?? "no status")"
+                    )
+                    .accessibilityIdentifier("terminal-tab-\(index + 1)")
                     .onTapGesture {
                         selectedTab = tab.id
                     }
@@ -318,9 +415,9 @@ struct HostTabsScreen: View {
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         }
-        .background(.thinMaterial)
+        .background(PocketshellTheme.paper)
         .alert("Rename tab", isPresented: renameAlertShown) {
             TextField("name", text: $renameText)
             Button("Save") { applyRename() }
@@ -354,9 +451,19 @@ struct HostTabsScreen: View {
 
     private func statusColor(_ status: AgentStatus) -> Color {
         switch status {
-        case .busy: .orange
-        case .waiting: .purple
-        case .idle: .green
+        case .busy: PocketshellTheme.busy
+        case .waiting: PocketshellTheme.accent
+        case .idle: PocketshellTheme.idle
+        }
+    }
+
+    private var connectionColor: Color {
+        guard let controller = activeController else { return PocketshellTheme.faint }
+        switch controller.phase {
+        case .attached: return PocketshellTheme.idle
+        case .connecting, .reconnecting: return PocketshellTheme.busy
+        case .failed, .exited: return .red
+        default: return PocketshellTheme.faint
         }
     }
 
@@ -486,11 +593,18 @@ struct TmuxJumpSheet: View {
     @State private var prompt: Prompt?
     @State private var promptText = ""
     @State private var killTarget: KillTarget?
+    @State private var query = ""
+    @State private var searchPresented = false
+    @AppStorage(AppSettings.tmuxTabsExpandedKey) private var tabsExpanded = true
 
     let controller: ConnectionController?
     var tabItems: [TabJumpItem] = []
+    var hostName = "host"
     var orderKey: String?
     var onSelectTab: ((UUID) -> Void)?
+    var onAddTab: (() -> Void)?
+    var onOpenWindowInNewTab: ((String, Int?) -> Void)?
+    var onRenameSession: ((String, String) -> Void)?
     var onRenameTab: ((UUID, String) -> Void)?
     var onCloseTab: ((UUID) -> Void)?
     var onMoveTab: ((IndexSet, Int) -> Void)?
@@ -503,210 +617,179 @@ struct TmuxJumpSheet: View {
         controller?.tmuxTarget?.session
     }
 
+    private var expandedSessionsKey: String? {
+        orderKey.map { "\(AppSettings.tmuxExpandedSessionsKeyPrefix).\($0)" }
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                if tabItems.count > 1 {
-                    Section("Tabs") {
-                        ForEach(tabItems) { item in
-                            Button {
-                                onSelectTab?(item.id)
-                                dismiss()
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack(spacing: 6) {
-                                        if let status = item.status {
-                                            Circle()
-                                                .fill(tabStatusColor(status))
-                                                .frame(width: 8, height: 8)
+                Section {
+                    sectionHeader("Tabs", expanded: $tabsExpanded, action: "+ Tab") {
+                        onAddTab?()
+                        dismiss()
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    if tabsExpanded {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(filteredTabItems) { item in
+                                    tabCard(item)
+                                        .draggable(item.id.uuidString)
+                                        .dropDestination(for: String.self) { identifiers, _ in
+                                            guard let identifier = identifiers.first,
+                                                let sourceID = tabItems.firstIndex(where: {
+                                                    $0.id.uuidString == identifier
+                                                }),
+                                                let targetID = tabItems.firstIndex(where: { $0.id == item.id }),
+                                                sourceID != targetID
+                                            else { return false }
+                                            onMoveTab?(
+                                                IndexSet(integer: sourceID),
+                                                targetID > sourceID ? targetID + 1 : targetID
+                                            )
+                                            return true
                                         }
-                                        Text(item.label)
-                                            .font(.subheadline.weight(.medium))
-                                        if let status = item.status {
-                                            Text(status.label)
-                                                .font(.caption2)
-                                                .foregroundStyle(tabStatusColor(status))
-                                        }
-                                        if item.selected {
-                                            Spacer()
-                                            Image(systemName: "eye")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    if !item.preview.isEmpty {
-                                        Text(item.preview)
-                                            .font(.caption2.monospaced())
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(3)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
                                 }
                             }
-                            .contextMenu {
-                                Button("Rename…") {
-                                    promptText = item.label
-                                    prompt = .renameTab(item.id)
-                                }
-                                Button("Close", role: .destructive) {
-                                    killTarget = .tab(id: item.id, label: item.label)
-                                }
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button("Close", role: .destructive) {
-                                    killTarget = .tab(id: item.id, label: item.label)
-                                }
-                            }
-                            .swipeActions(edge: .leading) {
-                                Button("Rename") {
-                                    promptText = item.label
-                                    prompt = .renameTab(item.id)
-                                }
-                                .tint(.blue)
-                            }
+                            .padding(.vertical, 3)
                         }
-                        .onMove { from, to in
-                            guard from.allSatisfy({ $0 < tabItems.count }) else { return }
-                            onMoveTab?(from, min(to, tabItems.count))
-                        }
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 }
-                if !sessions.isEmpty {
-                    Section {
-                        ForEach(sessions) { session in
-                            DisclosureGroup(isExpanded: expandedBinding(session.name)) {
-                                ForEach(windowsBySession[session.name] ?? []) { item in
-                                    Button {
-                                        jump(toSession: session.name, windowIndex: item.window.index)
-                                    } label: {
-                                        DashboardRow(item: item)
-                                    }
-                                    .contextMenu {
-                                        Button("Rename…") {
-                                            promptText = item.window.name
-                                            prompt = .renameWindow(session: session.name, index: item.window.index)
-                                        }
-                                        Button("Delete", role: .destructive) {
-                                            killTarget = .window(
-                                                session: session.name, index: item.window.index, name: item.window.name)
-                                        }
-                                    }
-                                    .swipeActions(edge: .trailing) {
-                                        Button("Delete", role: .destructive) {
-                                            killTarget = .window(
-                                                session: session.name, index: item.window.index, name: item.window.name)
-                                        }
-                                    }
-                                    .swipeActions(edge: .leading) {
-                                        Button("Rename") {
-                                            promptText = item.window.name
-                                            prompt = .renameWindow(session: session.name, index: item.window.index)
-                                        }
-                                        .tint(.blue)
-                                    }
+                Section {
+                    if filteredSessions.isEmpty, loaded {
+                        Text(query.isEmpty ? "No tmux sessions found" : "No matches")
+                            .font(PocketshellTheme.mono(11))
+                            .foregroundStyle(PocketshellTheme.muted)
+                            .listRowBackground(Color.clear)
+                    }
+                    ForEach(filteredSessions) { session in
+                        DisclosureGroup(isExpanded: expandedBinding(session.name)) {
+                            ForEach(filteredWindows(in: session)) { item in
+                                Button {
+                                    jump(toSession: session.name, windowIndex: item.window.index)
+                                } label: {
+                                    windowRow(item, session: session.name)
                                 }
-                                .onMove { from, to in
-                                    moveWindows(session: session.name, from: from, to: to)
-                                }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text(session.name)
-                                        .font(.subheadline.weight(.medium))
-                                    Text("\(session.windows)w")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    if session.attached {
-                                        Image(systemName: "eye")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
+                                .accessibilityIdentifier("tmux-window-\(session.name)-\(item.window.index)")
                                 .contextMenu {
-                                    Button("Attach") {
-                                        jump(toSession: session.name, windowIndex: nil)
+                                    Button("Open in New Tab") {
+                                        onOpenWindowInNewTab?(session.name, item.window.index)
+                                        dismiss()
                                     }
                                     Button("Rename…") {
-                                        promptText = session.name
-                                        prompt = .renameSession(session.name)
+                                        promptText = item.window.name
+                                        prompt = .renameWindow(session: session.name, index: item.window.index)
                                     }
                                     Button("Delete", role: .destructive) {
-                                        killTarget = .session(session.name)
+                                        killTarget = .window(
+                                            session: session.name, index: item.window.index, name: item.window.name)
                                     }
                                 }
                                 .swipeActions(edge: .trailing) {
                                     Button("Delete", role: .destructive) {
-                                        killTarget = .session(session.name)
+                                        killTarget = .window(
+                                            session: session.name, index: item.window.index, name: item.window.name)
                                     }
                                 }
                                 .swipeActions(edge: .leading) {
                                     Button("Rename") {
-                                        promptText = session.name
-                                        prompt = .renameSession(session.name)
+                                        promptText = item.window.name
+                                        prompt = .renameWindow(session: session.name, index: item.window.index)
                                     }
                                     .tint(.blue)
                                 }
+                                .listRowBackground(
+                                    item.status == .waiting ? PocketshellTheme.accentTint : PocketshellTheme.surface
+                                )
+                            }
+                            .onMove { from, to in
+                                moveWindows(session: session.name, from: from, to: to)
+                            }
+                            if query.isEmpty {
+                                Button {
+                                    Task {
+                                        await controller?.createTmuxWindow(in: session.name)
+                                        await load()
+                                    }
+                                } label: {
+                                    Label("new window in \(session.name)", systemImage: "plus")
+                                        .font(PocketshellTheme.mono(10, weight: .semibold))
+                                        .foregroundStyle(PocketshellTheme.muted)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 7) {
+                                Text(session.name)
+                                    .font(PocketshellTheme.mono(12.5, weight: .bold))
+                                Text("\(session.windows) windows")
+                                    .font(PocketshellTheme.mono(9))
+                                    .foregroundStyle(PocketshellTheme.muted)
+                            }
+                            .contextMenu {
+                                Button("Attach") {
+                                    jump(toSession: session.name, windowIndex: nil)
+                                }
+                                Button("Rename…") {
+                                    promptText = session.name
+                                    prompt = .renameSession(session.name)
+                                }
+                                Button("Delete", role: .destructive) {
+                                    killTarget = .session(session.name)
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button("Delete", role: .destructive) {
+                                    killTarget = .session(session.name)
+                                }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button("Rename") {
+                                    promptText = session.name
+                                    prompt = .renameSession(session.name)
+                                }
+                                .tint(.blue)
                             }
                         }
-                        .onMove { from, to in
-                            guard from.allSatisfy({ $0 < sessions.count }) else { return }
-                            sessions.move(fromOffsets: from, toOffset: min(to, sessions.count))
-                            if let orderKey {
-                                store.sessionOrder[orderKey] = sessions.map(\.name)
-                            }
-                        }
-                    } header: {
-                        Text("Sessions")
-                    } footer: {
-                        Text("Tap window re-attaches this tab. Swipe row to rename/delete, drag session to reorder.")
+                        .accessibilityIdentifier("tmux-session-\(session.name)")
+                        .listRowBackground(PocketshellTheme.secondarySurface)
                     }
-                }
-                if attached {
-                    Section("Quick") {
-                        Button("Next window") {
-                            controller?.sendText(Tmux.nextWindowKeys)
-                            dismiss()
-                        }
-                        Button("Previous window") {
-                            controller?.sendText(Tmux.previousWindowKeys)
-                            dismiss()
-                        }
-                        Button("Next pane") {
-                            controller?.sendText(Tmux.nextPaneKeys)
-                            dismiss()
-                        }
-                        Button("Zoom pane") {
-                            controller?.sendText(Tmux.zoomPaneKeys)
-                            dismiss()
-                        }
-                        Button("New window") {
-                            controller?.sendText(Tmux.newWindowKeys)
-                            dismiss()
-                        }
-                        Button("Split side by side") {
-                            controller?.sendText(Tmux.splitHorizontalKeys)
-                            dismiss()
-                        }
-                        Button("Split stacked") {
-                            controller?.sendText(Tmux.splitVerticalKeys)
-                            dismiss()
+                    .onMove { from, to in
+                        guard query.isEmpty, from.allSatisfy({ $0 < sessions.count }) else { return }
+                        sessions.move(fromOffsets: from, toOffset: min(to, sessions.count))
+                        if let orderKey {
+                            store.sessionOrder[orderKey] = sessions.map(\.name)
                         }
                     }
-                }
-                Section {
-                    Button("New session…") {
+                } header: {
+                    actionHeader("Tmux · on \(hostLabel)", action: "+ Session") {
                         promptText = ""
                         prompt = .newSession
                     }
                 }
-                if loaded && sessions.isEmpty {
-                    Text("No tmux sessions found")
-                        .foregroundStyle(.secondary)
-                }
             }
-            .navigationTitle("tmux")
+            .listStyle(.plain)
+            .navigationTitle("Switcher")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $query,
+                isPresented: $searchPresented,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search tabs, sessions, windows"
+            )
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
             .task {
                 await load()
+            }
+            .onAppear {
+                #if targetEnvironment(macCatalyst)
+                    searchPresented = true
+                #endif
             }
             .alert(prompt?.title ?? "", isPresented: promptShown) {
                 TextField("name", text: $promptText)
@@ -721,8 +804,169 @@ struct TmuxJumpSheet: View {
                 Button("Delete", role: .destructive) { applyKill() }
                 Button("Cancel", role: .cancel) { killTarget = nil }
             }
-            .themedScreen()
+            .paperScreen()
         }
+    }
+
+    private var hostLabel: String {
+        hostName
+    }
+
+    private var filteredTabItems: [TabJumpItem] {
+        guard !query.isEmpty else { return tabItems }
+        return tabItems.filter { item in
+            [item.label, item.preview, item.session ?? ""]
+                .contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
+    private var filteredSessions: [TmuxSession] {
+        guard !query.isEmpty else { return sessions }
+        return sessions.filter { session in
+            session.name.localizedCaseInsensitiveContains(query) || !filteredWindows(in: session).isEmpty
+        }
+    }
+
+    private func filteredWindows(in session: TmuxSession) -> [WindowDashboardItem] {
+        let items = windowsBySession[session.name] ?? []
+        guard !query.isEmpty, !session.name.localizedCaseInsensitiveContains(query) else { return items }
+        return items.filter { item in
+            [item.window.name, item.preview, item.status.label]
+                .contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
+    private func sectionHeader(_ title: String, expanded: Binding<Bool>, action: String, perform: @escaping () -> Void)
+        -> some View
+    {
+        HStack(spacing: 8) {
+            Text(title.uppercased())
+                .font(PocketshellTheme.mono(9, weight: .bold))
+                .tracking(1.4)
+                .foregroundStyle(PocketshellTheme.muted)
+            Rectangle().fill(PocketshellTheme.divider).frame(height: 1)
+            Button {
+                expanded.wrappedValue.toggle()
+            } label: {
+                Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(PocketshellTheme.muted)
+            }
+            Button(action, action: perform)
+                .font(PocketshellTheme.mono(10, weight: .bold))
+                .foregroundStyle(PocketshellTheme.accent)
+        }
+        .textCase(nil)
+    }
+
+    private func actionHeader(_ title: String, action: String, perform: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text(title.uppercased())
+                .font(PocketshellTheme.mono(9, weight: .bold))
+                .tracking(1.4)
+                .foregroundStyle(PocketshellTheme.muted)
+            Rectangle().fill(PocketshellTheme.divider).frame(height: 1)
+            Button(action, action: perform)
+                .font(PocketshellTheme.mono(10, weight: .bold))
+                .foregroundStyle(PocketshellTheme.accent)
+        }
+        .textCase(nil)
+    }
+
+    private func tabCard(_ item: TabJumpItem) -> some View {
+        Button {
+            onSelectTab?(item.id)
+            dismiss()
+        } label: {
+            VStack(spacing: 0) {
+                Text(item.preview.isEmpty ? "plain shell" : item.preview)
+                    .font(PocketshellTheme.mono(7.5))
+                    .foregroundStyle(Color(hexRGB: "D7DBDF"))
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
+                    .padding(7)
+                    .background(Color(hexRGB: "101214"))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(item.status?.chromeColor ?? PocketshellTheme.faint)
+                            .frame(width: 6, height: 6)
+                        Text(item.label)
+                            .font(PocketshellTheme.mono(10, weight: .bold))
+                            .foregroundStyle(PocketshellTheme.ink)
+                            .lineLimit(1)
+                    }
+                    Text(tabAttachment(item))
+                        .font(PocketshellTheme.mono(8))
+                        .foregroundStyle(PocketshellTheme.muted)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(7)
+                .background(PocketshellTheme.surface)
+            }
+            .frame(width: 128)
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+            .overlay {
+                RoundedRectangle(cornerRadius: 9)
+                    .stroke(
+                        item.selected ? PocketshellTheme.accent : PocketshellTheme.border,
+                        lineWidth: item.selected ? 1.5 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Rename…") {
+                promptText = item.label
+                prompt = .renameTab(item.id)
+            }
+            Button("Close", role: .destructive) {
+                killTarget = .tab(id: item.id, label: item.label)
+            }
+        }
+    }
+
+    private func tabAttachment(_ item: TabJumpItem) -> String {
+        guard let session = item.session else { return "plain shell · no tmux" }
+        return "⌗ \(session) › \(item.windowIndex.map(String.init) ?? "current")"
+    }
+
+    private func windowRow(_ item: WindowDashboardItem, session: String) -> some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(item.status.chromeColor)
+                .frame(width: 7, height: 7)
+                .shadow(color: item.status == .waiting ? item.status.chromeColor.opacity(0.4) : .clear, radius: 4)
+            Text("\(item.window.index): \(item.window.name)")
+                .font(PocketshellTheme.mono(12, weight: .semibold))
+                .foregroundStyle(PocketshellTheme.body)
+                .lineLimit(1)
+            Text(item.status.label)
+                .font(PocketshellTheme.mono(10))
+                .foregroundStyle(item.status.chromeTextColor)
+            Spacer()
+            if let tab = attachedTab(session: session, windowIndex: item.window.index) {
+                Text("IN \"\(tab.label.uppercased())\"")
+                    .font(PocketshellTheme.mono(8.5, weight: .bold))
+                    .foregroundStyle(item.status == .waiting ? PocketshellTheme.accentDark : PocketshellTheme.muted)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(item.status == .waiting ? PocketshellTheme.accentTint : PocketshellTheme.surface)
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(
+                            item.status == .waiting ? PocketshellTheme.accentBorder : PocketshellTheme.border))
+            } else {
+                Text("ATTACH ›")
+                    .font(PocketshellTheme.mono(9, weight: .bold))
+                    .foregroundStyle(PocketshellTheme.accent)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func attachedTab(session: String, windowIndex: Int) -> TabJumpItem? {
+        tabItems.first { $0.session == session && $0.windowIndex == windowIndex }
     }
 
     private var promptShown: Binding<Bool> {
@@ -747,15 +991,19 @@ struct TmuxJumpSheet: View {
         let controller = controller
         switch prompt {
         case .newSession:
-            Task { await controller?.createTmuxSession(named: name) }
-            dismiss()
-        case .renameSession(let old):
-            if let orderKey, var saved = store.sessionOrder[orderKey], let index = saved.firstIndex(of: old) {
-                saved[index] = name
-                store.sessionOrder[orderKey] = saved
-            }
             Task {
-                await controller?.renameTmuxSession(from: old, to: name)
+                guard await controller?.createTmuxSession(named: name) == true else { return }
+                onOpenWindowInNewTab?(name, nil)
+                dismiss()
+            }
+        case .renameSession(let old):
+            Task {
+                guard await controller?.renameTmuxSession(from: old, to: name) == true else { return }
+                if let orderKey, var saved = store.sessionOrder[orderKey], let index = saved.firstIndex(of: old) {
+                    saved[index] = name
+                    store.sessionOrder[orderKey] = saved
+                }
+                onRenameSession?(old, name)
                 await load()
             }
         case .renameWindow(let session, let index):
@@ -824,12 +1072,16 @@ struct TmuxJumpSheet: View {
 
     private func expandedBinding(_ name: String) -> Binding<Bool> {
         Binding(
-            get: { expandedSessions.contains(name) },
+            get: { !query.isEmpty || expandedSessions.contains(name) },
             set: { expanded in
+                guard query.isEmpty else { return }
                 if expanded {
                     expandedSessions.insert(name)
                 } else {
                     expandedSessions.remove(name)
+                }
+                if let expandedSessionsKey {
+                    UserDefaults.standard.set(expandedSessions.sorted(), forKey: expandedSessionsKey)
                 }
             }
         )
@@ -850,7 +1102,11 @@ struct TmuxJumpSheet: View {
             map[session.name] = await controller.dashboardItems(session: session.name)
         }
         windowsBySession = map
-        if expandedSessions.isEmpty {
+        if let expandedSessionsKey,
+            let saved = UserDefaults.standard.stringArray(forKey: expandedSessionsKey)
+        {
+            expandedSessions = Set(saved)
+        } else if expandedSessions.isEmpty {
             let initial = currentSession ?? sessions.first { $0.attached }?.name ?? sessions.first?.name
             if let initial {
                 expandedSessions = [initial]

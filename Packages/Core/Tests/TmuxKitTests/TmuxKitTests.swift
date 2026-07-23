@@ -2,6 +2,13 @@ import Testing
 
 @testable import TmuxKit
 
+@Test func newWindowTargetsSession() {
+    #expect(
+        Tmux.newWindowCommand(session: "my work")
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux new-window -t 'my work'"
+    )
+}
+
 @Test func listWindowsCommandUsesPipeFormat() {
     #expect(
         Tmux.listWindowsCommand(session: "claude")
@@ -73,17 +80,28 @@ import Testing
         ])
 }
 
+@Test func consolidateGroupsPrefersRenamedSessionOverClone() {
+    let sessions = [
+        TmuxSession(name: "agents-psh-492f0b8f", windows: 6, attached: true, group: "agents"),
+        TmuxSession(name: "homeops", windows: 6, attached: false, group: "agents"),
+    ]
+    #expect(
+        Tmux.consolidateGroups(sessions) == [
+            TmuxSession(name: "homeops", windows: 6, attached: true, group: "agents")
+        ])
+}
+
 @Test func attachCommandWithWindow() {
     #expect(
         Tmux.attachCommand(session: "claude", windowIndex: 3, clientTag: "ab12cd")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on \\; select-window -t 3"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on \\; set-option status off \\; select-window -t 3"
     )
 }
 
 @Test func attachCommandWithoutWindow() {
     #expect(
         Tmux.attachCommand(session: "claude", windowIndex: nil, clientTag: "ab12cd")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on \\; set-option status off"
     )
 }
 
@@ -197,6 +215,28 @@ import Testing
     let command = Tmux.capturePanesCommand(session: "agents")
     #expect(!command.contains("-S -"))
     #expect(command.contains("capture-pane -p -t 'agents':$w"))
+}
+
+@Test func capturePaneSnapshotCommandQuotesTarget() {
+    #expect(
+        Tmux.capturePaneSnapshotCommand(target: "agents-psh-a'b")
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux display-message -p -t 'agents-psh-a'\\''b' '@@command:#{pane_current_command}@@' && PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux capture-pane -p -t 'agents-psh-a'\\''b'"
+    )
+}
+
+@Test func parsePaneSnapshotSeparatesCommandAndText() {
+    #expect(
+        Tmux.parsePaneSnapshot("@@command:codex@@\nhello\nctx: 14% used / 86% left\n")
+            == TmuxPaneSnapshot(command: "codex", text: "hello\nctx: 14% used / 86% left\n")
+    )
+    #expect(Tmux.parsePaneSnapshot("ordinary pane text") == nil)
+}
+
+@Test func interactiveShellDetectionUsesCommandBasename() {
+    #expect(Tmux.isInteractiveShell("zsh"))
+    #expect(Tmux.isInteractiveShell("/bin/-bash"))
+    #expect(!Tmux.isInteractiveShell("codex"))
+    #expect(!Tmux.isInteractiveShell("node"))
 }
 
 @Test func classifyIgnoresStaleSpinnerAboveTail() {

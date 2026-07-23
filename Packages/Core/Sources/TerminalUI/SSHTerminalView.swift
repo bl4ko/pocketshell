@@ -94,6 +94,7 @@
                 target: context.coordinator,
                 action: #selector(Coordinator.handleScrollPan(_:))
             )
+            pan.allowedScrollTypesMask = .all
             let gestureDelegate = SimultaneousGestureDelegate()
             pan.delegate = gestureDelegate
             context.coordinator.gestureDelegate = gestureDelegate
@@ -184,7 +185,6 @@
             @MainActor private func handleScrollPanOnMain(_ gesture: UIPanGestureRecognizer) {
                 guard let view = gesture.view as? TerminalView else { return }
                 let terminal = view.getTerminal()
-                guard terminal.mouseMode != .off else { return }
                 switch gesture.state {
                 case .began:
                     scrollTracker = PanScrollTracker(step: Double(view.font.lineHeight))
@@ -193,6 +193,14 @@
                     gesture.setTranslation(.zero, in: view)
                     let lines = scrollTracker.lines(for: Double(delta))
                     guard lines != 0 else { return }
+                    if terminal.mouseMode == .off {
+                        if lines > 0 {
+                            view.scrollUp(lines: lines)
+                        } else {
+                            view.scrollDown(lines: -lines)
+                        }
+                        return
+                    }
                     let flags = terminal.encodeButton(
                         button: lines > 0 ? 4 : 5,
                         release: false,

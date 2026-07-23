@@ -11,6 +11,20 @@ struct TerminalTab: Identifiable {
     var tmuxWindowName: String?
 }
 
+private struct TabReorderModifier: ViewModifier {
+    let identifier: String
+    let move: (String) -> Bool
+
+    func body(content: Content) -> some View {
+        content
+            .draggable(identifier)
+            .dropDestination(for: String.self) { identifiers, _ in
+                guard let identifier = identifiers.first else { return false }
+                return move(identifier)
+            }
+    }
+}
+
 struct TabJumpItem: Identifiable {
     let id: UUID
     let label: String
@@ -407,6 +421,23 @@ struct HostTabsScreen: View {
                     .onTapGesture {
                         selectedTab = tab.id
                     }
+                    .modifier(
+                        TabReorderModifier(identifier: tab.id.uuidString) { identifier in
+                            guard
+                                let sourceIndex = tabs.firstIndex(where: {
+                                    $0.id.uuidString == identifier
+                                }),
+                                let targetIndex = tabs.firstIndex(where: { $0.id == tab.id }),
+                                sourceIndex != targetIndex
+                            else { return false }
+                            tabs.move(
+                                fromOffsets: IndexSet(integer: sourceIndex),
+                                toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+                            )
+                            persistTabs()
+                            return true
+                        }
+                    )
                     .contextMenu {
                         Button("Rename Tab") {
                             renameText = tab.name ?? ""

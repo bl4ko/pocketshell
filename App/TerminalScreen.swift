@@ -39,29 +39,48 @@ struct TerminalScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var connection: ConnectionController
     @StateObject private var keyboard = KeyboardObserver()
+    @State private var testKeyboardHeight: CGFloat =
+        ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" ? 300 : 0
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
+    @AppStorage(AppSettings.uiScaleKey) private var uiScale = 1.0
 
     let host: HostConfig
     var isActive = true
+    var quickReplyOptions: [Int] = []
 
     var body: some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
                 statusBanner
-                SSHTerminalView(bridge: connection.bridge, theme: TerminalTheme.named(themeName))
-                TerminalToolbar(
-                    keys: store.toolbarKeys,
-                    ctrlActive: Binding(
-                        get: { connection.bridge.ctrlActive },
-                        set: { connection.bridge.ctrlActive = $0 }
-                    ),
-                    onKey: { connection.bridge.handleToolbar($0) },
-                    onHideKeyboard: { connection.bridge.toggleKeyboard() },
-                    onPaste: { connection.bridge.paste() },
-                    onCopy: { connection.bridge.copySelection() }
-                )
+                SSHTerminalView(bridge: connection.bridge, theme: TerminalTheme.named(themeName), scale: uiScale)
+                    .focusEffectDisabled()
+                #if !targetEnvironment(macCatalyst)
+                    TerminalToolbar(
+                        keys: store.toolbarKeys,
+                        theme: TerminalTheme.named(themeName),
+                        ctrlActive: Binding(
+                            get: { connection.bridge.ctrlActive },
+                            set: { connection.bridge.ctrlActive = $0 }
+                        ),
+                        quickReplyOptions: quickReplyOptions,
+                        onKey: { connection.bridge.handleToolbar($0) },
+                        onHideKeyboard: {
+                            connection.bridge.toggleKeyboard()
+                            if ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" {
+                                testKeyboardHeight = testKeyboardHeight == 0 ? 300 : 0
+                            }
+                        },
+                        onPaste: { connection.bridge.paste() },
+                        onCopy: { connection.bridge.copySelection() }
+                    )
+                #endif
             }
-            .padding(.bottom, isActive ? max(0, keyboard.height - proxy.safeAreaInsets.bottom) : 0)
+            .padding(
+                .bottom,
+                isActive
+                    ? max(testKeyboardHeight, max(0, keyboard.height - proxy.safeAreaInsets.bottom))
+                    : 0
+            )
         }
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: windowPickerShown) {

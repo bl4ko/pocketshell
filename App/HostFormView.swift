@@ -14,6 +14,7 @@ struct HostFormView: View {
     @State private var keyTag = AppStore.deviceKeyTag
     @State private var tmuxSession = ""
     @State private var onConnectCommand = ""
+    @AppStorage(AppSettings.iCloudCredentialsSyncKey) private var credentialsSync = false
 
     var body: some View {
         NavigationStack {
@@ -29,10 +30,9 @@ struct HostFormView: View {
                     TextField("Username", text: $username)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    TextField("Group (optional)", text: $group)
-                        .autocorrectionDisabled()
+                    GroupField(group: $group, groups: groups)
                     Picker("Key", selection: $keyTag) {
-                        Text("Device key").tag(AppStore.deviceKeyTag)
+                        Text(credentialsSync ? "Shared PocketShell key" : "Device key").tag(AppStore.deviceKeyTag)
                         ForEach(store.importedKeys) { key in
                             Text(key.name).tag(key.tag)
                         }
@@ -95,5 +95,31 @@ struct HostFormView: View {
             store.hosts.append(updated)
         }
         dismiss()
+    }
+
+    private var groups: [String] {
+        Array(Set(store.hosts.compactMap(\.group) + store.vncHosts.compactMap(\.group))).sorted()
+    }
+}
+
+struct GroupField: View {
+    @Binding var group: String
+    let groups: [String]
+
+    var body: some View {
+        HStack {
+            TextField("Group (optional)", text: $group)
+                .autocorrectionDisabled()
+            Menu {
+                Button("No group") { group = "" }
+                ForEach(groups, id: \.self) { name in
+                    Button(name) { group = name }
+                }
+            } label: {
+                Image(systemName: "chevron.up.chevron.down")
+            }
+            .accessibilityLabel("Choose group")
+            .accessibilityIdentifier("group-picker")
+        }
     }
 }

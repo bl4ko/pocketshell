@@ -12,12 +12,9 @@
         public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
         public var imagePaste: ((Data) -> Void)?
         weak var view: TerminalView?
+        private var theme: TerminalTheme?
         private var gate = FeedGate()
         private var flushTask: Task<Void, Never>?
-        private var userInputPending = false
-        private var feedingView = false
-        private static let focusIn = Data("\u{1b}[I".utf8)
-        private static let focusOut = Data("\u{1b}[O".utf8)
 
         public init() {}
 
@@ -48,11 +45,18 @@
             }
         }
 
-        // Auto-replies emitted synchronously during feed must not count as user typing.
         private func feedView(_ out: Data) {
-            feedingView = true
-            view?.feed(byteArray: [UInt8](out)[...])
-            feedingView = false
+            guard let view else { return }
+            view.feed(byteArray: [UInt8](out)[...])
+            if let theme, !SSHTerminalView.isApplied(theme, to: view) {
+                SSHTerminalView.apply(theme, to: view)
+            }
+        }
+
+        func setTheme(_ theme: TerminalTheme) {
+            self.theme = theme
+            guard let view, !SSHTerminalView.isApplied(theme, to: view) else { return }
+            SSHTerminalView.apply(theme, to: view)
         }
 
         public func visibleText() -> String {
@@ -66,24 +70,25 @@
         }
 
         public func paste() {
-            let pasteboard = UIPasteboard.general
-            if let imagePaste, !pasteboard.hasStrings,
-                let image = pasteboard.image,
-                let data = image.jpegData(compressionQuality: 0.85)
-            {
-                imagePaste(data)
-                return
-            }
             view?.paste(nil)
+        }
+
+        func pasteImage() -> Bool {
+            guard let imagePaste else { return false }
+            let pasteboard = UIPasteboard.general
+            let image =
+                pasteboard.image
+                ?? pasteboard.url.flatMap { UIImage(contentsOfFile: $0.path) }
+                ?? pasteboard.string.flatMap(URL.init(string:)).flatMap {
+                    $0.isFileURL ? UIImage(contentsOfFile: $0.path) : nil
+                }
+            guard let data = image?.jpegData(compressionQuality: 0.85) else { return false }
+            imagePaste(data)
+            return true
         }
 
         public func copySelection() {
             view?.copy(nil)
-        }
-
-        public func consumeUserInput() -> Bool {
-            defer { userInputPending = false }
-            return userInputPending
         }
 
         public var isTerminalFocused: Bool {
@@ -114,15 +119,11 @@
                 return
             }
             if let data = ToolbarKeyEncoder.data(for: action) {
-                userInputPending = true
                 sendToHost?(data)
             }
         }
 
         public func processOutgoing(_ data: Data) {
-            if !feedingView, data != Self.focusIn, data != Self.focusOut {
-                userInputPending = true
-            }
             if ctrlActive,
                 let text = String(data: data, encoding: .utf8),
                 text.count == 1,

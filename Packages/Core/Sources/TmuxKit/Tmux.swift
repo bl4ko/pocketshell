@@ -31,10 +31,14 @@ public struct TmuxSession: Equatable, Hashable, Sendable, Identifiable {
 }
 
 public struct TmuxPaneSnapshot: Equatable, Sendable {
+    public var windowIndex: Int
+    public var windowName: String
     public var command: String
     public var text: String
 
-    public init(command: String, text: String) {
+    public init(windowIndex: Int, windowName: String, command: String, text: String) {
+        self.windowIndex = windowIndex
+        self.windowName = windowName
         self.command = command
         self.text = text
     }
@@ -145,17 +149,23 @@ public enum Tmux {
     public static func capturePaneSnapshotCommand(target: String) -> String {
         let target = shellQuote(target)
         return
-            "\(tmux) display-message -p -t \(target) '@@command:#{pane_current_command}@@'"
+            "\(tmux) display-message -p -t \(target) '@@snapshot:#{window_index}|#{window_name}|#{pane_current_command}@@'"
             + " && \(tmux) capture-pane -p -t \(target)"
     }
 
     public static func parsePaneSnapshot(_ output: String) -> TmuxPaneSnapshot? {
         let separator = output.firstIndex(of: "\n")
         let header = separator.map { output[..<$0] } ?? output[...]
-        guard header.hasPrefix("@@command:"), header.hasSuffix("@@") else { return nil }
-        let command = header.dropFirst(10).dropLast(2)
+        guard header.hasPrefix("@@snapshot:"), header.hasSuffix("@@") else { return nil }
+        let fields = header.dropFirst(11).dropLast(2).split(separator: "|", omittingEmptySubsequences: false)
+        guard fields.count >= 3, let windowIndex = Int(fields[0]) else { return nil }
         let text = separator.map { String(output[output.index(after: $0)...]) } ?? ""
-        return TmuxPaneSnapshot(command: String(command), text: text)
+        return TmuxPaneSnapshot(
+            windowIndex: windowIndex,
+            windowName: fields[1..<(fields.count - 1)].joined(separator: "|"),
+            command: String(fields.last!),
+            text: text
+        )
     }
 
     public static func isInteractiveShell(_ command: String) -> Bool {

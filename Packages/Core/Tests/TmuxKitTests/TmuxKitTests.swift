@@ -220,14 +220,19 @@ import Testing
 @Test func capturePaneSnapshotCommandQuotesTarget() {
     #expect(
         Tmux.capturePaneSnapshotCommand(target: "agents-psh-a'b")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux display-message -p -t 'agents-psh-a'\\''b' '@@command:#{pane_current_command}@@' && PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux capture-pane -p -t 'agents-psh-a'\\''b'"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux display-message -p -t 'agents-psh-a'\\''b' '@@snapshot:#{window_index}|#{window_name}|#{pane_current_command}@@' && PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux capture-pane -p -t 'agents-psh-a'\\''b'"
     )
 }
 
-@Test func parsePaneSnapshotSeparatesCommandAndText() {
+@Test func parsePaneSnapshotSeparatesWindowCommandAndText() {
     #expect(
-        Tmux.parsePaneSnapshot("@@command:codex@@\nhello\nctx: 14% used / 86% left\n")
-            == TmuxPaneSnapshot(command: "codex", text: "hello\nctx: 14% used / 86% left\n")
+        Tmux.parsePaneSnapshot("@@snapshot:2|api|server|codex@@\nhello\nctx: 14% used / 86% left\n")
+            == TmuxPaneSnapshot(
+                windowIndex: 2,
+                windowName: "api|server",
+                command: "codex",
+                text: "hello\nctx: 14% used / 86% left\n"
+            )
     )
     #expect(Tmux.parsePaneSnapshot("ordinary pane text") == nil)
 }

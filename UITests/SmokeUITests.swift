@@ -304,6 +304,10 @@ final class SmokeUITests: XCTestCase {
         sleep(2)
         let compactHeight = terminal.frame.height
         XCTAssertEqual(terminal.value as? String, "bottom")
+        terminal.swipeDown()
+        XCTAssertEqual(terminal.value as? String, "history")
+        terminal.swipeUp()
+        XCTAssertEqual(terminal.value as? String, "bottom")
 
         for _ in 0..<3 {
             keyboardButton.tap()

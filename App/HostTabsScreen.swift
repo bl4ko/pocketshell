@@ -356,8 +356,12 @@ struct HostTabsScreen: View {
                 text = tab.controller.bridge.visibleText()
                 agentRunning = nil
             }
+            let previous = tabStatuses[tab.id]
             let status = tabResolver.resolve(key: tab.id.uuidString, text: text, agentRunning: agentRunning)
             tabStatuses[tab.id] = status
+            if status == .idle, previous == .busy, tab.id != selectedTab {
+                unseenFinished.insert(tab.id)
+            }
             tabQuickReplies[tab.id] = status == .waiting ? AgentQuickReply.options(in: text) : []
             guard let status, !tab.controller.isTmuxAttached else { continue }
             samples.append(
@@ -369,10 +373,6 @@ struct HostTabsScreen: View {
         }
         let transitions = tabTracker.update(samples)
         persistTabs()
-        for transition in transitions where transition.status == .idle {
-            guard let id = tabID(fromKey: transition.key), id != selectedTab else { continue }
-            unseenFinished.insert(id)
-        }
         guard UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey) else { return }
         for transition in transitions {
             let content = UNMutableNotificationContent()
@@ -477,10 +477,6 @@ struct HostTabsScreen: View {
 
     private func tabLabel(_ tab: TerminalTab, index: Int) -> String {
         tab.name ?? tab.tmuxWindowName ?? "\(index + 1)"
-    }
-
-    private func tabID(fromKey key: String) -> UUID? {
-        UUID(uuidString: String(key.dropFirst("tab-".count)))
     }
 
     private func tabAccessibilityLabel(_ tab: TerminalTab, index: Int) -> String {

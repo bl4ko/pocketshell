@@ -20,8 +20,6 @@
         var pasteImage: (() -> Bool)?
         var sendControl: ((Character) -> Void)?
 
-        override var canBecomeFocused: Bool { false }
-
         #if targetEnvironment(macCatalyst)
             override var keyCommands: [UIKeyCommand]? {
                 "abcdefghijklmnopqrstuvwxyz".map { character in
@@ -111,6 +109,7 @@
             view.terminalDelegate = context.coordinator
             view.allowMouseReporting = false
             view.inputAccessoryView = nil
+            view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
             view.sendControl = { [weak bridge] in bridge?.sendControl($0) }
             let pan = UIPanGestureRecognizer(

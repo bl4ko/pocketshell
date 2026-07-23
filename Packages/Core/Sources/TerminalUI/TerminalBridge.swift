@@ -82,12 +82,30 @@
             let image =
                 pasteboard.image
                 ?? pasteboard.url.flatMap { UIImage(contentsOfFile: $0.path) }
-                ?? pasteboard.string.flatMap(URL.init(string:)).flatMap {
-                    $0.isFileURL ? UIImage(contentsOfFile: $0.path) : nil
-                }
+                ?? pasteboard.items.lazy.compactMap { item in
+                    item.values.lazy.compactMap(self.image(from:)).first
+                }.first
             guard let data = image?.jpegData(compressionQuality: 0.85) else { return false }
             imagePaste(data)
             return true
+        }
+
+        private func image(from value: Any) -> UIImage? {
+            if let image = value as? UIImage {
+                return image
+            }
+            if let url = value as? URL {
+                return UIImage(contentsOfFile: url.path)
+            }
+            if let data = value as? Data {
+                return UIImage(data: data) ?? String(data: data, encoding: .utf8).flatMap(image(from:))
+            }
+            guard let text = value as? String else { return nil }
+            switch ClipboardImageSource.parse(text) {
+            case .file(let url): return UIImage(contentsOfFile: url.path)
+            case .data(let data): return UIImage(data: data)
+            case nil: return nil
+            }
         }
 
         public func copySelection() {

@@ -46,3 +46,10 @@ import Testing
     #expect(!AutomaticReplyFilter.shouldSuppress(Data([0x1b, 0x5b] + Array("12;40R".utf8))))
     #expect(!AutomaticReplyFilter.shouldSuppress(Data("ctrl+l".utf8)))
 }
+
+@Test func clipboardImageSourcesParseMacRepresentations() throws {
+    #expect(
+        ClipboardImageSource.parse(#"<img src="file:///tmp/Screenshot%202026.png">"#)
+            == .file(try #require(URL(string: "file:///tmp/Screenshot%202026.png"))))
+    #expect(ClipboardImageSource.parse("<img src=\"data:image/png;base64,aGk=\">") == .data(Data("hi".utf8)))
+}

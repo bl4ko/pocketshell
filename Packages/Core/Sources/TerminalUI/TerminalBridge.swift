@@ -15,6 +15,7 @@
         private var theme: TerminalTheme?
         private var gate = FeedGate()
         private var flushTask: Task<Void, Never>?
+        private var feedingView = false
 
         public init() {}
 
@@ -47,6 +48,8 @@
 
         private func feedView(_ out: Data) {
             guard let view else { return }
+            feedingView = true
+            defer { feedingView = false }
             view.feed(byteArray: [UInt8](out)[...])
             if let theme, !SSHTerminalView.isApplied(theme, to: view) {
                 SSHTerminalView.apply(theme, to: view)
@@ -123,7 +126,16 @@
             }
         }
 
+        func sendControl(_ character: Character) {
+            if let data = ToolbarKeyEncoder.applyCtrl(to: character) {
+                sendToHost?(data)
+            }
+        }
+
         public func processOutgoing(_ data: Data) {
+            if feedingView, AutomaticReplyFilter.shouldSuppress(data) {
+                return
+            }
             if ctrlActive,
                 let text = String(data: data, encoding: .utf8),
                 text.count == 1,

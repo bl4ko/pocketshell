@@ -43,6 +43,7 @@ struct HostTabsScreen: View {
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTab: UUID?
     @State private var tabStatuses: [UUID: AgentStatus] = [:]
+    @State private var unseenFinished: Set<UUID> = []
     @State private var tabQuickReplies: [UUID: [Int]] = [:]
     @State private var tabTracker = AgentActivityTracker()
     @State private var tabResolver = TabStatusResolver()
@@ -173,6 +174,7 @@ struct HostTabsScreen: View {
             consumePendingTarget()
         }
         .onChange(of: selectedTab, initial: true) { _, _ in
+            if let selectedTab { unseenFinished.remove(selectedTab) }
             for tab in tabs {
                 tab.controller.bridge.setLive(tab.id == selectedTab)
             }
@@ -317,6 +319,7 @@ struct HostTabsScreen: View {
         Task { await tab.controller.stop() }
         tabs.removeAll { $0.id == id }
         tabStatuses[id] = nil
+        unseenFinished.remove(id)
         tabResolver.forget(key: id.uuidString)
         if selectedTab == id {
             selectedTab = tabs.last?.id
@@ -366,6 +369,10 @@ struct HostTabsScreen: View {
         }
         let transitions = tabTracker.update(samples)
         persistTabs()
+        for transition in transitions where transition.status == .idle {
+            guard let id = tabID(fromKey: transition.key), id != selectedTab else { continue }
+            unseenFinished.insert(id)
+        }
         guard UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey) else { return }
         for transition in transitions {
             let content = UNMutableNotificationContent()
@@ -387,11 +394,7 @@ struct HostTabsScreen: View {
             HStack(spacing: 4) {
                 ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                     HStack(spacing: 5) {
-                        if let status = tabStatuses[tab.id] {
-                            Circle()
-                                .fill(statusColor(status))
-                                .frame(width: 6, height: 6)
-                        }
+                        statusDotView(for: tab)
                         Text(tabLabel(tab, index: index))
                             .font(.footnote.monospaced())
                             .lineLimit(1)
@@ -414,9 +417,7 @@ struct HostTabsScreen: View {
                             )
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        "\(tabLabel(tab, index: index)), \(tabStatuses[tab.id]?.label ?? "no status")"
-                    )
+                    .accessibilityLabel(tabAccessibilityLabel(tab, index: index))
                     .accessibilityIdentifier("terminal-tab-\(index + 1)")
                     .onTapGesture {
                         selectedTab = tab.id
@@ -478,6 +479,16 @@ struct HostTabsScreen: View {
         tab.name ?? tab.tmuxWindowName ?? "\(index + 1)"
     }
 
+    private func tabID(fromKey key: String) -> UUID? {
+        UUID(uuidString: String(key.dropFirst("tab-".count)))
+    }
+
+    private func tabAccessibilityLabel(_ tab: TerminalTab, index: Int) -> String {
+        let status = tabStatuses[tab.id]?.label ?? "no status"
+        let unseen = unseenFinished.contains(tab.id) ? ", unseen" : ""
+        return "\(tabLabel(tab, index: index)), \(status)\(unseen)"
+    }
+
     private func applyRename() {
         guard let id = renamingTab,
             let index = tabs.firstIndex(where: { $0.id == id })
@@ -486,6 +497,17 @@ struct HostTabsScreen: View {
         tabs[index].name = trimmed.isEmpty ? nil : trimmed
         renamingTab = nil
         persistTabs()
+    }
+
+    @ViewBuilder
+    private func statusDotView(for tab: TerminalTab) -> some View {
+        if let status = tabStatuses[tab.id] {
+            let unseen = status == .idle && unseenFinished.contains(tab.id)
+            Circle()
+                .fill(unseen ? Color.blue : statusColor(status))
+                .frame(width: unseen ? 7 : 6, height: unseen ? 7 : 6)
+                .shadow(color: unseen ? Color.blue.opacity(0.6) : Color.clear, radius: 3)
+        }
     }
 
     private func statusColor(_ status: AgentStatus) -> Color {

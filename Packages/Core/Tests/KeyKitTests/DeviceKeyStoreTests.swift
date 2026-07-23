@@ -51,3 +51,24 @@ import Testing
     let signature = try privateKey.signature(for: message)
     #expect(privateKey.publicKey.isValidSignature(signature, for: message))
 }
+
+@Test func portablePrivateKeyRoundtrip() throws {
+    let original = DeviceKeyMaterial.ed25519(Curve25519.Signing.PrivateKey())
+    let restored = try #require(PortablePrivateKey(original)).keyMaterial()
+    #expect(restored.publicKeyRawRepresentation == original.publicKeyRawRepresentation)
+}
+
+@Test func portableP256PrivateKeyRoundtrip() throws {
+    let original = DeviceKeyMaterial.software(P256.Signing.PrivateKey())
+    let restored = try #require(PortablePrivateKey(original)).keyMaterial()
+    #expect(restored.publicKeyRawRepresentation == original.publicKeyRawRepresentation)
+}
+
+@Test func sharedKeyPreferenceIsStableAcrossMergeOrder() throws {
+    let first = try #require(PortablePrivateKey(.software(P256.Signing.PrivateKey())))
+    let second = try #require(PortablePrivateKey(.software(P256.Signing.PrivateKey())))
+    let preferred = try #require(PortablePrivateKey.stablePreferred(first, second))
+    let reversed = try #require(PortablePrivateKey.stablePreferred(second, first))
+
+    #expect(try preferred.keyMaterial().publicKeyRawRepresentation == reversed.keyMaterial().publicKeyRawRepresentation)
+}

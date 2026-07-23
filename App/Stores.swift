@@ -25,23 +25,39 @@ struct JSONStore<T: Codable> {
     }
 }
 
-struct TabRecord: Codable, Equatable {
-    var name: String?
-    var tmuxSession: String?
-    var windowIndex: Int?
+private struct SyncedCredentials: Codable {
+    var deviceKey: PortablePrivateKey?
+    var importedKeys: [ImportedKey]
+    var privateKeys: [String: PortablePrivateKey]
+    var vncPasswords: [String: String]
 }
 
 @MainActor
 final class AppStore: ObservableObject {
     static let deviceKeyTag = "pocketshell-device-key"
 
-    @Published var hosts: [HostConfig] { didSet { hostsStore.save(hosts) } }
-    @Published var vncHosts: [VNCHostConfig] { didSet { vncHostsStore.save(vncHosts) } }
-    @Published var snippets: [Snippet] { didSet { snippetsStore.save(snippets) } }
-    @Published var toolbarKeys: [ToolbarKey] { didSet { toolbarStore.save(toolbarKeys) } }
-    @Published var importedKeys: [ImportedKey] { didSet { importedKeysStore.save(importedKeys) } }
-    @Published var savedTabs: [String: [TabRecord]] { didSet { savedTabsStore.save(savedTabs) } }
-    @Published var sessionOrder: [String: [String]] { didSet { sessionOrderStore.save(sessionOrder) } }
+    @Published var hosts: [HostConfig] { didSet { hostsStore.save(hosts); saveConfigToCloud() } }
+    @Published var vncHosts: [VNCHostConfig] { didSet { vncHostsStore.save(vncHosts); saveConfigToCloud() } }
+    @Published var snippets: [Snippet] { didSet { snippetsStore.save(snippets); saveConfigToCloud() } }
+    @Published var toolbarKeys: [ToolbarKey] { didSet { toolbarStore.save(toolbarKeys); saveConfigToCloud() } }
+    @Published var importedKeys: [ImportedKey] {
+        didSet { importedKeysStore.save(importedKeys); saveCredentialsToCloud() }
+    }
+    @Published var savedTabs: [String: [TabRecord]] {
+        didSet {
+            markWorkspaceChanged(old: oldValue, new: savedTabs)
+            savedTabsStore.save(savedTabs)
+            saveConfigToCloud()
+        }
+    }
+    @Published var sessionOrder: [String: [String]] {
+        didSet {
+            markWorkspaceChanged(old: oldValue, new: sessionOrder)
+            sessionOrderStore.save(sessionOrder)
+            saveConfigToCloud()
+        }
+    }
+    @Published private(set) var configSyncError: String?
 
     let keyStore = DeviceKeyStore()
     let knownHosts: KnownHostsStore
@@ -53,6 +69,13 @@ final class AppStore: ObservableObject {
     private let importedKeysStore = JSONStore<[ImportedKey]>(filename: "imported-keys.json")
     private let savedTabsStore = JSONStore<[String: [TabRecord]]>(filename: "tabs.json")
     private let sessionOrderStore = JSONStore<[String: [String]]>(filename: "session-order.json")
+    private let workspaceUpdatedAtStore = JSONStore<[String: Date]>(filename: "workspace-updated-at.json")
+    private var workspaceUpdatedAt: [String: Date]
+    private var applyingConfig = false
+    private var applyingCredentials = false
+
+    private static let cloudConfigAccount = "config-v1"
+    private static let cloudCredentialsAccount = "credentials-v1"
 
     init() {
         hosts = hostsStore.load() ?? []
@@ -62,9 +85,13 @@ final class AppStore: ObservableObject {
         importedKeys = importedKeysStore.load() ?? []
         savedTabs = savedTabsStore.load() ?? [:]
         sessionOrder = sessionOrderStore.load() ?? [:]
+        workspaceUpdatedAt = workspaceUpdatedAtStore.load() ?? [:]
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("pocketshell", isDirectory: true)
         knownHosts = KnownHostsStore(fileURL: dir.appendingPathComponent("known-hosts.json"))
+        if cloudSyncEnabled {
+            setCloudSyncEnabled(true)
+        }
     }
 
     private var cachedKey: DeviceKeyMaterial?
@@ -115,20 +142,256 @@ final class AppStore: ObservableObject {
             vncHosts: vncHosts,
             snippets: snippets,
             toolbarKeys: toolbarKeys,
-            knownHosts: knownHosts.entries()
+            knownHosts: knownHosts.entries(),
+            workspace: localWorkspace
         )
     }
 
     func applyConfig(_ config: ConfigExport) {
+        applyingConfig = true
         hosts = ConfigExport.mergeByID(existing: hosts, incoming: config.hosts)
         vncHosts = ConfigExport.mergeByID(existing: vncHosts, incoming: config.vncHosts)
         snippets = ConfigExport.mergeByID(existing: snippets, incoming: config.snippets)
         toolbarKeys = ConfigExport.mergeByID(existing: toolbarKeys, incoming: config.toolbarKeys)
+        if let workspace = config.workspace {
+            applyWorkspace(WorkspaceConfig.merged(local: localWorkspace, remote: workspace))
+        }
         try? knownHosts.merge(config.knownHosts)
+        applyingConfig = false
+        saveConfigToCloud()
+    }
+
+    func setCloudSyncEnabled(_ enabled: Bool) {
+        guard enabled else { return }
+        if let config = cloudConfig() {
+            applyConfig(config)
+        } else {
+            saveConfigToCloud()
+        }
+        if credentialsSyncEnabled {
+            setCredentialsSyncEnabled(true)
+        }
+    }
+
+    func refreshCloudConfig() {
+        if cloudSyncEnabled {
+            receiveCloudConfig()
+        }
+        if credentialsSyncEnabled {
+            receiveCloudCredentials()
+        }
+    }
+
+    private var cloudSyncEnabled: Bool {
+        UserDefaults.standard.bool(forKey: AppSettings.iCloudSyncKey)
+    }
+
+    private var credentialsSyncEnabled: Bool {
+        cloudSyncEnabled && UserDefaults.standard.bool(forKey: AppSettings.iCloudCredentialsSyncKey)
+    }
+
+    private func cloudConfig() -> ConfigExport? {
+        do {
+            guard let data = try SynchronizableStore.get(account: Self.cloudConfigAccount) else { return nil }
+            configSyncError = nil
+            return try JSONDecoder().decode(ConfigExport.self, from: data)
+        } catch {
+            configSyncError = "iCloud Keychain sync failed: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    private func receiveCloudConfig() {
+        guard cloudSyncEnabled, let config = cloudConfig() else { return }
+        applyingConfig = true
+        hosts = config.hosts
+        vncHosts = config.vncHosts
+        snippets = config.snippets
+        toolbarKeys = config.toolbarKeys
+        if let workspace = config.workspace {
+            applyWorkspace(WorkspaceConfig.merged(local: localWorkspace, remote: workspace))
+        }
+        try? knownHosts.merge(config.knownHosts)
+        applyingConfig = false
+    }
+
+    func saveConfigToCloud() {
+        guard cloudSyncEnabled, !applyingConfig,
+            let data = try? JSONEncoder().encode(exportConfig())
+        else { return }
+        do {
+            try SynchronizableStore.set(data, account: Self.cloudConfigAccount)
+            configSyncError = nil
+        } catch {
+            configSyncError = "iCloud Keychain sync failed: \(error.localizedDescription)"
+        }
+    }
+
+    func tmuxSessions(for host: HostConfig) -> [String] {
+        localWorkspace.tmuxSessions(hostID: host.id, configuredSession: host.tmuxSession)
+    }
+
+    private var localWorkspace: WorkspaceConfig {
+        WorkspaceConfig(
+            savedTabs: savedTabs,
+            sessionOrder: sessionOrder,
+            updatedAtByHost: workspaceUpdatedAt
+        )
+    }
+
+    private func applyWorkspace(_ workspace: WorkspaceConfig) {
+        workspaceUpdatedAt = workspace.updatedAtByHost ?? [:]
+        workspaceUpdatedAtStore.save(workspaceUpdatedAt)
+        savedTabs = workspace.savedTabs
+        sessionOrder = workspace.sessionOrder
+    }
+
+    private func markWorkspaceChanged<T: Equatable>(old: [String: T], new: [String: T]) {
+        guard !applyingConfig else { return }
+        let changed = Set(old.keys).union(new.keys).filter { old[$0] != new[$0] }
+        guard !changed.isEmpty else { return }
+        let now = Date()
+        for hostID in changed {
+            workspaceUpdatedAt[hostID] = now
+        }
+        workspaceUpdatedAtStore.save(workspaceUpdatedAt)
+    }
+
+    func setCredentialsSyncEnabled(_ enabled: Bool) {
+        guard enabled, cloudSyncEnabled else { return }
+        var credentials = localCredentials()
+        if let remote = cloudCredentials() {
+            credentials = mergedCredentials(local: credentials, remote: remote)
+        }
+        if credentials.deviceKey == nil {
+            guard let deviceKey = createSharedDeviceKey() else { return }
+            credentials.deviceKey = deviceKey
+        }
+        guard applyCredentials(credentials) else { return }
+        saveCredentialsToCloud()
+    }
+
+    func saveCredentialsToCloud() {
+        guard credentialsSyncEnabled, !applyingCredentials,
+            let data = try? JSONEncoder().encode(localCredentials())
+        else { return }
+        do {
+            try SynchronizableStore.set(data, account: Self.cloudCredentialsAccount)
+            configSyncError = nil
+        } catch {
+            configSyncError = "iCloud Keychain sync failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func cloudCredentials() -> SyncedCredentials? {
+        do {
+            guard let data = try SynchronizableStore.get(account: Self.cloudCredentialsAccount) else { return nil }
+            configSyncError = nil
+            return try JSONDecoder().decode(SyncedCredentials.self, from: data)
+        } catch {
+            configSyncError = "iCloud Keychain sync failed: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    private func receiveCloudCredentials() {
+        guard let credentials = cloudCredentials() else { return }
+        applyCredentials(credentials)
+    }
+
+    private func localCredentials() -> SyncedCredentials {
+        let deviceKey = (try? keyStore.load(tag: Self.deviceKeyTag)).flatMap(PortablePrivateKey.init)
+        let keys = importedKeys.reduce(into: [String: PortablePrivateKey]()) { result, key in
+            guard let material = try? keyStore.load(tag: key.tag),
+                let portable = PortablePrivateKey(material)
+            else { return }
+            result[key.tag] = portable
+        }
+        let passwords = vncHosts.reduce(into: [String: String]()) { result, host in
+            let account = "vnc-\(host.id.uuidString)"
+            if let password = PasswordVault.get(account: account) {
+                result[account] = password
+            }
+        }
+        return SyncedCredentials(
+            deviceKey: deviceKey,
+            importedKeys: importedKeys,
+            privateKeys: keys,
+            vncPasswords: passwords
+        )
+    }
+
+    private func mergedCredentials(local: SyncedCredentials, remote: SyncedCredentials) -> SyncedCredentials {
+        var privateKeys = local.privateKeys
+        privateKeys.merge(remote.privateKeys) { _, remote in remote }
+        var passwords = local.vncPasswords
+        passwords.merge(remote.vncPasswords) { _, remote in remote }
+        return SyncedCredentials(
+            deviceKey: PortablePrivateKey.stablePreferred(local.deviceKey, remote.deviceKey),
+            importedKeys: ConfigExport.mergeByID(existing: local.importedKeys, incoming: remote.importedKeys),
+            privateKeys: privateKeys,
+            vncPasswords: passwords
+        )
+    }
+
+    @discardableResult
+    private func applyCredentials(_ credentials: SyncedCredentials) -> Bool {
+        applyingCredentials = true
+        var deviceKeyRestored = true
+        if let deviceKey = credentials.deviceKey {
+            do {
+                let material = try deviceKey.keyMaterial()
+                if try keyStore.load(tag: Self.deviceKeyTag)?.publicKeyRawRepresentation
+                    != material.publicKeyRawRepresentation
+                {
+                    try keyStore.saveImported(tag: Self.deviceKeyTag, key: material)
+                }
+                cachedKey = material
+            } catch {
+                configSyncError = "Couldn't restore synced device key: \(error.localizedDescription)"
+                deviceKeyRestored = false
+            }
+        }
+        let removedTags = Set(importedKeys.map(\.tag)).subtracting(credentials.importedKeys.map(\.tag))
+        for tag in removedTags {
+            try? keyStore.delete(tag: tag)
+        }
+        for (tag, key) in credentials.privateKeys {
+            do {
+                try keyStore.saveImported(tag: tag, key: key.keyMaterial())
+            } catch {
+                configSyncError = "Couldn't restore synced SSH key: \(error.localizedDescription)"
+            }
+        }
+        importedKeys = credentials.importedKeys
+        for host in vncHosts {
+            let account = "vnc-\(host.id.uuidString)"
+            if let password = credentials.vncPasswords[account] {
+                PasswordVault.set(password, account: account)
+            } else {
+                PasswordVault.delete(account: account)
+            }
+        }
+        applyingCredentials = false
+        return deviceKeyRestored
+    }
+
+    private func createSharedDeviceKey() -> PortablePrivateKey? {
+        let material = DeviceKeyMaterial.software(P256.Signing.PrivateKey())
+        guard let portable = PortablePrivateKey(material) else { return nil }
+        do {
+            try keyStore.saveImported(tag: Self.deviceKeyTag, key: material)
+            cachedKey = material
+            return portable
+        } catch {
+            configSyncError = "Couldn't create shared device key: \(error.localizedDescription)"
+            return nil
+        }
     }
 
     func setVNCPassword(_ password: String, for host: VNCHostConfig) {
         PasswordVault.set(password, account: "vnc-\(host.id.uuidString)")
+        saveCredentialsToCloud()
     }
 
     func vncPassword(for host: VNCHostConfig) -> String {
@@ -138,5 +401,6 @@ final class AppStore: ObservableObject {
     func deleteVNCHost(_ host: VNCHostConfig) {
         PasswordVault.delete(account: "vnc-\(host.id.uuidString)")
         vncHosts.removeAll { $0.id == host.id }
+        saveCredentialsToCloud()
     }
 }

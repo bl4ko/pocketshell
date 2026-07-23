@@ -58,5 +58,6 @@ New code goes in a Core module with tests, not in `App/`, unless it is pure UI g
 - **Keyboard bottom padding** applies to the ACTIVE tab only and without animation — animated padding reflows SwiftTerm every frame on every tab (lag + PTY resize storms).
 - **Clipboard image paste** uploads to remote `/tmp/psh-*.jpg` via chunked base64 exec and inserts the path; toolbar paste button appears for image-only clipboard.
 - **Mac Catalyst installs must be development-signed**: never install a `CODE_SIGNING_ALLOWED=NO` build. An unsigned replacement loses the Team ID/app-group entitlements and cannot read PocketShell's Keychain SSH credentials.
+- **RoyalVNC on Mac Catalyst uses our fork**: PocketShell pins `bl4ko/royalvnc` commit `7cd41cf` because upstream 1.1.0 fails to bridge `IOSurface` to `IOSurfaceRef` with Xcode 26.5. The one-line fix is upstream PR #36; keep the fork pin until it is merged and released, then verify signed Catalyst and iOS builds before switching back.
 
 Commit each verified feature or fix immediately using the repository's conventional commit format; do not accumulate unrelated completed work in the working tree.

@@ -140,12 +140,23 @@
                     command.wantsPriorityOverSystemBehavior = true
                     addKeyCommand(command)
                 }
+                let copyCommand = UIKeyCommand(
+                    input: "c",
+                    modifierFlags: .command,
+                    action: #selector(handleCopy)
+                )
+                copyCommand.wantsPriorityOverSystemBehavior = true
+                addKeyCommand(copyCommand)
             }
 
             @objc private func handleControl(_ command: UIKeyCommand) {
                 if let character = command.input?.first {
                     sendControl?(character)
                 }
+            }
+
+            @objc private func handleCopy() {
+                terminalView.copy(nil)
             }
         #endif
     }

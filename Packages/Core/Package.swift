@@ -25,8 +25,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
         .package(
-            url: "https://github.com/royalapplications/royalvnc.git",
-            revision: "92d4427c73817d8f849bb289ff190aa4b40c44ea"),
+            url: "https://github.com/bl4ko/royalvnc.git",
+            revision: "7cd41cff27e175c12b552dce2812ff78b35eb541"),
     ],
     targets: [
         .target(name: "Models", swiftSettings: strict),

@@ -6,6 +6,11 @@ enum AppSettings {
     static let terminalThemeKey = "pocketshell.terminalTheme"
     static let appLockKey = "pocketshell.appLock"
     static let agentNotifyKey = "pocketshell.agentNotify"
+    static let iCloudSyncKey = "pocketshell.iCloudSync"
+    static let iCloudCredentialsSyncKey = "pocketshell.iCloudCredentialsSync"
+    static let tmuxTabsExpandedKey = "pocketshell.tmuxTabsExpanded"
+    static let tmuxExpandedSessionsKeyPrefix = "pocketshell.tmuxExpandedSessions"
+    static let uiScaleKey = "pocketshell.uiScale"
 }
 
 struct ConfigDocument: FileDocument {
@@ -32,6 +37,8 @@ struct SettingsView: View {
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
     @AppStorage(AppSettings.appLockKey) private var appLock = false
     @AppStorage(AppSettings.agentNotifyKey) private var agentNotify = false
+    @AppStorage(AppSettings.iCloudSyncKey) private var iCloudSync = false
+    @AppStorage(AppSettings.iCloudCredentialsSyncKey) private var iCloudCredentialsSync = false
     @State private var exportDocument: ConfigDocument?
     @State private var exporting = false
     @State private var importing = false
@@ -64,6 +71,17 @@ struct SettingsView: View {
                 )
             }
             Section {
+                Toggle("Sync config with iCloud Keychain", isOn: $iCloudSync)
+                    .accessibilityIdentifier("settings.icloudSync")
+                    .onChange(of: iCloudSync) { _, enabled in
+                        store.setCloudSyncEnabled(enabled)
+                    }
+                Toggle("Include shared SSH key, imported keys and VNC passwords", isOn: $iCloudCredentialsSync)
+                    .accessibilityIdentifier("settings.icloudCredentialsSync")
+                    .disabled(!iCloudSync)
+                    .onChange(of: iCloudCredentialsSync) { _, enabled in
+                        store.setCredentialsSyncEnabled(enabled)
+                    }
                 Button("Export config…") {
                     let encoder = JSONEncoder()
                     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -77,11 +95,15 @@ struct SettingsView: View {
             } header: {
                 Text("Config")
             } footer: {
-                Text(
-                    "Hosts, desktops, snippets, toolbar and host fingerprints. Keys and passwords stay on device — install this device's public key from the Keys screen after import."
-                )
+                if let error = store.configSyncError {
+                    Text(error).foregroundStyle(.red)
+                } else {
+                    Text(
+                        "Credential sync uses one portable PocketShell SSH key across devices. Install its public key on hosts once. Turning sync off doesn't erase credentials already received."
+                    )
+                }
             }
-            Section("Terminal theme") {
+            Section("App + terminal theme") {
                 ForEach(TerminalTheme.all) { theme in
                     Button {
                         themeName = theme.name
@@ -129,7 +151,7 @@ struct SettingsView: View {
         .alert(importResult ?? "", isPresented: importAlertShown) {
             Button("OK") { importResult = nil }
         }
-        .themedScreen()
+        .paperScreen()
     }
 
     private var importAlertShown: Binding<Bool> {

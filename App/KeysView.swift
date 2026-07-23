@@ -3,6 +3,7 @@ import SwiftUI
 
 struct KeysView: View {
     @EnvironmentObject var store: AppStore
+    @AppStorage(AppSettings.iCloudCredentialsSyncKey) private var credentialsSync = false
     @State private var publicKeyLine: String?
     @State private var keyKind = ""
     @State private var error: String?
@@ -12,7 +13,7 @@ struct KeysView: View {
     var body: some View {
         List {
             if let publicKeyLine {
-                Section("Device public key (\(keyKind))") {
+                Section("\(credentialsSync ? "Shared PocketShell" : "Device") public key (\(keyKind))") {
                     Text(publicKeyLine)
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
@@ -56,13 +57,14 @@ struct KeysView: View {
         .sheet(isPresented: $importing) {
             ImportKeyView()
         }
-        .themedScreen()
+        .paperScreen()
     }
 
     private func loadKey() {
         do {
             let key = try store.deviceKey()
-            publicKeyLine = key.openSSHPublicKeyLine(comment: "pocketshell@iphone")
+            publicKeyLine = key.openSSHPublicKeyLine(
+                comment: credentialsSync ? "pocketshell@shared" : "pocketshell@device")
             switch key {
             case .enclave: keyKind = "Secure Enclave"
             case .software: keyKind = "software, Keychain"
@@ -120,7 +122,7 @@ struct ImportKeyView: View {
                         .disabled(name.isEmpty || keyText.isEmpty)
                 }
             }
-            .themedScreen()
+            .paperScreen()
         }
     }
 

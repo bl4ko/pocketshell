@@ -124,6 +124,7 @@
     private final class TerminalViewController: UIViewController {
         let terminalView = BottomAnchoredTerminalView()
         var sendControl: ((Character) -> Void)?
+        var sendEscape: (() -> Void)?
 
         override func loadView() {
             view = terminalView
@@ -147,6 +148,13 @@
                 )
                 copyCommand.wantsPriorityOverSystemBehavior = true
                 addKeyCommand(copyCommand)
+                let escapeCommand = UIKeyCommand(
+                    input: UIKeyCommand.inputEscape,
+                    modifierFlags: [],
+                    action: #selector(handleEscape)
+                )
+                escapeCommand.wantsPriorityOverSystemBehavior = true
+                addKeyCommand(escapeCommand)
             }
 
             @objc private func handleControl(_ command: UIKeyCommand) {
@@ -157,6 +165,10 @@
 
             @objc private func handleCopy() {
                 terminalView.copy(nil)
+            }
+
+            @objc private func handleEscape() {
+                sendEscape?()
             }
         #endif
     }
@@ -219,6 +231,9 @@
                 controller.sendControl = { [weak bridge] character in
                     guard let data = ToolbarKeyEncoder.applyCtrl(to: character) else { return }
                     bridge?.processOutgoing(data)
+                }
+                controller.sendEscape = { [weak bridge] in
+                    bridge?.processOutgoing(Data([0x1b]))
                 }
                 controller.installControlKeyCommands()
             #endif

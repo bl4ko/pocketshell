@@ -37,7 +37,6 @@ targets:
       - package: Core
         products:
           - VNCKit
-        platformFilter: iOS
     info:
       path: App/Info.plist
       properties:

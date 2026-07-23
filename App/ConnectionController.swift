@@ -202,7 +202,9 @@ final class ConnectionController: ObservableObject {
             let output = try? await connection.exec(
                 Tmux.capturePaneSnapshotCommand(target: Tmux.cloneName(session: session, clientTag: cloneTag)))
         else { return nil }
-        return Tmux.parsePaneSnapshot(output)
+        guard let snapshot = Tmux.parsePaneSnapshot(output) else { return nil }
+        pendingShell = .tmux(session: session, windowIndex: snapshot.windowIndex)
+        return snapshot
     }
 
     func dashboardItems(session: String) async -> [WindowDashboardItem] {

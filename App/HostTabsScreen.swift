@@ -8,6 +8,7 @@ struct TerminalTab: Identifiable {
     let id = UUID()
     let controller: ConnectionController
     var name: String?
+    var tmuxWindowName: String?
 }
 
 struct TabJumpItem: Identifiable {
@@ -191,7 +192,7 @@ struct HostTabsScreen: View {
             let text = tab.controller.bridge.visibleText()
             return TabJumpItem(
                 id: tab.id,
-                label: tab.name ?? "tab \(index + 1)",
+                label: tabLabel(tab, index: index),
                 status: tabStatuses[tab.id],
                 preview: Tmux.previewLines(text, count: 3),
                 selected: tab.id == selectedTab,
@@ -222,7 +223,7 @@ struct HostTabsScreen: View {
     private func openWindowInNewTab(session: String, windowIndex: Int?, name: String? = nil) {
         let controller = makeController()
         controller.preset(session: session, windowIndex: windowIndex)
-        let tab = TerminalTab(controller: controller, name: name)
+        let tab = TerminalTab(controller: controller, tmuxWindowName: name)
         controller.onExit = { closeTab(id: tab.id) }
         tabs.append(tab)
         selectedTab = tab.id
@@ -329,6 +330,9 @@ struct HostTabsScreen: View {
             let agentRunning: Bool?
             if tab.controller.isTmuxAttached {
                 guard let snapshot = await tab.controller.currentTmuxPaneSnapshot() else { continue }
+                if let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }) {
+                    tabs[currentIndex].tmuxWindowName = snapshot.windowName
+                }
                 text = snapshot.text
                 agentRunning = !Tmux.isInteractiveShell(snapshot.command)
             } else {
@@ -342,7 +346,7 @@ struct HostTabsScreen: View {
             samples.append(
                 .init(
                     key: "tab-\(tab.id.uuidString)",
-                    title: "\(host.name) \(tab.name ?? "tab \(index + 1)")",
+                    title: "\(host.name) \(tabLabel(tab, index: index))",
                     status: status
                 ))
         }
@@ -374,7 +378,7 @@ struct HostTabsScreen: View {
                                 .fill(statusColor(status))
                                 .frame(width: 6, height: 6)
                         }
-                        Text(tab.name ?? "\(index + 1)")
+                        Text(tabLabel(tab, index: index))
                             .font(.footnote.monospaced())
                             .lineLimit(1)
                     }
@@ -397,7 +401,7 @@ struct HostTabsScreen: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(
-                        "\(tab.name ?? "tab \(index + 1)"), \(tabStatuses[tab.id]?.label ?? "no status")"
+                        "\(tabLabel(tab, index: index)), \(tabStatuses[tab.id]?.label ?? "no status")"
                     )
                     .accessibilityIdentifier("terminal-tab-\(index + 1)")
                     .onTapGesture {
@@ -437,6 +441,10 @@ struct HostTabsScreen: View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         tabs[index].name = trimmed.isEmpty ? nil : trimmed
         persistTabs()
+    }
+
+    private func tabLabel(_ tab: TerminalTab, index: Int) -> String {
+        tab.name ?? tab.tmuxWindowName ?? "\(index + 1)"
     }
 
     private func applyRename() {

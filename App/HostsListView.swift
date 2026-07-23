@@ -197,7 +197,11 @@ struct HostsListView: View {
 
     private func hostRow(_ host: HostConfig) -> some View {
         let windows = monitor.snapshot?.windows.filter { $0.host == host.name } ?? []
-        let needsInput = windows.contains { $0.status == "needs input" }
+        let records = store.savedTabs[host.id.uuidString] ?? []
+        let matchedWindows = records.compactMap { record in
+            windows.first { $0.session == record.tmuxSession && $0.index == record.windowIndex }
+        }
+        let needsInput = matchedWindows.contains { $0.status == "needs input" }
         return NavigationLink(value: host) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
@@ -210,9 +214,8 @@ struct HostsListView: View {
                             .foregroundStyle(PocketshellTheme.muted)
                     }
                     Spacer()
-                    let tabs = store.savedTabs[host.id.uuidString]?.count ?? 0
-                    if tabs > 0 {
-                        Text("\(tabs) TABS OPEN")
+                    if !records.isEmpty {
+                        Text("\(records.count) TABS OPEN")
                             .font(PocketshellTheme.mono(10, weight: .bold))
                             .foregroundStyle(PocketshellTheme.accentDark)
                             .padding(.horizontal, 8)
@@ -222,7 +225,7 @@ struct HostsListView: View {
                             .overlay(Capsule().stroke(PocketshellTheme.accentBorder))
                     }
                 }
-                if windows.isEmpty {
+                if records.isEmpty {
                     HStack {
                         let sessions = store.tmuxSessions(for: host)
                         Text(
@@ -234,8 +237,11 @@ struct HostsListView: View {
                     .font(PocketshellTheme.mono(10))
                     .foregroundStyle(PocketshellTheme.faint)
                 } else {
-                    ForEach(windows, id: \.index) { window in
-                        agentRow(window, updatedAt: monitor.snapshot?.updatedAt)
+                    ForEach(Array(records.enumerated()), id: \.offset) { index, record in
+                        let window = windows.first {
+                            $0.session == record.tmuxSession && $0.index == record.windowIndex
+                        }
+                        tabRow(record, index: index, window: window, updatedAt: monitor.snapshot?.updatedAt)
                     }
                 }
             }
@@ -259,24 +265,36 @@ struct HostsListView: View {
         }
     }
 
-    private func agentRow(_ window: SessionSnapshot.Window, updatedAt: Date?) -> some View {
-        let color = statusColor(window.status)
+    private func tabRow(_ record: TabRecord, index: Int, window: SessionSnapshot.Window?, updatedAt: Date?) -> some View
+    {
+        let status = window?.status
+        let label = record.name ?? window.map(windowName) ?? "tab \(index + 1)"
         return HStack(spacing: 6) {
-            statusDot(color, glow: window.status == "needs input")
-            Text("\(window.session) · \(window.name)")
+            if let status {
+                statusDot(statusColor(status), glow: status == "needs input")
+            }
+            Text(label)
                 .font(PocketshellTheme.mono(12, weight: .semibold))
-                .foregroundStyle(window.status == "idle" ? PocketshellTheme.muted : PocketshellTheme.body)
+                .foregroundStyle(status == "idle" ? PocketshellTheme.muted : PocketshellTheme.body)
                 .lineLimit(1)
-            Text(window.status)
-                .font(PocketshellTheme.mono(10))
-                .foregroundStyle(statusTextColor(window.status))
+            if let status {
+                Text(status)
+                    .font(PocketshellTheme.mono(10))
+                    .foregroundStyle(statusTextColor(status))
+            }
             Spacer()
-            if let updatedAt {
+            if status != nil, let updatedAt {
                 Text(age(updatedAt))
                     .font(PocketshellTheme.mono(10))
                     .foregroundStyle(PocketshellTheme.faint)
             }
         }
+    }
+
+    private func windowName(_ window: SessionSnapshot.Window) -> String {
+        window.name.split(separator: ":", maxSplits: 1).last.map {
+            String($0).trimmingCharacters(in: .whitespaces)
+        } ?? window.name
     }
 
     private func vncHostRow(_ host: VNCHostConfig) -> some View {

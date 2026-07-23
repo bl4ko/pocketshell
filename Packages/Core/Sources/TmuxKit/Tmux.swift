@@ -294,6 +294,14 @@ public enum Tmux {
         return order.compactMap { merged[$0] }
     }
 
+    public static func canonicalSessionNames(_ output: String, requested: [String]) -> [String] {
+        let requestedSet = Set(requested)
+        let matches = consolidateGroups(parseSessions(output)).filter {
+            requestedSet.contains($0.name) || $0.group.map(requestedSet.contains) == true
+        }
+        return matches.isEmpty ? requested : matches.map(\.name)
+    }
+
     private static func isPocketShellClone(_ name: String) -> Bool {
         name.contains(/-psh-[[:alnum:]]+$/)
     }

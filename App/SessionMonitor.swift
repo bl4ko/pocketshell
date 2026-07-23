@@ -95,9 +95,11 @@ final class SessionMonitor: ObservableObject {
         var snapshots: [SessionSnapshot.Window] = []
         var targets: [String: [String: Any]] = [:]
         for host in store.hosts {
-            let sessions = store.tmuxSessions(for: host)
-            guard !sessions.isEmpty else { continue }
+            let requestedSessions = store.tmuxSessions(for: host)
+            guard !requestedSessions.isEmpty else { continue }
             guard let connection = await connection(for: host) else { continue }
+            let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
+            let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
             for session in sessions {
                 let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
                 let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""

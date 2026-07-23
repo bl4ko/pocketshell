@@ -91,6 +91,19 @@ import Testing
         ])
 }
 
+@Test func canonicalSessionNamesRemovesRequestedAliases() {
+    let output = """
+        agents-psh-a1b2|6|1|agents
+        homeops|6|0|agents
+        homeops-psh-c3d4|6|1|agents
+        vibe-apps|2|1|corpus
+        """
+    #expect(
+        Tmux.canonicalSessionNames(output, requested: ["agents", "homeops", "vibe-apps"])
+            == ["homeops", "vibe-apps"]
+    )
+}
+
 @Test func attachCommandWithWindow() {
     #expect(
         Tmux.attachCommand(session: "claude", windowIndex: 3, clientTag: "ab12cd")

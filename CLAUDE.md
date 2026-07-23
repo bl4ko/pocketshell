@@ -53,7 +53,10 @@ New code goes in a Core module with tests, not in `App/`, unless it is pure UI g
 
 ## Hard-won gotchas (do not re-learn)
 
-- **Tab status detection**: marker heuristics alone flap on narrow wrapped screens, so `TabStatusResolver` diffs screen text between 5s polls. User keystrokes echo = screen change, so `TerminalBridge` flags typed-since-poll and the resolver holds the previous status. SwiftTerm auto-replies (cursor position, color queries — emitted synchronously during `feed` on every TUI redraw) exit through the same `send` delegate as keystrokes; they must NOT set the typed flag or the active tab's status freezes forever (`feedingView` guard in `TerminalBridge`). Mid-redraw frames lack footer markers, so one markerless sample is held (2 consecutive = clear). Codex idle is detected via `\d+% (context left|used)` footer regex.
+- **Tab status detection**: `TabStatusResolver` trusts explicit busy/waiting/idle markers; screen diffs are not activity because idle TUIs redraw and busy TUIs can stay static. Tmux polling captures `pane_current_command` with the screen: markerless redraw frames hold the previous status while a foreground process runs, and returning to an interactive shell clears it. Non-tmux tabs retain a one-frame markerless grace. Codex idle is detected via `\d+% (context left|used)` footer regex.
 - **Hidden tabs** live in a ZStack: `allowsHitTesting(false)` blocks touches but NOT first responder. Tab switch focuses the selected TerminalView; `becomeFirstResponder` auto-resigns the old one — never resign-then-become (keyboard dismiss/present jank).
 - **Keyboard bottom padding** applies to the ACTIVE tab only and without animation — animated padding reflows SwiftTerm every frame on every tab (lag + PTY resize storms).
 - **Clipboard image paste** uploads to remote `/tmp/psh-*.jpg` via chunked base64 exec and inserts the path; toolbar paste button appears for image-only clipboard.
+- **Mac Catalyst installs must be development-signed**: never install a `CODE_SIGNING_ALLOWED=NO` build. An unsigned replacement loses the Team ID/app-group entitlements and cannot read PocketShell's Keychain SSH credentials.
+
+Commit each verified feature or fix immediately using the repository's conventional commit format; do not accumulate unrelated completed work in the working tree.

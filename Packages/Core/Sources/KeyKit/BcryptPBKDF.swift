@@ -112,6 +112,7 @@ enum BcryptPBKDF {
         precondition(rounds > 0 && keyLength > 0)
         let stride = (keyLength + 31) / 32
         let amt = (keyLength + stride - 1) / stride
+        // OpenSSH bcrypt_pbkdf requires this SHA-512 prehash before its expensive Blowfish rounds.
         let sha2pass = [UInt8](SHA512.hash(data: passphrase))
         var key = [UInt8](repeating: 0, count: keyLength)
         var remaining = keyLength

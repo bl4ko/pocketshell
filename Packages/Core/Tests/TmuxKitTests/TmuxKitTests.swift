@@ -102,6 +102,10 @@ import Testing
         Tmux.canonicalSessionNames(output, requested: ["agents", "homeops", "vibe-apps"])
             == ["homeops", "vibe-apps"]
     )
+    #expect(
+        Tmux.canonicalSessionMap(output, requested: ["agents", "homeops", "vibe-apps"])
+            == ["agents": "homeops", "homeops": "homeops", "vibe-apps": "vibe-apps"]
+    )
 }
 
 @Test func attachCommandWithWindow() {

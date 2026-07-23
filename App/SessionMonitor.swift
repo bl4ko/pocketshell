@@ -99,6 +99,10 @@ final class SessionMonitor: ObservableObject {
             guard !requestedSessions.isEmpty else { continue }
             guard let connection = await connection(for: host) else { continue }
             let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
+            canonicalizeSavedTabs(
+                for: host,
+                using: Tmux.canonicalSessionMap(sessionsOutput, requested: requestedSessions)
+            )
             let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
             for session in sessions {
                 let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
@@ -135,6 +139,19 @@ final class SessionMonitor: ObservableObject {
         WatchRelay.shared.push(snapshot)
         for transition in transitions {
             notify(transition, userInfo: targets[transition.key])
+        }
+    }
+
+    private func canonicalizeSavedTabs(for host: HostConfig, using sessions: [String: String]) {
+        let key = host.id.uuidString
+        guard var tabs = store.savedTabs[key] else { return }
+        for index in tabs.indices {
+            if let session = tabs[index].tmuxSession, let canonical = sessions[session] {
+                tabs[index].tmuxSession = canonical
+            }
+        }
+        if tabs != store.savedTabs[key] {
+            store.savedTabs[key] = tabs
         }
     }
 

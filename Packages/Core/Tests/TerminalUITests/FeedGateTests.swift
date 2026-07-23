@@ -40,3 +40,9 @@ import Testing
     #expect(gate.ingest(Data("b".utf8)) == nil)
     #expect(gate.drain() == Data("b".utf8))
 }
+
+@Test func automaticWindowSizeRepliesAreSuppressed() {
+    #expect(AutomaticReplyFilter.shouldSuppress(Data([0x1b, 0x5b] + Array("4;67;224t".utf8))))
+    #expect(!AutomaticReplyFilter.shouldSuppress(Data([0x1b, 0x5b] + Array("12;40R".utf8))))
+    #expect(!AutomaticReplyFilter.shouldSuppress(Data("ctrl+l".utf8)))
+}

@@ -65,6 +65,11 @@ struct PocketshellApp: App {
                         lock.authenticate()
                     }
                 }
+                .task {
+                    store.refreshCloudConfig()
+                    try? await Task.sleep(for: .seconds(1))
+                    store.refreshCloudConfig()
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             lock.scenePhaseChanged(phase)

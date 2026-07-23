@@ -2,6 +2,7 @@
     import Models
     import SwiftTerm
     import SwiftUI
+    import ToolbarUI
     import UIKit
 
     extension UIColor {
@@ -37,7 +38,36 @@
         }
     }
 
-    public struct SSHTerminalView: UIViewRepresentable {
+    private final class TerminalViewController: UIViewController {
+        let terminalView = BottomAnchoredTerminalView()
+        var sendControl: ((Character) -> Void)?
+
+        override func loadView() {
+            view = terminalView
+        }
+
+        #if targetEnvironment(macCatalyst)
+            func installControlKeyCommands() {
+                for character in "abcdefghijklmnopqrstuvwxyz" {
+                    let command = UIKeyCommand(
+                        input: String(character),
+                        modifierFlags: .control,
+                        action: #selector(handleControl(_:))
+                    )
+                    command.wantsPriorityOverSystemBehavior = true
+                    addKeyCommand(command)
+                }
+            }
+
+            @objc private func handleControl(_ command: UIKeyCommand) {
+                if let character = command.input?.first {
+                    sendControl?(character)
+                }
+            }
+        #endif
+    }
+
+    public struct SSHTerminalView: UIViewControllerRepresentable {
         private let bridge: TerminalBridge
         private let theme: TerminalTheme
         private let scale: Double
@@ -82,14 +112,22 @@
                 && view.caretColor.isEqual(UIColor(cursor))
         }
 
-        public func makeUIView(context: Context) -> TerminalView {
-            let view = BottomAnchoredTerminalView()
+        public func makeUIViewController(context: Context) -> UIViewController {
+            let controller = TerminalViewController()
+            let view = controller.terminalView
             view.accessibilityIdentifier = "terminal.view"
             view.terminalDelegate = context.coordinator
             view.allowMouseReporting = false
             view.inputAccessoryView = nil
             view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
+            #if targetEnvironment(macCatalyst)
+                controller.sendControl = { [weak bridge] character in
+                    guard let data = ToolbarKeyEncoder.applyCtrl(to: character) else { return }
+                    bridge?.processOutgoing(data)
+                }
+                controller.installControlKeyCommands()
+            #endif
             let pan = UIPanGestureRecognizer(
                 target: context.coordinator,
                 action: #selector(Coordinator.handleScrollPan(_:))
@@ -111,10 +149,11 @@
             context.coordinator.scale = scale
             bridge.view = view
             bridge.setTheme(theme)
-            return view
+            return controller
         }
 
-        public func updateUIView(_ uiView: TerminalView, context: Context) {
+        public func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+            guard let uiView = (uiViewController as? TerminalViewController)?.terminalView else { return }
             bridge.setTheme(theme)
             guard context.coordinator.scale != scale else { return }
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)

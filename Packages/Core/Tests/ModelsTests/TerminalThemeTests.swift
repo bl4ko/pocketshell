@@ -37,6 +37,8 @@ import Testing
 
 @Test func accentHexIsAnsiBlue() {
     #expect(TerminalTheme.defaultTheme.accentHex == "2472c8")
+    #expect(TerminalTheme.named("Pocketshell").background == "24262b")
+    #expect(TerminalTheme.named("Pocketshell").accentHex == "e8590c")
     #expect(TerminalTheme.named("Dracula").accentHex == "bd93f9")
 }
 

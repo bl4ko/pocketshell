@@ -5,7 +5,7 @@
     import UIKit
 
     extension UIColor {
-        convenience init(_ rgb: RGBColor) {
+        convenience init(_ rgb: Models.RGBColor) {
             self.init(
                 red: CGFloat(rgb.red) / 255,
                 green: CGFloat(rgb.green) / 255,
@@ -15,27 +15,53 @@
         }
     }
 
+    private final class BottomAnchoredTerminalView: TerminalView {
+        private var previousSize = CGSize.zero
+        var pasteImage: (() -> Bool)?
+
+        override var canBecomeFocused: Bool { false }
+
+        override func paste(_ sender: Any?) {
+            if pasteImage?() != true {
+                super.paste(sender)
+            }
+        }
+
+        override func layoutSubviews() {
+            let sizeChanged = bounds.size != previousSize
+            let wasAtBottom = !canScroll || scrollPosition >= 0.999
+            super.layoutSubviews()
+            if sizeChanged, wasAtBottom {
+                scroll(toPosition: 1)
+            }
+            accessibilityValue = !canScroll || scrollPosition >= 0.999 ? "bottom" : "history"
+            previousSize = bounds.size
+        }
+    }
+
     public struct SSHTerminalView: UIViewRepresentable {
         private let bridge: TerminalBridge
         private let theme: TerminalTheme
+        private let scale: Double
 
-        public init(bridge: TerminalBridge, theme: TerminalTheme = .defaultTheme) {
+        public init(bridge: TerminalBridge, theme: TerminalTheme = .defaultTheme, scale: Double = 1) {
             self.bridge = bridge
             self.theme = theme
+            self.scale = scale
         }
 
         static func apply(_ theme: TerminalTheme, to view: TerminalView) {
-            if let background = RGBColor(hex: theme.background) {
+            if let background = Models.RGBColor(hex: theme.background) {
                 view.backgroundColor = UIColor(background)
                 view.nativeBackgroundColor = UIColor(background)
             }
-            if let foreground = RGBColor(hex: theme.foreground) {
+            if let foreground = Models.RGBColor(hex: theme.foreground) {
                 view.nativeForegroundColor = UIColor(foreground)
             }
-            if let cursor = RGBColor(hex: theme.cursor) {
+            if let cursor = Models.RGBColor(hex: theme.cursor) {
                 view.caretColor = UIColor(cursor)
             }
-            let colors = theme.ansi.compactMap { RGBColor(hex: $0) }.map {
+            let colors = theme.ansi.compactMap { Models.RGBColor(hex: $0) }.map {
                 SwiftTerm.Color(
                     red: UInt16($0.red) * 257,
                     green: UInt16($0.green) * 257,
@@ -47,13 +73,24 @@
             }
         }
 
+        static func isApplied(_ theme: TerminalTheme, to view: TerminalView) -> Bool {
+            guard
+                let background = Models.RGBColor(hex: theme.background),
+                let foreground = Models.RGBColor(hex: theme.foreground),
+                let cursor = Models.RGBColor(hex: theme.cursor)
+            else { return false }
+            return view.nativeBackgroundColor.isEqual(UIColor(background))
+                && view.nativeForegroundColor.isEqual(UIColor(foreground))
+                && view.caretColor.isEqual(UIColor(cursor))
+        }
+
         public func makeUIView(context: Context) -> TerminalView {
-            let view = TerminalView()
+            let view = BottomAnchoredTerminalView()
+            view.accessibilityIdentifier = "terminal.view"
             view.terminalDelegate = context.coordinator
-            Self.apply(theme, to: view)
-            context.coordinator.appliedTheme = theme.name
             view.allowMouseReporting = false
             view.inputAccessoryView = nil
+            view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
             let pan = UIPanGestureRecognizer(
                 target: context.coordinator,
                 action: #selector(Coordinator.handleScrollPan(_:))
@@ -68,18 +105,26 @@
             )
             view.addGestureRecognizer(pinch)
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
-            if FontZoom.range.contains(saved) {
-                view.font = UIFont.monospacedSystemFont(ofSize: CGFloat(saved), weight: .regular)
-            }
+            let base = FontZoom.range.contains(saved) ? saved : Double(view.font.pointSize)
+            view.font = UIFont.monospacedSystemFont(
+                ofSize: CGFloat(FontZoom.size(base: base, scale: scale)), weight: .regular)
+            context.coordinator.scale = scale
             bridge.view = view
+            bridge.setTheme(theme)
             return view
         }
 
         public func updateUIView(_ uiView: TerminalView, context: Context) {
-            if context.coordinator.appliedTheme != theme.name {
-                Self.apply(theme, to: uiView)
-                context.coordinator.appliedTheme = theme.name
-            }
+            bridge.setTheme(theme)
+            guard context.coordinator.scale != scale else { return }
+            let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
+            let base =
+                FontZoom.range.contains(saved)
+                ? saved
+                : Double(uiView.font.pointSize) / context.coordinator.scale
+            uiView.font = UIFont.monospacedSystemFont(
+                ofSize: CGFloat(FontZoom.size(base: base, scale: scale)), weight: .regular)
+            context.coordinator.scale = scale
         }
 
         public func makeCoordinator() -> Coordinator {
@@ -99,13 +144,13 @@
             private let bridge: TerminalBridge
             private var scrollTracker = PanScrollTracker(step: 1)
             var gestureDelegate: SimultaneousGestureDelegate?
-            var appliedTheme: String?
 
             init(bridge: TerminalBridge) {
                 self.bridge = bridge
             }
 
             static let fontSizeKey = "pocketshell.terminalFontSize"
+            var scale = 1.0
             private var pinchBaseSize: Double = 0
 
             @objc func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
@@ -131,7 +176,7 @@
                         view.font = UIFont.monospacedSystemFont(ofSize: CGFloat(size.rounded()), weight: .regular)
                     }
                 case .ended:
-                    UserDefaults.standard.set(Double(view.font.pointSize), forKey: Self.fontSizeKey)
+                    UserDefaults.standard.set(Double(view.font.pointSize) / scale, forKey: Self.fontSizeKey)
                 default:
                     break
                 }

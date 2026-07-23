@@ -33,7 +33,7 @@ struct VNCHostFormView: View {
                         .keyboardType(.URL)
                     TextField("Port", text: $port)
                         .keyboardType(.numberPad)
-                    TextField("Group (optional)", text: $group)
+                    GroupField(group: $group, groups: groups)
                 }
                 Section {
                     TextField("Username", text: $username)
@@ -77,5 +77,9 @@ struct VNCHostFormView: View {
             store.setVNCPassword(password, for: host)
         }
         dismiss()
+    }
+
+    private var groups: [String] {
+        Array(Set(store.hosts.compactMap(\.group) + store.vncHosts.compactMap(\.group))).sorted()
     }
 }

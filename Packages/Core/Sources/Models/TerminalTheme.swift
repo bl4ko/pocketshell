@@ -47,7 +47,19 @@ public struct TerminalTheme: Equatable, Sendable, Identifiable {
         ]
     )
 
+    public static let pocketshell = TerminalTheme(
+        name: "Pocketshell",
+        background: "24262b",
+        foreground: "e5e1da",
+        cursor: "e8590c",
+        ansi: [
+            "303238", "d75a35", "4fb86b", "dea642", "e8590c", "b879e8", "68c5d2", "e5e1da",
+            "72767d", "f07855", "72d58b", "f0bf61", "f47a35", "cf9af1", "8bd9e3", "ffffff",
+        ]
+    )
+
     public static let all: [TerminalTheme] = [
+        pocketshell,
         defaultTheme,
         TerminalTheme(
             name: "Dracula",

@@ -18,7 +18,22 @@
 
     private final class BottomAnchoredTerminalView: TerminalView {
         private var previousSize = CGSize.zero
+        #if targetEnvironment(macCatalyst)
+            private let dragSelectionLayer = CAShapeLayer()
+            private var dragSelectionStart: Position?
+            private var dragSelectionEnd: Position?
+        #endif
         var pasteImage: (() -> Bool)?
+
+        override func copy(_ sender: Any?) {
+            #if targetEnvironment(macCatalyst)
+                if let text = dragSelectionText(), !text.isEmpty {
+                    UIPasteboard.general.string = text
+                    return
+                }
+            #endif
+            super.copy(sender)
+        }
 
         override func paste(_ sender: Any?) {
             if pasteImage?() != true {
@@ -36,6 +51,74 @@
             accessibilityValue = !canScroll || scrollPosition >= 0.999 ? "bottom" : "history"
             previousSize = bounds.size
         }
+
+        #if targetEnvironment(macCatalyst)
+            func beginDragSelection(at point: CGPoint) {
+                dragSelectionStart = terminalPosition(at: point)
+                dragSelectionEnd = dragSelectionStart
+                drawDragSelection()
+            }
+
+            func extendDragSelection(to point: CGPoint) {
+                dragSelectionEnd = terminalPosition(at: point)
+                drawDragSelection()
+            }
+
+            func clearDragSelection() {
+                dragSelectionStart = nil
+                dragSelectionEnd = nil
+                dragSelectionLayer.removeFromSuperlayer()
+            }
+
+            private func terminalPosition(at point: CGPoint) -> Position {
+                let terminal = getTerminal()
+                let col = min(max(Int(point.x / bounds.width * CGFloat(terminal.cols)), 0), terminal.cols - 1)
+                let row = min(max(Int(point.y / bounds.height * CGFloat(terminal.rows)), 0), terminal.rows - 1)
+                return Position(col: col, row: row)
+            }
+
+            private func orderedSelection() -> (Position, Position)? {
+                guard let start = dragSelectionStart, let end = dragSelectionEnd else { return nil }
+                return start.row < end.row || (start.row == end.row && start.col <= end.col)
+                    ? (start, end) : (end, start)
+            }
+
+            private func dragSelectionText() -> String? {
+                guard let (start, end) = orderedSelection() else { return nil }
+                return (start.row...end.row).compactMap { row in
+                    guard let line = getTerminal().getLine(row: row) else { return nil }
+                    let text = line.translateToString(trimRight: true)
+                    let lower = row == start.row ? start.col : 0
+                    let upper = row == end.row ? end.col + 1 : text.count
+                    guard lower < text.count else { return "" }
+                    return String(text.dropFirst(lower).prefix(max(0, min(upper, text.count) - lower)))
+                }.joined(separator: "\n")
+            }
+
+            private func drawDragSelection() {
+                guard let (start, end) = orderedSelection() else { return }
+                let terminal = getTerminal()
+                let cellWidth = bounds.width / CGFloat(terminal.cols)
+                let cellHeight = bounds.height / CGFloat(terminal.rows)
+                let path = CGMutablePath()
+                for row in start.row...end.row {
+                    let firstCol = row == start.row ? start.col : 0
+                    let lastCol = row == end.row ? end.col : terminal.cols - 1
+                    path.addRect(
+                        CGRect(
+                            x: CGFloat(firstCol) * cellWidth,
+                            y: CGFloat(row) * cellHeight,
+                            width: CGFloat(lastCol - firstCol + 1) * cellWidth,
+                            height: cellHeight
+                        ))
+                }
+                dragSelectionLayer.path = path
+                dragSelectionLayer.fillColor = UIColor.systemBlue.withAlphaComponent(0.35).cgColor
+                if dragSelectionLayer.superlayer == nil {
+                    layer.addSublayer(dragSelectionLayer)
+                }
+            }
+        #endif
     }
 
     private final class TerminalViewController: UIViewController {
@@ -144,6 +227,15 @@
             tap.cancelsTouchesInView = false
             tap.delegate = gestureDelegate
             view.addGestureRecognizer(tap)
+            #if targetEnvironment(macCatalyst)
+                let selectionPan = UIPanGestureRecognizer(
+                    target: context.coordinator,
+                    action: #selector(Coordinator.handleSelectionPan(_:))
+                )
+                selectionPan.maximumNumberOfTouches = 1
+                selectionPan.delegate = gestureDelegate
+                view.addGestureRecognizer(selectionPan)
+            #endif
             let pinch = UIPinchGestureRecognizer(
                 target: context.coordinator,
                 action: #selector(Coordinator.handlePinch(_:))
@@ -214,6 +306,9 @@
             @objc func handleMouseTap(_ gesture: UITapGestureRecognizer) {
                 MainActor.assumeIsolated {
                     guard gesture.state == .ended, let view = gesture.view as? TerminalView else { return }
+                    #if targetEnvironment(macCatalyst)
+                        (view as? BottomAnchoredTerminalView)?.clearDragSelection()
+                    #endif
                     let terminal = view.getTerminal()
                     guard terminal.mouseMode != .off else { return }
                     let location = gesture.location(in: view)
@@ -223,18 +318,36 @@
                         Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
                     terminal.sendEvent(
                         buttonFlags: terminal.encodeButton(
-                            button: 1, release: false, shift: false, meta: false, control: false),
+                            button: 0, release: false, shift: false, meta: false, control: false),
                         x: col,
                         y: row
                     )
                     terminal.sendEvent(
                         buttonFlags: terminal.encodeButton(
-                            button: 1, release: true, shift: false, meta: false, control: false),
+                            button: 0, release: true, shift: false, meta: false, control: false),
                         x: col,
                         y: row
                     )
                 }
             }
+
+            #if targetEnvironment(macCatalyst)
+                @objc func handleSelectionPan(_ gesture: UIPanGestureRecognizer) {
+                    MainActor.assumeIsolated {
+                        guard gesture.buttonMask.contains(.primary),
+                            let view = gesture.view as? BottomAnchoredTerminalView
+                        else { return }
+                        switch gesture.state {
+                        case .began:
+                            view.beginDragSelection(at: gesture.location(in: view))
+                        case .changed, .ended:
+                            view.extendDragSelection(to: gesture.location(in: view))
+                        default:
+                            break
+                        }
+                    }
+                }
+            #endif
 
             @MainActor private func handlePinchOnMain(_ gesture: UIPinchGestureRecognizer) {
                 guard let view = gesture.view as? TerminalView else { return }
@@ -255,6 +368,9 @@
 
             @MainActor private func handleScrollPanOnMain(_ gesture: UIPanGestureRecognizer) {
                 guard let view = gesture.view as? TerminalView else { return }
+                #if targetEnvironment(macCatalyst)
+                    guard !gesture.buttonMask.contains(.primary) else { return }
+                #endif
                 let terminal = view.getTerminal()
                 switch gesture.state {
                 case .began:

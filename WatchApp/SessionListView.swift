@@ -51,7 +51,7 @@ struct SessionListView: View {
             Text(window.lastLine)
                 .font(.system(size: 11).monospaced())
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(2)
         }
     }
 
@@ -79,16 +79,20 @@ struct ReplyView: View {
 
     var body: some View {
         List {
-            Text(window.lastLine)
-                .font(.system(size: 11).monospaced())
-                .foregroundStyle(.secondary)
-            ForEach(Self.replies, id: \.label) { reply in
-                Button(reply.label) {
-                    client.send(window: window, text: reply.text, pressEnter: true)
-                }
+            Section("Recent output") {
+                Text(window.lastLine)
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(.secondary)
             }
-            Button("Enter only") {
-                client.send(window: window, text: "", pressEnter: true)
+            Section("Reply") {
+                ForEach(Self.replies, id: \.label) { reply in
+                    Button(reply.label) {
+                        client.send(window: window, text: reply.text, pressEnter: true)
+                    }
+                }
+                Button("Enter only") {
+                    client.send(window: window, text: "", pressEnter: true)
+                }
             }
         }
         .navigationTitle(window.name)

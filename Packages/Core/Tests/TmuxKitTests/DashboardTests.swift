@@ -52,6 +52,34 @@ import Testing
     #expect(AgentStatus.classify(pane) == .busy)
 }
 
+@Test func classifyBusySpinnerAboveTaskOverlay() {
+    let pane = """
+        ✻ Sautéing… (36s · ↓ 3.8k tokens)
+          ⎿ Tip: Use /btw to ask a quick side question without interrupting Claude's current work
+
+        ● How is Claude doing this session? (optional)
+          1: Bad    2: Fine    3: Good    0: Dismiss
+
+        ❯ proceed
+        ❯ Press up to edit queued messages
+
+        ctx: 11% used / 89% left  [Opus 4.8 (1M context)]
+        ⏵⏵ auto mode on (shift+tab to cycle)
+
+        ▣ main                      ↑/↓ to select · Enter to view
+        ○ github-checker   Run github-checker agent       24s
+        ○ infra-auditor    Run infra-auditor agent        23s
+        ○ pentester        Run pentester agent            21s
+        ○ digest-generator Run digest-generator MORNING   20s
+        ○ digest-generator Run digest-generator EVENING   18s
+        ○ skills-updater   Run skills-updater agent       17s
+        ○ code-improver    Run code-improver agent        15s
+        ○ updater          Run updater agent              14s
+        ○ backup-tester    Run backup-tester agent        13s
+        """
+    #expect(AgentStatus.classify(pane) == .busy)
+}
+
 @Test func classifyBusyForOpencodeEscInterrupt() {
     #expect(AgentStatus.classify("▄▀█▄  esc interrupt") == .busy)
     #expect(AgentStatus.classify("esc again to interrupt") == .busy)
@@ -123,7 +151,11 @@ import Testing
 
 @Test func previewLinesDropsDashAndUnderscoreLines() {
     let pane = "result: 4 tests passed\n----------\n____________\n  ? for shortcuts"
-    #expect(Tmux.previewLines(pane, count: 3) == "result: 4 tests passed\n  ? for shortcuts")
+    #expect(Tmux.previewLines(pane, count: 3) == "result: 4 tests passed\n? for shortcuts")
+}
+
+@Test func previewLinesTrimsTerminalPadding() {
+    #expect(Tmux.previewLines("                 useful text\n   ", count: 1) == "useful text")
 }
 
 @Test func previewLinesKeepsLastCountMeaningfulLines() {

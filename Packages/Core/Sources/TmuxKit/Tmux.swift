@@ -30,6 +30,16 @@ public struct TmuxSession: Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
+public struct TmuxPaneSnapshot: Equatable, Sendable {
+    public var command: String
+    public var text: String
+
+    public init(command: String, text: String) {
+        self.command = command
+        self.text = text
+    }
+}
+
 public enum AgentStatus: Equatable, Sendable {
     case busy
     case waiting
@@ -69,7 +79,10 @@ public enum AgentStatus: Equatable, Sendable {
         while lines.last?.allSatisfy(\.isWhitespace) == true {
             lines.removeLast()
         }
-        let tail = lines.suffix(15).joined(separator: "\n")
+        let baseTail = lines.suffix(15)
+        let tail =
+            (baseTail.joined(separator: "\n").lowercased().contains("enter to view")
+            ? lines.suffix(40) : baseTail).joined(separator: "\n")
         let lowered = tail.lowercased()
         if lowered.contains("compacting conversation") || lowered.contains(/esc\b.{0,12}interrupt/) {
             return .busy
@@ -111,7 +124,7 @@ public enum Tmux {
         let clone = cloneName(session: session, clientTag: clientTag)
         let attach =
             "\(tmux) -u new-session -t \(shellQuote(session)) -s \(shellQuote(clone))"
-            + " \\; set-option destroy-unattached on"
+            + " \\; set-option destroy-unattached on \\; set-option status off"
         guard let windowIndex else { return attach }
         return "\(attach) \\; select-window -t \(windowIndex)"
     }
@@ -127,6 +140,28 @@ public enum Tmux {
         let target = shellQuote(session)
         return
             "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w; done"
+    }
+
+    public static func capturePaneSnapshotCommand(target: String) -> String {
+        let target = shellQuote(target)
+        return
+            "\(tmux) display-message -p -t \(target) '@@command:#{pane_current_command}@@'"
+            + " && \(tmux) capture-pane -p -t \(target)"
+    }
+
+    public static func parsePaneSnapshot(_ output: String) -> TmuxPaneSnapshot? {
+        let separator = output.firstIndex(of: "\n")
+        let header = separator.map { output[..<$0] } ?? output[...]
+        guard header.hasPrefix("@@command:"), header.hasSuffix("@@") else { return nil }
+        let command = header.dropFirst(10).dropLast(2)
+        let text = separator.map { String(output[output.index(after: $0)...]) } ?? ""
+        return TmuxPaneSnapshot(command: String(command), text: text)
+    }
+
+    public static func isInteractiveShell(_ command: String) -> Bool {
+        let name = command.split(separator: "/").last.map(String.init) ?? command
+        return ["sh", "bash", "zsh", "fish", "dash", "ash", "ksh", "csh", "tcsh", "nu", "pwsh", "powershell"]
+            .contains(name.trimmingCharacters(in: CharacterSet(charactersIn: "-")).lowercased())
     }
 
     public static func reorderWindowsCommand(session: String, indexes: [Int], fromOffset: Int, toOffset: Int) -> String?
@@ -196,6 +231,7 @@ public enum Tmux {
 
     public static func previewLines(_ text: String, count: Int) -> String {
         text.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { line in line.contains { $0.isLetter || $0.isNumber } }
             .suffix(count)
             .joined(separator: "\n")
@@ -233,7 +269,9 @@ public enum Tmux {
             let key = session.group ?? session.name
             if var existing = merged[key] {
                 existing.attached = existing.attached || session.attached
-                if session.name == key {
+                if session.name == key
+                    || (isPocketShellClone(existing.name) && !isPocketShellClone(session.name))
+                {
                     existing.name = session.name
                     existing.windows = session.windows
                 }
@@ -246,8 +284,16 @@ public enum Tmux {
         return order.compactMap { merged[$0] }
     }
 
+    private static func isPocketShellClone(_ name: String) -> Bool {
+        name.contains(/-psh-[[:alnum:]]+$/)
+    }
+
     public static func newSessionCommand(name: String) -> String {
         "\(tmux) new-session -d -s \(shellQuote(name))"
+    }
+
+    public static func newWindowCommand(session: String) -> String {
+        "\(tmux) new-window -t \(shellQuote(session))"
     }
 
     public static func renameWindowCommand(session: String, windowIndex: Int, name: String) -> String {

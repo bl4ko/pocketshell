@@ -219,10 +219,10 @@ struct HostTabsScreen: View {
         persistTabs()
     }
 
-    private func openWindowInNewTab(session: String, windowIndex: Int?) {
+    private func openWindowInNewTab(session: String, windowIndex: Int?, name: String? = nil) {
         let controller = makeController()
         controller.preset(session: session, windowIndex: windowIndex)
-        let tab = TerminalTab(controller: controller)
+        let tab = TerminalTab(controller: controller, name: name)
         controller.onExit = { closeTab(id: tab.id) }
         tabs.append(tab)
         selectedTab = tab.id
@@ -603,7 +603,7 @@ struct TmuxJumpSheet: View {
     var orderKey: String?
     var onSelectTab: ((UUID) -> Void)?
     var onAddTab: (() -> Void)?
-    var onOpenWindowInNewTab: ((String, Int?) -> Void)?
+    var onOpenWindowInNewTab: ((String, Int?, String?) -> Void)?
     var onRenameSession: ((String, String) -> Void)?
     var onRenameTab: ((UUID, String) -> Void)?
     var onCloseTab: ((UUID) -> Void)?
@@ -678,7 +678,7 @@ struct TmuxJumpSheet: View {
                                 .accessibilityIdentifier("tmux-window-\(session.name)-\(item.window.index)")
                                 .contextMenu {
                                     Button("Open in New Tab") {
-                                        onOpenWindowInNewTab?(session.name, item.window.index)
+                                        onOpenWindowInNewTab?(session.name, item.window.index, item.window.name)
                                         dismiss()
                                     }
                                     Button("Rename…") {
@@ -993,7 +993,7 @@ struct TmuxJumpSheet: View {
         case .newSession:
             Task {
                 guard await controller?.createTmuxSession(named: name) == true else { return }
-                onOpenWindowInNewTab?(name, nil)
+                onOpenWindowInNewTab?(name, nil, name)
                 dismiss()
             }
         case .renameSession(let old):

@@ -30,6 +30,9 @@ import Testing
 @Test func ctrlAppliedToLowercaseLetter() {
     #expect(ToolbarKeyEncoder.applyCtrl(to: "c") == Data([0x03]))
     #expect(ToolbarKeyEncoder.applyCtrl(to: "b") == Data([0x02]))
+    #expect(ToolbarKeyEncoder.applyCtrl(to: "k") == Data([0x0b]))
+    #expect(ToolbarKeyEncoder.applyCtrl(to: "l") == Data([0x0c]))
+    #expect(ToolbarKeyEncoder.applyCtrl(to: "u") == Data([0x15]))
     #expect(ToolbarKeyEncoder.applyCtrl(to: "z") == Data([0x1a]))
 }
 

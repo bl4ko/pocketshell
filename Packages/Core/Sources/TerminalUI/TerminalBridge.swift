@@ -144,12 +144,6 @@
             }
         }
 
-        func sendControl(_ character: Character) {
-            if let data = ToolbarKeyEncoder.applyCtrl(to: character) {
-                sendToHost?(data)
-            }
-        }
-
         public func processOutgoing(_ data: Data) {
             if feedingView, AutomaticReplyFilter.shouldSuppress(data) {
                 return

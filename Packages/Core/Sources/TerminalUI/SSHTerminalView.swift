@@ -18,27 +18,6 @@
     private final class BottomAnchoredTerminalView: TerminalView {
         private var previousSize = CGSize.zero
         var pasteImage: (() -> Bool)?
-        var sendControl: ((Character) -> Void)?
-
-        #if targetEnvironment(macCatalyst)
-            override var keyCommands: [UIKeyCommand]? {
-                "abcdefghijklmnopqrstuvwxyz".map { character in
-                    let command = UIKeyCommand(
-                        input: String(character),
-                        modifierFlags: .control,
-                        action: #selector(handleControl(_:))
-                    )
-                    command.wantsPriorityOverSystemBehavior = true
-                    return command
-                }
-            }
-
-            @objc private func handleControl(_ command: UIKeyCommand) {
-                if let character = command.input?.first {
-                    sendControl?(character)
-                }
-            }
-        #endif
 
         override func paste(_ sender: Any?) {
             if pasteImage?() != true {
@@ -111,7 +90,6 @@
             view.inputAccessoryView = nil
             view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
-            view.sendControl = { [weak bridge] in bridge?.sendControl($0) }
             let pan = UIPanGestureRecognizer(
                 target: context.coordinator,
                 action: #selector(Coordinator.handleScrollPan(_:))

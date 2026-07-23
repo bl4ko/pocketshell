@@ -295,11 +295,27 @@ public enum Tmux {
     }
 
     public static func canonicalSessionNames(_ output: String, requested: [String]) -> [String] {
-        let requestedSet = Set(requested)
-        let matches = consolidateGroups(parseSessions(output)).filter {
-            requestedSet.contains($0.name) || $0.group.map(requestedSet.contains) == true
+        let sessionMap = canonicalSessionMap(output, requested: requested)
+        let names = requested.compactMap { sessionMap[$0] }
+        return names.isEmpty
+            ? requested
+            : names.reduce(into: []) {
+                if !$0.contains($1) { $0.append($1) }
+            }
+    }
+
+    public static func canonicalSessionMap(_ output: String, requested: [String]) -> [String: String] {
+        let parsed = parseSessions(output)
+        let canonical = consolidateGroups(parsed)
+        return requested.reduce(into: [:]) { result, requestedName in
+            let requestedGroup = parsed.first { $0.name == requestedName }.map { $0.group ?? $0.name }
+            if let session = canonical.first(where: { session in
+                session.name == requestedName || session.group == requestedName
+                    || requestedGroup.map { (session.group ?? session.name) == $0 } == true
+            }) {
+                result[requestedName] = session.name
+            }
         }
-        return matches.isEmpty ? requested : matches.map(\.name)
     }
 
     private static func isPocketShellClone(_ name: String) -> Bool {

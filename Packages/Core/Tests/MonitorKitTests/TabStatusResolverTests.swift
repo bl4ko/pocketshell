@@ -95,6 +95,27 @@ private let compactingTail = """
     #expect(resolver.resolve(key: "t1", text: "$ ") == nil)
 }
 
+@Test func singleIdleFrameDuringBusyHoldsBusy() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: busyScreen)
+    #expect(resolver.resolve(key: "t1", text: idleScreen) == .busy)
+    #expect(resolver.resolve(key: "t1", text: busyScreen) == .busy)
+    #expect(resolver.resolve(key: "t1", text: idleScreen) == .busy)
+}
+
+@Test func consecutiveIdleFramesConfirmIdleAfterBusy() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: busyScreen)
+    _ = resolver.resolve(key: "t1", text: idleScreen)
+    #expect(resolver.resolve(key: "t1", text: idleScreen) == .idle)
+}
+
+@Test func waitingFlipsImmediatelyFromBusy() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: busyScreen)
+    #expect(resolver.resolve(key: "t1", text: waitingScreen) == .waiting)
+}
+
 @Test func forgetDropsState() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)

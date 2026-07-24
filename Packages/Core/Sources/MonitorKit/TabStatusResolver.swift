@@ -3,12 +3,18 @@ import TmuxKit
 public struct TabStatusResolver: Sendable {
     private var lastStatus: [String: AgentStatus] = [:]
     private var blankStreak: [String: Int] = [:]
+    private var pendingIdle: Set<String> = []
 
     public init() {}
 
     public mutating func resolve(key: String, text: String, agentRunning: Bool? = nil) -> AgentStatus? {
         if let detected = AgentStatus.detectAgent(text) {
             blankStreak[key] = 0
+            if detected == .idle, lastStatus[key] == .busy, !pendingIdle.contains(key) {
+                pendingIdle.insert(key)
+                return .busy
+            }
+            pendingIdle.remove(key)
             lastStatus[key] = detected
             return detected
         }
@@ -33,5 +39,6 @@ public struct TabStatusResolver: Sendable {
     public mutating func forget(key: String) {
         lastStatus[key] = nil
         blankStreak[key] = nil
+        pendingIdle.remove(key)
     }
 }

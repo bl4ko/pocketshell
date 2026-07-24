@@ -2,6 +2,7 @@ import Foundation
 import Models
 import SwiftUI
 import TmuxKit
+import UIKit
 
 enum PocketshellTheme {
     private static var selected: TerminalTheme {
@@ -96,6 +97,7 @@ private struct AppScreen: ViewModifier {
 
     func body(content: Content) -> some View {
         let theme = TerminalTheme.named(themeName)
+        let style: UIUserInterfaceStyle = theme == .pocketshell ? .light : .dark
         content
             .scrollContentBackground(.hidden)
             .background(PocketshellTheme.paper.ignoresSafeArea())
@@ -103,6 +105,18 @@ private struct AppScreen: ViewModifier {
             .toolbarBackground(PocketshellTheme.paper, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .preferredColorScheme(theme == .pocketshell ? .light : .dark)
+            .onAppear { Self.overrideWindows(style) }
+            .onChange(of: themeName) { _, name in
+                Self.overrideWindows(TerminalTheme.named(name) == .pocketshell ? .light : .dark)
+            }
+    }
+
+    private static func overrideWindows(_ style: UIUserInterfaceStyle) {
+        for scene in UIApplication.shared.connectedScenes {
+            for window in (scene as? UIWindowScene)?.windows ?? [] {
+                window.overrideUserInterfaceStyle = style
+            }
+        }
     }
 }
 

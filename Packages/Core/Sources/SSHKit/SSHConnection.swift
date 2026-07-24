@@ -302,6 +302,7 @@ final class ShellDataHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = SSHChannelData
 
     private let continuation: AsyncStream<Data>.Continuation
+    private var pending = Data()
 
     init(continuation: AsyncStream<Data>.Continuation) {
         self.continuation = continuation
@@ -310,12 +311,24 @@ final class ShellDataHandler: ChannelInboundHandler, @unchecked Sendable {
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let channelData = unwrapInboundIn(data)
         guard case .byteBuffer(let buffer) = channelData.data else { return }
-        continuation.yield(Data(buffer.readableBytesView))
+        pending.append(contentsOf: buffer.readableBytesView)
+    }
+
+    func channelReadComplete(context: ChannelHandlerContext) {
+        flush()
+        context.fireChannelReadComplete()
     }
 
     func channelInactive(context: ChannelHandlerContext) {
+        flush()
         continuation.finish()
         context.fireChannelInactive()
+    }
+
+    private func flush() {
+        guard !pending.isEmpty else { return }
+        continuation.yield(pending)
+        pending = Data()
     }
 }
 

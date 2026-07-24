@@ -148,6 +148,13 @@
                 )
                 copyCommand.wantsPriorityOverSystemBehavior = true
                 addKeyCommand(copyCommand)
+                let pasteCommand = UIKeyCommand(
+                    input: "v",
+                    modifierFlags: .command,
+                    action: #selector(handlePaste)
+                )
+                pasteCommand.wantsPriorityOverSystemBehavior = true
+                addKeyCommand(pasteCommand)
                 let escapeCommand = UIKeyCommand(
                     input: UIKeyCommand.inputEscape,
                     modifierFlags: [],
@@ -165,6 +172,10 @@
 
             @objc private func handleCopy() {
                 terminalView.copy(nil)
+            }
+
+            @objc private func handlePaste() {
+                terminalView.paste(nil)
             }
 
             @objc private func handleEscape() {

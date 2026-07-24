@@ -7,7 +7,7 @@ import Testing
     #expect(
         commands == [
             "printf '%s' 'aGVsbG8=' > '/tmp/psh-x.jpg.b64'",
-            "base64 -d '/tmp/psh-x.jpg.b64' > '/tmp/psh-x.jpg' && rm '/tmp/psh-x.jpg.b64'",
+            "base64 -d < '/tmp/psh-x.jpg.b64' > '/tmp/psh-x.jpg' && rm '/tmp/psh-x.jpg.b64'",
         ])
 }
 
@@ -18,7 +18,7 @@ import Testing
             "printf '%s' 'AAAA' > '/tmp/f.png.b64'",
             "printf '%s' 'BBBB' >> '/tmp/f.png.b64'",
             "printf '%s' 'CC' >> '/tmp/f.png.b64'",
-            "base64 -d '/tmp/f.png.b64' > '/tmp/f.png' && rm '/tmp/f.png.b64'",
+            "base64 -d < '/tmp/f.png.b64' > '/tmp/f.png' && rm '/tmp/f.png.b64'",
         ])
 }
 

@@ -360,7 +360,12 @@ final class ConnectionController: ObservableObject {
         guard let connection else { return }
         let path = RemoteFileUpload.remotePath()
         for command in RemoteFileUpload.commands(base64: data.base64EncodedString(), remotePath: path) {
-            guard (try? await connection.exec(command)) != nil else { return }
+            do {
+                _ = try await connection.exec(command)
+            } catch {
+                bridge.feed(Data("\r\n[image paste failed: \(error)]\r\n".utf8))
+                return
+            }
         }
         bridge.sendToHost?(Data("\(path) ".utf8))
     }

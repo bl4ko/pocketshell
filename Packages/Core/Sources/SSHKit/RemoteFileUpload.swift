@@ -11,7 +11,7 @@ public enum RemoteFileUpload {
             result.append("printf '%s' '\(base64[index..<end])' \(redirect) \(staging)")
             index = end
         }
-        result.append("base64 -d \(staging) > '\(remotePath)' && rm \(staging)")
+        result.append("base64 -d < \(staging) > '\(remotePath)' && rm \(staging)")
         return result
     }
 

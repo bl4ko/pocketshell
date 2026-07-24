@@ -76,6 +76,14 @@
             view?.paste(nil)
         }
 
+        public func sendPasted(_ text: String) {
+            guard view?.getTerminal().bracketedPasteMode == true else {
+                sendToHost?(Data(text.utf8))
+                return
+            }
+            sendToHost?(Data("\u{1b}[200~\(text)\u{1b}[201~".utf8))
+        }
+
         func pasteImage() -> Bool {
             guard let imagePaste else { return false }
             let pasteboard = UIPasteboard.general

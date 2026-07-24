@@ -367,7 +367,8 @@ final class ConnectionController: ObservableObject {
                 return
             }
         }
-        bridge.sendToHost?(Data("\(path) ".utf8))
+        bridge.sendPasted(path)
+        bridge.sendToHost?(Data(" ".utf8))
     }
 
     private func handleStreamEnded(generation: Int) async {

@@ -121,6 +121,7 @@
         let terminalView = BottomAnchoredTerminalView()
         var sendControl: ((Character) -> Void)?
         var sendEscape: (() -> Void)?
+        var sendBytes: ((Data) -> Void)?
 
         override func loadView() {
             view = terminalView
@@ -158,6 +159,18 @@
                 )
                 escapeCommand.wantsPriorityOverSystemBehavior = true
                 addKeyCommand(escapeCommand)
+                for arrow in [
+                    UIKeyCommand.inputUpArrow, UIKeyCommand.inputDownArrow,
+                    UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow,
+                ] {
+                    let command = UIKeyCommand(
+                        input: arrow,
+                        modifierFlags: [],
+                        action: #selector(handleArrow(_:))
+                    )
+                    command.wantsPriorityOverSystemBehavior = true
+                    addKeyCommand(command)
+                }
             }
 
             @objc private func handleControl(_ command: UIKeyCommand) {
@@ -176,6 +189,21 @@
 
             @objc private func handleEscape() {
                 sendEscape?()
+            }
+
+            // SwiftTerm's pressesBegan repeats held keys on a fixed 0.4s/10Hz timer;
+            // UIKeyCommand repeats at the system key-repeat rate instead.
+            @objc private func handleArrow(_ command: UIKeyCommand) {
+                let letter: String
+                switch command.input {
+                case UIKeyCommand.inputUpArrow: letter = "A"
+                case UIKeyCommand.inputDownArrow: letter = "B"
+                case UIKeyCommand.inputRightArrow: letter = "C"
+                case UIKeyCommand.inputLeftArrow: letter = "D"
+                default: return
+                }
+                let prefix = terminalView.getTerminal().applicationCursor ? "\u{1b}O" : "\u{1b}["
+                sendBytes?(Data((prefix + letter).utf8))
             }
         #endif
     }
@@ -241,6 +269,9 @@
                 }
                 controller.sendEscape = { [weak bridge] in
                     bridge?.processOutgoing(Data([0x1b]))
+                }
+                controller.sendBytes = { [weak bridge] data in
+                    bridge?.processOutgoing(data)
                 }
                 controller.installControlKeyCommands()
             #endif

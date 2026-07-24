@@ -37,6 +37,7 @@ struct TabJumpItem: Identifiable {
 
 struct HostTabsScreen: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var monitor: SessionMonitor
     @ObservedObject private var router = NotificationRouter.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -44,6 +45,7 @@ struct HostTabsScreen: View {
     @State private var selectedTab: UUID?
     @State private var tabStatuses: [UUID: AgentStatus] = [:]
     @State private var unseenFinished: Set<UUID> = []
+    @State private var lastTabStatus: [UUID: AgentStatus] = [:]
     @State private var tabQuickReplies: [UUID: [Int]] = [:]
     @State private var tabTracker = AgentActivityTracker()
     @State private var tabResolver = TabStatusResolver()
@@ -173,8 +175,15 @@ struct HostTabsScreen: View {
         .onChange(of: router.pending) { _, _ in
             consumePendingTarget()
         }
+        .onChange(of: monitor.unseenFinished) { old, new in
+            for tab in tabs where tab.id != selectedTab {
+                if let key = tmuxKey(tab), new.contains(key), !old.contains(key) {
+                    promoteTab(id: tab.id)
+                }
+            }
+        }
         .onChange(of: selectedTab, initial: true) { _, _ in
-            if let selectedTab { unseenFinished.remove(selectedTab) }
+            if let tab = tabs.first(where: { $0.id == selectedTab }) { clearUnseen(tab) }
             for tab in tabs {
                 tab.controller.bridge.setLive(tab.id == selectedTab)
             }
@@ -319,6 +328,7 @@ struct HostTabsScreen: View {
         Task { await tab.controller.stop() }
         tabs.removeAll { $0.id == id }
         tabStatuses[id] = nil
+        lastTabStatus[id] = nil
         unseenFinished.remove(id)
         tabResolver.forget(key: id.uuidString)
         if selectedTab == id {
@@ -356,11 +366,14 @@ struct HostTabsScreen: View {
                 text = tab.controller.bridge.visibleText()
                 agentRunning = nil
             }
-            let previous = tabStatuses[tab.id]
+            let previous = lastTabStatus[tab.id]
             let status = tabResolver.resolve(key: tab.id.uuidString, text: text, agentRunning: agentRunning)
             tabStatuses[tab.id] = status
-            if status == .idle, previous == .busy, tab.id != selectedTab {
-                unseenFinished.insert(tab.id)
+            if let status { lastTabStatus[tab.id] = status }
+            if tab.id == selectedTab {
+                clearUnseen(tab)
+            } else if status == .idle, previous == .busy || previous == .waiting {
+                markUnseen(tab)
             }
             tabQuickReplies[tab.id] = status == .waiting ? AgentQuickReply.options(in: text) : []
             guard let status, !tab.controller.isTmuxAttached else { continue }
@@ -481,7 +494,7 @@ struct HostTabsScreen: View {
 
     private func tabAccessibilityLabel(_ tab: TerminalTab, index: Int) -> String {
         let status = tabStatuses[tab.id]?.label ?? "no status"
-        let unseen = unseenFinished.contains(tab.id) ? ", unseen" : ""
+        let unseen = isUnseen(tab) ? ", unseen" : ""
         return "\(tabLabel(tab, index: index)), \(status)\(unseen)"
     }
 
@@ -495,10 +508,43 @@ struct HostTabsScreen: View {
         persistTabs()
     }
 
+    private func tmuxKey(_ tab: TerminalTab) -> String? {
+        guard let target = tab.controller.tmuxTarget, let index = target.windowIndex else { return nil }
+        return SessionMonitor.windowKey(hostID: host.id, session: target.session, windowIndex: index)
+    }
+
+    private func isUnseen(_ tab: TerminalTab) -> Bool {
+        if unseenFinished.contains(tab.id) { return true }
+        guard let key = tmuxKey(tab) else { return false }
+        return monitor.unseenFinished.contains(key)
+    }
+
+    private func markUnseen(_ tab: TerminalTab) {
+        if let target = tab.controller.tmuxTarget, let index = target.windowIndex {
+            monitor.markFinished(hostID: host.id, session: target.session, windowIndex: index)
+        } else {
+            unseenFinished.insert(tab.id)
+        }
+        promoteTab(id: tab.id)
+    }
+
+    private func clearUnseen(_ tab: TerminalTab) {
+        unseenFinished.remove(tab.id)
+        if let target = tab.controller.tmuxTarget, let index = target.windowIndex {
+            monitor.markSeen(hostID: host.id, session: target.session, windowIndex: index)
+        }
+    }
+
+    private func promoteTab(id: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }), index > 0 else { return }
+        tabs.move(fromOffsets: IndexSet(integer: index), toOffset: 0)
+        persistTabs()
+    }
+
     @ViewBuilder
     private func statusDotView(for tab: TerminalTab) -> some View {
         if let status = tabStatuses[tab.id] {
-            let unseen = status == .idle && unseenFinished.contains(tab.id)
+            let unseen = status == .idle && isUnseen(tab)
             Circle()
                 .fill(unseen ? Color.blue : statusColor(status))
                 .frame(width: unseen ? 7 : 6, height: unseen ? 7 : 6)

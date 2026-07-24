@@ -56,6 +56,7 @@ final class SessionMonitor: ObservableObject {
     static let refreshTaskID = "com.bl4ko.pocketshell.refresh"
 
     @Published private(set) var snapshot: SessionSnapshot?
+    @Published private(set) var unseenFinished: Set<String> = []
 
     private let store: AppStore
     private var tracker = AgentActivityTracker()
@@ -69,6 +70,18 @@ final class SessionMonitor: ObservableObject {
 
     var enabled: Bool {
         UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey)
+    }
+
+    static func windowKey(hostID: UUID, session: String, windowIndex: Int) -> String {
+        "\(hostID):\(session):\(windowIndex)"
+    }
+
+    func markFinished(hostID: UUID, session: String, windowIndex: Int) {
+        unseenFinished.insert(Self.windowKey(hostID: hostID, session: session, windowIndex: windowIndex))
+    }
+
+    func markSeen(hostID: UUID, session: String, windowIndex: Int) {
+        unseenFinished.remove(Self.windowKey(hostID: hostID, session: session, windowIndex: windowIndex))
     }
 
     func startPolling() {
@@ -112,6 +125,9 @@ final class SessionMonitor: ObservableObject {
                     let text = captures[window.index] ?? ""
                     let status = AgentStatus.classify(text)
                     let key = "\(host.id):\(session):\(window.index)"
+                    if status == .busy {
+                        unseenFinished.remove(key)
+                    }
                     targets[key] = ["hostID": host.id.uuidString, "session": session, "windowIndex": window.index]
                     samples.append(
                         .init(
@@ -132,6 +148,9 @@ final class SessionMonitor: ObservableObject {
             }
         }
         let transitions = tracker.update(samples)
+        for transition in transitions where transition.status == .idle {
+            unseenFinished.insert(transition.key)
+        }
         let snapshot = SessionSnapshot(windows: snapshots, updatedAt: Date())
         self.snapshot = snapshot
         SnapshotStore.save(snapshot)

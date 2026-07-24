@@ -241,7 +241,13 @@ struct HostsListView: View {
                         let window = windows.first {
                             $0.session == record.tmuxSession && $0.index == record.windowIndex
                         }
-                        tabRow(record, index: index, window: window, updatedAt: monitor.snapshot?.updatedAt)
+                        tabRow(
+                            record,
+                            index: index,
+                            window: window,
+                            updatedAt: monitor.snapshot?.updatedAt,
+                            unseen: unseenTab(host: host, record: record, window: window)
+                        )
                     }
                 }
             }
@@ -265,13 +271,26 @@ struct HostsListView: View {
         }
     }
 
-    private func tabRow(_ record: TabRecord, index: Int, window: SessionSnapshot.Window?, updatedAt: Date?) -> some View
-    {
+    private func unseenTab(host: HostConfig, record: TabRecord, window: SessionSnapshot.Window?) -> Bool {
+        guard window?.status == "idle", let session = record.tmuxSession, let index = record.windowIndex else {
+            return false
+        }
+        return monitor.unseenFinished.contains(
+            SessionMonitor.windowKey(hostID: host.id, session: session, windowIndex: index))
+    }
+
+    private func tabRow(
+        _ record: TabRecord,
+        index: Int,
+        window: SessionSnapshot.Window?,
+        updatedAt: Date?,
+        unseen: Bool
+    ) -> some View {
         let status = window?.status
         let label = record.name ?? window.map(windowName) ?? "tab \(index + 1)"
         return HStack(spacing: 6) {
             if let status {
-                statusDot(statusColor(status), glow: status == "needs input")
+                statusDot(unseen ? .blue : statusColor(status), glow: unseen || status == "needs input")
             }
             Text(label)
                 .font(PocketshellTheme.mono(12, weight: .semibold))

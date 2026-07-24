@@ -85,14 +85,10 @@
 
             private func dragSelectionText() -> String? {
                 guard let (start, end) = orderedSelection() else { return nil }
-                return (start.row...end.row).compactMap { row in
-                    guard let line = getTerminal().getLine(row: row) else { return nil }
-                    let text = line.translateToString(trimRight: true)
-                    let lower = row == start.row ? start.col : 0
-                    let upper = row == end.row ? end.col + 1 : text.count
-                    guard lower < text.count else { return "" }
-                    return String(text.dropFirst(lower).prefix(max(0, min(upper, text.count) - lower)))
-                }.joined(separator: "\n")
+                let rows = (start.row...end.row).map { row in
+                    getTerminal().getLine(row: row)?.translateToString(trimRight: true) ?? ""
+                }
+                return SelectionText.join(rows: rows, startCol: start.col, endCol: end.col)
             }
 
             private func drawDragSelection() {

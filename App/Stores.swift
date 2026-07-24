@@ -4,14 +4,26 @@ import KeyKit
 import Models
 import SSHKit
 
+private func appDataURL(_ filename: String) -> URL {
+    let legacyDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("pocketshell", isDirectory: true)
+    let directory =
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SnapshotStore.appGroup)
+        ?? legacyDirectory
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent(filename)
+    let legacyURL = legacyDirectory.appendingPathComponent(filename)
+    if directory != legacyDirectory, !FileManager.default.fileExists(atPath: url.path) {
+        try? FileManager.default.copyItem(at: legacyURL, to: url)
+    }
+    return url
+}
+
 struct JSONStore<T: Codable> {
     let url: URL
 
     init(filename: String) {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("pocketshell", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        url = dir.appendingPathComponent(filename)
+        url = appDataURL(filename)
     }
 
     func load() -> T? {
@@ -86,9 +98,7 @@ final class AppStore: ObservableObject {
         savedTabs = savedTabsStore.load() ?? [:]
         sessionOrder = sessionOrderStore.load() ?? [:]
         workspaceUpdatedAt = workspaceUpdatedAtStore.load() ?? [:]
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("pocketshell", isDirectory: true)
-        knownHosts = KnownHostsStore(fileURL: dir.appendingPathComponent("known-hosts.json"))
+        knownHosts = KnownHostsStore(fileURL: appDataURL("known-hosts.json"))
         if cloudSyncEnabled {
             setCloudSyncEnabled(true)
         }

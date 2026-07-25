@@ -57,8 +57,16 @@ struct HostTabsScreen: View {
     @State private var editingSnippet: Snippet?
     @State private var renamingTab: UUID?
     @State private var renameText = ""
+    @State private var tabWidths: [UUID: CGFloat] = [:]
+    @State private var draggingTab: UUID?
+    @State private var dragCenterX: CGFloat = 0
+    @State private var dragGrabDelta: CGFloat = 0
 
     let host: HostConfig
+
+    private let tabSpacing: CGFloat = 4
+    private let tabStripInset: CGFloat = 8
+    private let tabStripSpace = "tabstrip"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -404,9 +412,49 @@ struct HostTabsScreen: View {
         }
     }
 
+    private func slotMidX(_ index: Int) -> CGFloat {
+        guard tabs.indices.contains(index) else { return 0 }
+        var edge = tabStripInset
+        for tab in tabs.prefix(index) { edge += (tabWidths[tab.id] ?? 0) + tabSpacing }
+        return edge + (tabWidths[tabs[index].id] ?? 0) / 2
+    }
+
+    private func dropIndex(forX x: CGFloat) -> Int {
+        var edge = tabStripInset
+        for (index, tab) in tabs.enumerated() {
+            let width = tabWidths[tab.id] ?? 0
+            if x < edge + width / 2 { return index }
+            edge += width + tabSpacing
+        }
+        return tabs.count
+    }
+
+    #if targetEnvironment(macCatalyst)
+        private func reorderGesture(for id: UUID) -> some Gesture {
+            DragGesture(minimumDistance: 4, coordinateSpace: .named(tabStripSpace))
+                .onChanged { value in
+                    guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
+                    if draggingTab != id {
+                        draggingTab = id
+                        dragGrabDelta = value.startLocation.x - slotMidX(from)
+                    }
+                    dragCenterX = value.location.x - dragGrabDelta
+                    let to = dropIndex(forX: dragCenterX)
+                    guard to != from, to != from + 1 else { return }
+                    withAnimation(.snappy(duration: 0.18)) {
+                        tabs.move(fromOffsets: IndexSet(integer: from), toOffset: to)
+                    }
+                }
+                .onEnded { _ in
+                    withAnimation(.snappy(duration: 0.18)) { draggingTab = nil }
+                    persistTabs()
+                }
+        }
+    #endif
+
     private var tabStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+            HStack(spacing: tabSpacing) {
                 ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                     HStack(spacing: 5) {
                         statusDotView(for: tab)
@@ -434,26 +482,46 @@ struct HostTabsScreen: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(tabAccessibilityLabel(tab, index: index))
                     .accessibilityIdentifier("terminal-tab-\(index + 1)")
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear
+                                .onAppear { tabWidths[tab.id] = geometry.size.width }
+                                .onChange(of: geometry.size.width) { _, width in
+                                    tabWidths[tab.id] = width
+                                }
+                        }
+                    }
+                    .offset(x: draggingTab == tab.id ? dragCenterX - slotMidX(index) : 0)
+                    .zIndex(draggingTab == tab.id ? 1 : 0)
+                    .transaction { transaction in
+                        if draggingTab == tab.id { transaction.animation = nil }
+                    }
                     .onTapGesture {
                         selectedTab = tab.id
                     }
-                    .modifier(
-                        TabReorderModifier(identifier: tab.id.uuidString) { identifier in
-                            guard
-                                let sourceIndex = tabs.firstIndex(where: {
-                                    $0.id.uuidString == identifier
-                                }),
-                                let targetIndex = tabs.firstIndex(where: { $0.id == tab.id }),
-                                sourceIndex != targetIndex
-                            else { return false }
-                            tabs.move(
-                                fromOffsets: IndexSet(integer: sourceIndex),
-                                toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
-                            )
-                            persistTabs()
-                            return true
-                        }
-                    )
+                    #if targetEnvironment(macCatalyst)
+                        .gesture(reorderGesture(for: tab.id))
+                    #else
+                        .modifier(
+                            TabReorderModifier(identifier: tab.id.uuidString) { identifier in
+                                guard
+                                    let sourceIndex = tabs.firstIndex(where: {
+                                        $0.id.uuidString == identifier
+                                    }),
+                                    let targetIndex = tabs.firstIndex(where: { $0.id == tab.id }),
+                                    sourceIndex != targetIndex
+                                else { return false }
+                                withAnimation(.snappy(duration: 0.18)) {
+                                    tabs.move(
+                                        fromOffsets: IndexSet(integer: sourceIndex),
+                                        toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+                                    )
+                                }
+                                persistTabs()
+                                return true
+                            }
+                        )
+                    #endif
                     .contextMenu {
                         Button("Rename Tab") {
                             renameText = tab.name ?? ""
@@ -465,8 +533,9 @@ struct HostTabsScreen: View {
                     }
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, tabStripInset)
             .padding(.vertical, 6)
+            .coordinateSpace(.named(tabStripSpace))
         }
         .background(PocketshellTheme.paper)
         .alert("Rename tab", isPresented: renameAlertShown) {

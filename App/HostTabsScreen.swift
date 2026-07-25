@@ -86,6 +86,7 @@ struct HostTabsScreen: View {
                 }
             }
         }
+        .background(tabShortcuts)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -116,6 +117,11 @@ struct HostTabsScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
+                        activeController?.findVisible = true
+                    } label: {
+                        Label("Find", systemImage: "magnifyingglass")
+                    }
+                    Button {
                         showFiles = true
                     } label: {
                         Label("Files", systemImage: "folder")
@@ -143,6 +149,7 @@ struct HostTabsScreen: View {
                     Image(systemName: "plus.square.on.square")
                         .foregroundStyle(PocketshellTheme.accent)
                 }
+                .keyboardShortcut("t", modifiers: .command)
                 .accessibilityIdentifier("new-tab")
             }
         }
@@ -410,6 +417,31 @@ struct HostTabsScreen: View {
                     trigger: nil
                 ))
         }
+    }
+
+    private var tabShortcuts: some View {
+        ZStack {
+            ForEach(Array(tabs.prefix(9).enumerated()), id: \.element.id) { index, tab in
+                Button("") { selectedTab = tab.id }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+            }
+            Button("") { if let selectedTab { closeTab(id: selectedTab) } }
+                .keyboardShortcut("w", modifiers: .command)
+            Button("") { activeController?.findVisible = true }
+                .keyboardShortcut("f", modifiers: .command)
+            Button("") { cycleTab(by: -1) }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+            Button("") { cycleTab(by: 1) }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
+    private func cycleTab(by delta: Int) {
+        guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == selectedTab }) else { return }
+        selectedTab = tabs[(index + delta + tabs.count) % tabs.count].id
     }
 
     private func slotMidX(_ index: Int) -> CGFloat {

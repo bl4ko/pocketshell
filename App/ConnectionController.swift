@@ -20,6 +20,7 @@ final class ConnectionController: ObservableObject {
     }
 
     @Published var phase: Phase = .idle
+    @Published var findVisible = false
     let bridge = TerminalBridge()
     var onExit: (() -> Void)?
 

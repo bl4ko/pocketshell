@@ -43,6 +43,9 @@ struct TerminalScreen: View {
         ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" ? 300 : 0
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
     @AppStorage(AppSettings.uiScaleKey) private var uiScale = 1.0
+    @State private var findTerm = ""
+    @State private var findFailed = false
+    @FocusState private var findFocused: Bool
 
     let host: HostConfig
     var isActive = true
@@ -52,6 +55,9 @@ struct TerminalScreen: View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
                 statusBanner
+                if connection.findVisible {
+                    findBar
+                }
                 SSHTerminalView(bridge: connection.bridge, theme: TerminalTheme.named(themeName), scale: uiScale)
                     .focusEffectDisabled()
                 #if !targetEnvironment(macCatalyst)
@@ -94,6 +100,60 @@ struct TerminalScreen: View {
                 connection.appForegrounded()
             }
         }
+    }
+
+    private var findBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(PocketshellTheme.secondary)
+            TextField("find in scrollback", text: $findTerm)
+                .textFieldStyle(.plain)
+                .font(.caption.monospaced())
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .foregroundStyle(findFailed ? Color.red : PocketshellTheme.ink)
+                .focused($findFocused)
+                .onSubmit { runFind(forward: true) }
+                .onChange(of: findTerm) { _, _ in findFailed = false }
+                .accessibilityIdentifier("find-field")
+            Button {
+                runFind(forward: false)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .keyboardShortcut("g", modifiers: [.command, .shift])
+            .accessibilityIdentifier("find-previous")
+            Button {
+                runFind(forward: true)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .keyboardShortcut("g", modifiers: .command)
+            .accessibilityIdentifier("find-next")
+            Button {
+                closeFind()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .accessibilityIdentifier("find-close")
+        }
+        .font(.caption)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(PocketshellTheme.paper)
+        .onAppear { findFocused = true }
+    }
+
+    private func runFind(forward: Bool) {
+        findFailed = !connection.bridge.find(findTerm, forward: forward)
+    }
+
+    private func closeFind() {
+        connection.bridge.clearFind()
+        connection.findVisible = false
+        findFailed = false
+        connection.bridge.setTerminalFocused(true)
     }
 
     private var statusBanner: some View {

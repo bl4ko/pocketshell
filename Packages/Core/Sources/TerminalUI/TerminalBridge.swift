@@ -116,6 +116,15 @@
             }
         }
 
+        public func find(_ term: String, forward: Bool) -> Bool {
+            guard let view, !term.isEmpty else { return false }
+            return forward ? view.findNext(term) : view.findPrevious(term)
+        }
+
+        public func clearFind() {
+            view?.clearSearch()
+        }
+
         public func copySelection() {
             view?.copy(nil)
         }

@@ -18,22 +18,7 @@
 
     private final class BottomAnchoredTerminalView: TerminalView {
         private var previousSize = CGSize.zero
-        #if targetEnvironment(macCatalyst)
-            private let dragSelectionLayer = CAShapeLayer()
-            private var dragSelectionStart: Position?
-            private var dragSelectionEnd: Position?
-        #endif
         var pasteImage: (() -> Bool)?
-
-        override func copy(_ sender: Any?) {
-            #if targetEnvironment(macCatalyst)
-                if let text = dragSelectionText(), !text.isEmpty {
-                    UIPasteboard.general.string = text
-                    return
-                }
-            #endif
-            super.copy(sender)
-        }
 
         override func paste(_ sender: Any?) {
             if pasteImage?() != true {
@@ -52,69 +37,6 @@
             previousSize = bounds.size
         }
 
-        #if targetEnvironment(macCatalyst)
-            func beginDragSelection(at point: CGPoint) {
-                dragSelectionStart = terminalPosition(at: point)
-                dragSelectionEnd = dragSelectionStart
-                drawDragSelection()
-            }
-
-            func extendDragSelection(to point: CGPoint) {
-                dragSelectionEnd = terminalPosition(at: point)
-                drawDragSelection()
-            }
-
-            func clearDragSelection() {
-                dragSelectionStart = nil
-                dragSelectionEnd = nil
-                dragSelectionLayer.removeFromSuperlayer()
-            }
-
-            private func terminalPosition(at point: CGPoint) -> Position {
-                let terminal = getTerminal()
-                let col = min(max(Int(point.x / bounds.width * CGFloat(terminal.cols)), 0), terminal.cols - 1)
-                let row = min(max(Int(point.y / bounds.height * CGFloat(terminal.rows)), 0), terminal.rows - 1)
-                return Position(col: col, row: row)
-            }
-
-            private func orderedSelection() -> (Position, Position)? {
-                guard let start = dragSelectionStart, let end = dragSelectionEnd else { return nil }
-                return start.row < end.row || (start.row == end.row && start.col <= end.col)
-                    ? (start, end) : (end, start)
-            }
-
-            private func dragSelectionText() -> String? {
-                guard let (start, end) = orderedSelection() else { return nil }
-                let rows = (start.row...end.row).map { row in
-                    getTerminal().getLine(row: row)?.translateToString(trimRight: true) ?? ""
-                }
-                return SelectionText.join(rows: rows, startCol: start.col, endCol: end.col)
-            }
-
-            private func drawDragSelection() {
-                guard let (start, end) = orderedSelection() else { return }
-                let terminal = getTerminal()
-                let cellWidth = bounds.width / CGFloat(terminal.cols)
-                let cellHeight = bounds.height / CGFloat(terminal.rows)
-                let path = CGMutablePath()
-                for row in start.row...end.row {
-                    let firstCol = row == start.row ? start.col : 0
-                    let lastCol = row == end.row ? end.col : terminal.cols - 1
-                    path.addRect(
-                        CGRect(
-                            x: CGFloat(firstCol) * cellWidth,
-                            y: CGFloat(row) * cellHeight,
-                            width: CGFloat(lastCol - firstCol + 1) * cellWidth,
-                            height: cellHeight
-                        ))
-                }
-                dragSelectionLayer.path = path
-                dragSelectionLayer.fillColor = UIColor.systemBlue.withAlphaComponent(0.35).cgColor
-                if dragSelectionLayer.superlayer == nil {
-                    layer.addSublayer(dragSelectionLayer)
-                }
-            }
-        #endif
     }
 
     private final class TerminalViewController: UIViewController {
@@ -180,6 +102,7 @@
             }
 
             @objc private func handleCopy() {
+                guard terminalView.selectionActive else { return }
                 terminalView.copy(nil)
             }
 
@@ -371,7 +294,9 @@
                 MainActor.assumeIsolated {
                     guard gesture.state == .ended, let view = gesture.view as? TerminalView else { return }
                     #if targetEnvironment(macCatalyst)
-                        (view as? BottomAnchoredTerminalView)?.clearDragSelection()
+                        if view.selectionActive {
+                            view.clearSelection()
+                        }
                     #endif
                     let terminal = view.getTerminal()
                     guard terminal.mouseMode != .off else { return }
@@ -399,13 +324,13 @@
                 @objc func handleSelectionPan(_ gesture: UIPanGestureRecognizer) {
                     MainActor.assumeIsolated {
                         guard gesture.buttonMask.contains(.primary),
-                            let view = gesture.view as? BottomAnchoredTerminalView
+                            let view = gesture.view as? TerminalView
                         else { return }
                         switch gesture.state {
                         case .began:
-                            view.beginDragSelection(at: gesture.location(in: view))
+                            view.startPointerSelection(at: gesture.location(in: view))
                         case .changed, .ended:
-                            view.extendDragSelection(to: gesture.location(in: view))
+                            view.extendPointerSelection(to: gesture.location(in: view))
                         default:
                             break
                         }

@@ -23,7 +23,9 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.9.0"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
+        .package(
+            url: "https://github.com/bl4ko/SwiftTerm.git",
+            revision: "154fb73f3d7e5d474b2b543bd62010d3bbfdc440"),
         .package(
             url: "https://github.com/bl4ko/royalvnc.git",
             revision: "7cd41cff27e175c12b552dce2812ff78b35eb541"),

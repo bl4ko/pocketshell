@@ -14,6 +14,7 @@ struct HostFormView: View {
     @State private var keyTag = AppStore.deviceKeyTag
     @State private var tmuxSession = ""
     @State private var onConnectCommand = ""
+    @State private var proxyJump: UUID?
     @AppStorage(AppSettings.iCloudCredentialsSyncKey) private var credentialsSync = false
 
     var body: some View {
@@ -37,6 +38,13 @@ struct HostFormView: View {
                             Text(key.name).tag(key.tag)
                         }
                     }
+                    Picker("Jump host", selection: $proxyJump) {
+                        Text("Direct").tag(UUID?.none)
+                        ForEach(bastionCandidates) { candidate in
+                            Text(candidate.name).tag(UUID?.some(candidate.id))
+                        }
+                    }
+                    .accessibilityIdentifier("jump-host-picker")
                 }
                 Section {
                     TextField("tmux session (optional)", text: $tmuxSession)
@@ -71,6 +79,7 @@ struct HostFormView: View {
                 keyTag = host.keyTag
                 tmuxSession = host.tmuxSession ?? ""
                 onConnectCommand = host.onConnectCommand ?? ""
+                proxyJump = host.proxyJump
             }
             .themedScreen()
         }
@@ -89,12 +98,17 @@ struct HostFormView: View {
         updated.keyTag = keyTag
         updated.tmuxSession = tmuxSession.isEmpty ? nil : tmuxSession
         updated.onConnectCommand = onConnectCommand.isEmpty ? nil : onConnectCommand
+        updated.proxyJump = proxyJump
         if let index = store.hosts.firstIndex(where: { $0.id == updated.id }) {
             store.hosts[index] = updated
         } else {
             store.hosts.append(updated)
         }
         dismiss()
+    }
+
+    private var bastionCandidates: [HostConfig] {
+        store.hosts.filter { $0.id != host?.id }
     }
 
     private var groups: [String] {

@@ -179,7 +179,7 @@ final class SessionMonitor: ObservableObject {
             return existing
         }
         guard let key = try? store.key(for: host) else { return nil }
-        let connection = SSHConnection(host: host, key: key, knownHosts: store.knownHosts)
+        let connection = SSHConnection(host: host, key: key, knownHosts: store.knownHosts, hops: store.hops(for: host))
         do {
             try await connection.connect()
         } catch {

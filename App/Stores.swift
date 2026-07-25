@@ -120,6 +120,13 @@ final class AppStore: ObservableObject {
         return key
     }
 
+    func hops(for host: HostConfig) -> [SSHHop] {
+        HostConfig.jumpChain(to: host, in: hosts).compactMap { bastion in
+            guard let key = try? key(for: bastion) else { return nil }
+            return SSHHop(host: bastion, key: key)
+        }
+    }
+
     func key(for host: HostConfig) throws -> DeviceKeyMaterial {
         guard host.keyTag != Self.deviceKeyTag else { return try deviceKey() }
         if let imported = try keyStore.load(tag: host.keyTag) {

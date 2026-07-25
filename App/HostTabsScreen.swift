@@ -249,7 +249,8 @@ struct HostTabsScreen: View {
         return ConnectionController(
             host: currentHost,
             key: (try? store.key(for: currentHost)) ?? .software(.init()),
-            knownHosts: store.knownHosts
+            knownHosts: store.knownHosts,
+            hops: store.hops(for: currentHost)
         )
     }
 

@@ -89,7 +89,8 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
                 replyHandler(["error": "unknown host"])
                 return
             }
-            let connection = SSHConnection(host: host, key: key, knownHosts: store.knownHosts)
+            let connection = SSHConnection(
+                host: host, key: key, knownHosts: store.knownHosts, hops: store.hops(for: host))
             do {
                 try await connection.connect()
                 _ = try await connection.exec(

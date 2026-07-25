@@ -101,6 +101,44 @@
             await connection.disconnect()
         }
 
+        @Test func connectsThroughJumpHost() async throws {
+            let bastion = try TestSSHD()
+            defer { bastion.stop() }
+            let target = try TestSSHD()
+            defer { target.stop() }
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kh-\(UUID().uuidString).json")
+            let connection = SSHConnection(
+                host: target.hostConfig(),
+                key: target.clientKeyMaterial,
+                knownHosts: KnownHostsStore(fileURL: file),
+                hops: [SSHHop(host: bastion.hostConfig(), key: bastion.clientKeyMaterial)]
+            )
+            try await connection.connect()
+            let output = try await connection.exec("echo jumped")
+            #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == "jumped")
+            await connection.disconnect()
+        }
+
+        @Test func jumpHostRecordsBothHostKeys() async throws {
+            let bastion = try TestSSHD()
+            defer { bastion.stop() }
+            let target = try TestSSHD()
+            defer { target.stop() }
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kh-\(UUID().uuidString).json")
+            let store = KnownHostsStore(fileURL: file)
+            let connection = SSHConnection(
+                host: target.hostConfig(),
+                key: target.clientKeyMaterial,
+                knownHosts: store,
+                hops: [SSHHop(host: bastion.hostConfig(), key: bastion.clientKeyMaterial)]
+            )
+            try await connection.connect()
+            await connection.disconnect()
+            #expect(store.entries().count == 2)
+        }
+
         @Test func shellChannelEchoesInput() async throws {
             let sshd = try TestSSHD()
             defer { sshd.stop() }

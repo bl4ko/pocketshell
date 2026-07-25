@@ -27,6 +27,7 @@ final class ConnectionController: ObservableObject {
     private let host: HostConfig
     private let key: DeviceKeyMaterial
     private let knownHosts: KnownHostsStore
+    private let hops: [SSHHop]
     private var connection: SSHConnection?
     private var shell: ShellStream?
     private var machine = ReconnectMachine(baseDelay: .seconds(3))
@@ -43,10 +44,11 @@ final class ConnectionController: ObservableObject {
     private var shellGeneration = 0
     private var stopped = false
 
-    init(host: HostConfig, key: DeviceKeyMaterial, knownHosts: KnownHostsStore) {
+    init(host: HostConfig, key: DeviceKeyMaterial, knownHosts: KnownHostsStore, hops: [SSHHop] = []) {
         self.host = host
         self.key = key
         self.knownHosts = knownHosts
+        self.hops = hops
     }
 
     func start() async {
@@ -248,7 +250,7 @@ final class ConnectionController: ObservableObject {
 
     private func establish(initial: Bool) async {
         phase = initial ? .connecting : phase
-        let connection = SSHConnection(host: host, key: key, knownHosts: knownHosts)
+        let connection = SSHConnection(host: host, key: key, knownHosts: knownHosts, hops: hops)
         self.connection = connection
         do {
             try await connection.connect()

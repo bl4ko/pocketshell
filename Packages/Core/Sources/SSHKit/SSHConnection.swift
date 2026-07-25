@@ -21,16 +21,29 @@ public struct ShellStream: Sendable {
     public let close: @Sendable () async -> Void
 }
 
+public struct SSHHop: Sendable {
+    public let host: HostConfig
+    public let key: DeviceKeyMaterial
+
+    public init(host: HostConfig, key: DeviceKeyMaterial) {
+        self.host = host
+        self.key = key
+    }
+}
+
 public actor SSHConnection {
     private let host: HostConfig
     private let key: DeviceKeyMaterial
     private let knownHosts: KnownHostsStore
+    private let hops: [SSHHop]
     private var channel: Channel?
+    private var hopChannels: [Channel] = []
 
-    public init(host: HostConfig, key: DeviceKeyMaterial, knownHosts: KnownHostsStore) {
+    public init(host: HostConfig, key: DeviceKeyMaterial, knownHosts: KnownHostsStore, hops: [SSHHop] = []) {
         self.host = host
         self.key = key
         self.knownHosts = knownHosts
+        self.hops = hops
     }
 
     public var isConnected: Bool {
@@ -42,6 +55,30 @@ public actor SSHConnection {
     }
 
     public func connect() async throws {
+        do {
+            var parent: Channel?
+            for hop in hops {
+                let hopChannel: Channel
+                if let parent {
+                    hopChannel = try await jump(through: parent, to: hop.host, key: hop.key)
+                } else {
+                    hopChannel = try await dial(host: hop.host, key: hop.key)
+                }
+                hopChannels.append(hopChannel)
+                parent = hopChannel
+            }
+            if let parent {
+                channel = try await jump(through: parent, to: host, key: key)
+            } else {
+                channel = try await dial(host: host, key: key)
+            }
+        } catch {
+            await closeHops()
+            throw error
+        }
+    }
+
+    private func dial(host: HostConfig, key: DeviceKeyMaterial) async throws -> Channel {
         let userAuth = KeyAuthDelegate(username: host.username, key: key)
         let serverAuth = TOFUServerAuthDelegate(host: host.hostname, port: host.port, store: knownHosts)
         let handshake = HandshakeWaiter()
@@ -68,13 +105,73 @@ public actor SSHConnection {
             try? await channel.close()
             throw error
         }
-        self.channel = channel
+        return channel
+    }
+
+    /// Opens a direct-tcpip channel on `parent` and runs a nested SSH client over it,
+    /// so the target is reached without exposing a local listening socket.
+    private func jump(through parent: Channel, to host: HostConfig, key: DeviceKeyMaterial) async throws -> Channel {
+        let userAuth = KeyAuthDelegate(username: host.username, key: key)
+        let serverAuth = TOFUServerAuthDelegate(host: host.hostname, port: host.port, store: knownHosts)
+        let handshake = HandshakeWaiter()
+        let originator = try SocketAddress(ipAddress: "127.0.0.1", port: 0)
+        let channelType = SSHChannelType.directTCPIP(
+            .init(targetHost: host.hostname, targetPort: host.port, originatorAddress: originator)
+        )
+
+        let promise = parent.eventLoop.makePromise(of: Channel.self)
+        parent.eventLoop.execute {
+            parent.pipeline.handler(type: NIOSSHHandler.self).whenComplete { result in
+                switch result {
+                case .success(let handler):
+                    handler.createChannel(promise, channelType: channelType) { child, _ in
+                        child.setOption(ChannelOptions.allowRemoteHalfClosure, value: true).flatMap {
+                            child.eventLoop.makeCompletedFuture {
+                                let config = SSHClientConfiguration(
+                                    userAuthDelegate: userAuth,
+                                    serverAuthDelegate: serverAuth
+                                )
+                                try child.pipeline.syncOperations.addHandler(SSHChannelDataCodec())
+                                try child.pipeline.syncOperations.addHandler(
+                                    NIOSSHHandler(
+                                        role: .client(config),
+                                        allocator: child.allocator,
+                                        inboundChildChannelInitializer: nil
+                                    ))
+                                try child.pipeline.syncOperations.addHandler(handshake)
+                            }
+                        }
+                    }
+                case .failure(let error):
+                    promise.fail(error)
+                }
+            }
+        }
+
+        let child = try await promise.futureResult.get()
+        do {
+            try await handshake.waitForAuth()
+        } catch {
+            try? await child.close()
+            throw error
+        }
+        return child
+    }
+
+    private func closeHops() async {
+        for hop in hopChannels.reversed() {
+            try? await hop.close()
+        }
+        hopChannels = []
     }
 
     public func disconnect() async {
-        guard let channel else { return }
+        let channel = self.channel
         self.channel = nil
-        try? await channel.close()
+        if let channel {
+            try? await channel.close()
+        }
+        await closeHops()
     }
 
     public func waitUntilClosed() async {
@@ -169,6 +266,24 @@ public actor SSHConnection {
             }
         }
         return try await promise.futureResult.get()
+    }
+}
+
+final class SSHChannelDataCodec: ChannelDuplexHandler, @unchecked Sendable {
+    typealias InboundIn = SSHChannelData
+    typealias InboundOut = ByteBuffer
+    typealias OutboundIn = ByteBuffer
+    typealias OutboundOut = SSHChannelData
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let channelData = unwrapInboundIn(data)
+        guard channelData.type == .channel, case .byteBuffer(let buffer) = channelData.data else { return }
+        context.fireChannelRead(wrapInboundOut(buffer))
+    }
+
+    func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+        let buffer = unwrapOutboundIn(data)
+        context.write(wrapOutboundOut(SSHChannelData(type: .channel, data: .byteBuffer(buffer))), promise: promise)
     }
 }
 

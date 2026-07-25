@@ -54,7 +54,8 @@ struct SnippetRunView: View {
     private func run() async {
         do {
             let key = try store.key(for: host)
-            let connection = SSHConnection(host: host, key: key, knownHosts: store.knownHosts)
+            let connection = SSHConnection(
+                host: host, key: key, knownHosts: store.knownHosts, hops: store.hops(for: host))
             try await connection.connect()
             let output = try await connection.exec(snippet.command)
             await connection.disconnect()

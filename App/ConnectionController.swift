@@ -85,6 +85,13 @@ final class ConnectionController: ObservableObject {
         bridge.processOutgoing(Data(text.utf8))
     }
 
+    // Focus-in counts as client activity for tmux window-size latest without
+    // reaching the pane, so the focused device wins the sizing battle.
+    func nudgeTmuxSizing() {
+        guard phase == .attached, isTmuxAttached else { return }
+        bridge.sendToHost?(Data("\u{1b}[I".utf8))
+    }
+
     var isTmuxAttached: Bool {
         if case .tmux = pendingShell { return true }
         return false

@@ -191,6 +191,7 @@ struct HostTabsScreen: View {
             if focusedElsewhere {
                 tabs.first { $0.id == selectedTab }?.controller.bridge.setTerminalFocused(true)
             }
+            activeController?.nudgeTmuxSizing()
         }
         .onDisappear {
             for tab in tabs {
@@ -199,6 +200,7 @@ struct HostTabsScreen: View {
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
+            activeController?.nudgeTmuxSizing()
             try? await Task.sleep(for: .seconds(1))
             while !Task.isCancelled {
                 await pollTabs()

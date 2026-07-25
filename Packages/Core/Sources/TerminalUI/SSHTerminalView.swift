@@ -359,6 +359,20 @@
                 guard let view = gesture.view as? TerminalView else { return }
                 #if targetEnvironment(macCatalyst)
                     guard !gesture.buttonMask.contains(.primary) else { return }
+                #else
+                    if bridge.selectMode {
+                        switch gesture.state {
+                        case .began:
+                            // Also disables SwiftTerm's own selection pan for this drag.
+                            view.clearSelection()
+                            view.startPointerSelection(at: gesture.location(in: view))
+                        case .changed, .ended:
+                            view.extendPointerSelection(to: gesture.location(in: view))
+                        default:
+                            break
+                        }
+                        return
+                    }
                 #endif
                 let terminal = view.getTerminal()
                 switch gesture.state {

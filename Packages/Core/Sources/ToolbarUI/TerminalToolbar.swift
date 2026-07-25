@@ -64,6 +64,8 @@
         let onHideKeyboard: (() -> Void)?
         let onPaste: (() -> Void)?
         let onCopy: (() -> Void)?
+        let onToggleSelect: (() -> Void)?
+        let selectActive: Bool
         @State private var prefixPaletteActive = false
         @State private var prefixExpiry = Date.distantPast
 
@@ -75,7 +77,9 @@
             onKey: @escaping (ToolbarKey.Action) -> Void,
             onHideKeyboard: (() -> Void)? = nil,
             onPaste: (() -> Void)? = nil,
-            onCopy: (() -> Void)? = nil
+            onCopy: (() -> Void)? = nil,
+            onToggleSelect: (() -> Void)? = nil,
+            selectActive: Bool = false
         ) {
             self.keys = keys
             self.theme = theme
@@ -85,6 +89,8 @@
             self.onHideKeyboard = onHideKeyboard
             self.onPaste = onPaste
             self.onCopy = onCopy
+            self.onToggleSelect = onToggleSelect
+            self.selectActive = selectActive
         }
 
         public var body: some View {
@@ -111,11 +117,18 @@
                             Menu {
                                 Button("Paste") { onPaste() }
                                 if let onCopy { Button("Copy selection") { onCopy() } }
+                                if let onToggleSelect {
+                                    Button(selectActive ? "Done selecting" : "Select text") { onToggleSelect() }
+                                }
                             } label: {
-                                keyLabel(icon: "doc.on.clipboard")
+                                keyLabel(
+                                    icon: selectActive ? "selection.pin.in.out" : "doc.on.clipboard",
+                                    active: selectActive
+                                )
                             } primaryAction: {
-                                onPaste()
+                                if selectActive { onCopy?() } else { onPaste() }
                             }
+                            .accessibilityIdentifier("terminal.clipboard")
                         }
                         if !quickReplyOptions.isEmpty {
                             HStack(spacing: 5) {
@@ -276,16 +289,19 @@
                 .shadow(color: Palette.border(theme), radius: 0, y: 1)
         }
 
-        private func keyLabel(icon: String) -> some View {
+        private func keyLabel(icon: String, active: Bool = false) -> some View {
             Image(systemName: icon)
                 .font(.caption)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 6)
                 .frame(minWidth: 28)
-                .background(Palette.key(theme))
-                .foregroundStyle(Palette.text(theme))
+                .background(active ? Palette.accentTint(theme) : Palette.key(theme))
+                .foregroundStyle(active ? Palette.accentDark(theme) : Palette.text(theme))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Palette.border(theme)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(active ? Palette.accentBorder(theme) : Palette.border(theme))
+                )
                 .shadow(color: Palette.border(theme), radius: 0, y: 1)
         }
     }

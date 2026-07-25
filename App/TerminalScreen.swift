@@ -77,7 +77,9 @@ struct TerminalScreen: View {
                             }
                         },
                         onPaste: { connection.bridge.paste() },
-                        onCopy: { connection.bridge.copySelection() }
+                        onCopy: { connection.bridge.copySelection() },
+                        onToggleSelect: { connection.bridge.toggleSelectMode() },
+                        selectActive: connection.bridge.selectMode
                     )
                 #endif
             }

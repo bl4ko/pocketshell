@@ -8,6 +8,7 @@
     @MainActor
     public final class TerminalBridge: ObservableObject {
         @Published public var ctrlActive = false
+        @Published public var selectMode = false
         public var sendToHost: ((Data) -> Void)?
         public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
         public var imagePaste: ((Data) -> Void)?
@@ -126,7 +127,17 @@
         }
 
         public func copySelection() {
-            view?.copy(nil)
+            guard let view, view.selectionActive else { return }
+            view.copy(nil)
+            view.clearSelection()
+            selectMode = false
+        }
+
+        public func toggleSelectMode() {
+            selectMode.toggle()
+            if !selectMode {
+                view?.clearSelection()
+            }
         }
 
         public var isTerminalFocused: Bool {

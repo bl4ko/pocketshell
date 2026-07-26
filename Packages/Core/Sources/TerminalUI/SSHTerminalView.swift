@@ -301,6 +301,7 @@
             @objc func handleMouseTap(_ gesture: UITapGestureRecognizer) {
                 MainActor.assumeIsolated {
                     guard gesture.state == .ended, let view = gesture.view as? TerminalView else { return }
+                    noteUserPresence()
                     #if targetEnvironment(macCatalyst)
                         if view.selectionActive {
                             view.clearSelection()
@@ -328,19 +329,22 @@
                 }
             }
 
-            #if targetEnvironment(macCatalyst)
-                private var lastPointerNudge = Date.distantPast
+            // Attaching from another device wins tmux's window-size latest with no
+            // input at all, so the device being touched or hovered has to say so to
+            // reclaim its size; typing already counts as client activity.
+            private var lastPresenceNudge = Date.distantPast
 
-                // Attaching from another device wins tmux's window-size latest with no
-                // input at all; moving the pointer here means this device is the one
-                // being looked at, so it reclaims the size without waiting for a click.
+            @MainActor private func noteUserPresence() {
+                guard Date().timeIntervalSince(lastPresenceNudge) > 2 else { return }
+                lastPresenceNudge = Date()
+                bridge.userInteracted?()
+            }
+
+            #if targetEnvironment(macCatalyst)
                 @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
                     MainActor.assumeIsolated {
-                        guard gesture.view?.window?.isKeyWindow == true,
-                            Date().timeIntervalSince(lastPointerNudge) > 2
-                        else { return }
-                        lastPointerNudge = Date()
-                        bridge.pointerActivity?()
+                        guard gesture.view?.window?.isKeyWindow == true else { return }
+                        noteUserPresence()
                     }
                 }
 
@@ -380,6 +384,9 @@
 
             @MainActor private func handleScrollPanOnMain(_ gesture: UIPanGestureRecognizer) {
                 guard let view = gesture.view as? TerminalView else { return }
+                if gesture.state == .began {
+                    noteUserPresence()
+                }
                 #if targetEnvironment(macCatalyst)
                     guard !gesture.buttonMask.contains(.primary) else { return }
                 #else

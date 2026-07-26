@@ -350,7 +350,7 @@ final class ConnectionController: ObservableObject {
             bridge.imagePaste = { [weak self] data in
                 Task { await self?.uploadPastedImage(data) }
             }
-            bridge.pointerActivity = { [weak self] in
+            bridge.userInteracted = { [weak self] in
                 self?.nudgeTmuxSizing()
             }
             _ = machine.handle(.established)

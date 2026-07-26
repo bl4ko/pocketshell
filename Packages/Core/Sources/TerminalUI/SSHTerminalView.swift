@@ -373,6 +373,11 @@
                         }
                         return
                     }
+                    // SwiftTerm extends the selection on any pan once its own gesture is
+                    // armed; scrolling at the same time makes the handles undraggable.
+                    if view.selectionActive, view.selectionPanActive {
+                        return
+                    }
                 #endif
                 let terminal = view.getTerminal()
                 switch gesture.state {

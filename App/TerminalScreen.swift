@@ -117,8 +117,23 @@ struct TerminalScreen: View {
                 .foregroundStyle(findFailed ? Color.red : PocketshellTheme.ink)
                 .focused($findFocused)
                 .onSubmit { runFind(forward: true) }
-                .onChange(of: findTerm) { _, _ in findFailed = false }
+                .onChange(of: findTerm) { _, term in
+                    findFailed = false
+                    guard !term.isEmpty else {
+                        connection.bridge.clearFind()
+                        return
+                    }
+                    // A fresh forward search starts at row 0 of the scrollback, which
+                    // on a long buffer lands thousands of lines from the prompt; a
+                    // reverse search starts at the bottom, on the newest match.
+                    runFind(forward: false, fromStart: true)
+                }
                 .accessibilityIdentifier("find-field")
+            if findFailed {
+                Text("no match")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(Color.red)
+            }
             Button {
                 runFind(forward: false)
             } label: {
@@ -147,7 +162,10 @@ struct TerminalScreen: View {
         .onAppear { findFocused = true }
     }
 
-    private func runFind(forward: Bool) {
+    private func runFind(forward: Bool, fromStart: Bool = false) {
+        if fromStart {
+            connection.bridge.clearFind()
+        }
         findFailed = !connection.bridge.find(findTerm, forward: forward)
     }
 

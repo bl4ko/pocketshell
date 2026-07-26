@@ -527,6 +527,12 @@ struct HostTabsScreen: View {
                                 }
                         }
                     }
+                    .scaleEffect(draggingTab == tab.id ? 1.06 : 1)
+                    .shadow(
+                        color: .black.opacity(draggingTab == tab.id ? 0.25 : 0),
+                        radius: 6,
+                        y: 2
+                    )
                     .offset(x: draggingTab == tab.id ? dragCenterX - slotMidX(index) : 0)
                     .zIndex(draggingTab == tab.id ? 1 : 0)
                     .transaction { transaction in

@@ -222,6 +222,14 @@
                 selectionPan.maximumNumberOfTouches = 1
                 selectionPan.delegate = gestureDelegate
                 view.addGestureRecognizer(selectionPan)
+                // Short drags stay within the tap's slop, and the tap clears the
+                // selection the drag just made.
+                tap.require(toFail: selectionPan)
+                let hover = UIHoverGestureRecognizer(
+                    target: context.coordinator,
+                    action: #selector(Coordinator.handleHover(_:))
+                )
+                view.addGestureRecognizer(hover)
             #endif
             let pinch = UIPinchGestureRecognizer(
                 target: context.coordinator,
@@ -321,6 +329,21 @@
             }
 
             #if targetEnvironment(macCatalyst)
+                private var lastPointerNudge = Date.distantPast
+
+                // Attaching from another device wins tmux's window-size latest with no
+                // input at all; moving the pointer here means this device is the one
+                // being looked at, so it reclaims the size without waiting for a click.
+                @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
+                    MainActor.assumeIsolated {
+                        guard gesture.view?.window?.isKeyWindow == true,
+                            Date().timeIntervalSince(lastPointerNudge) > 2
+                        else { return }
+                        lastPointerNudge = Date()
+                        bridge.pointerActivity?()
+                    }
+                }
+
                 @objc func handleSelectionPan(_ gesture: UIPanGestureRecognizer) {
                     MainActor.assumeIsolated {
                         guard gesture.buttonMask.contains(.primary),

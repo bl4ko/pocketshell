@@ -12,6 +12,7 @@
         public var sendToHost: ((Data) -> Void)?
         public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
         public var imagePaste: ((Data) -> Void)?
+        public var pointerActivity: (() -> Void)?
         weak var view: TerminalView?
         private var theme: TerminalTheme?
         private var gate = FeedGate()

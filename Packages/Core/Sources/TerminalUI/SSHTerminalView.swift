@@ -81,6 +81,14 @@
                 )
                 escapeCommand.wantsPriorityOverSystemBehavior = true
                 addKeyCommand(escapeCommand)
+                // Catalyst's focus engine eats shift+tab before the terminal sees it.
+                let backTabCommand = UIKeyCommand(
+                    input: "\t",
+                    modifierFlags: .shift,
+                    action: #selector(handleBackTab)
+                )
+                backTabCommand.wantsPriorityOverSystemBehavior = true
+                addKeyCommand(backTabCommand)
                 for arrow in [
                     UIKeyCommand.inputUpArrow, UIKeyCommand.inputDownArrow,
                     UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow,
@@ -112,6 +120,10 @@
 
             @objc private func handleEscape() {
                 sendEscape?()
+            }
+
+            @objc private func handleBackTab() {
+                sendBytes?(Data("\u{1b}[Z".utf8))
             }
 
             // SwiftTerm's pressesBegan repeats held keys on a fixed 0.4s/10Hz timer;

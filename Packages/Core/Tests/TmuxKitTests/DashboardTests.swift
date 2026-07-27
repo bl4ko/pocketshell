@@ -35,6 +35,23 @@ import Testing
     #expect(AgentStatus.classify("✻ Waddling… (6m 14s · ↓ 22.7k tokens · almost done thinking)") == .busy)
 }
 
+@Test func classifyBusyWhileBackgroundAgentsRun() {
+    let pane = """
+        ● Plan agent designing full migration runbook against vendored kubespray collection.
+
+        ✳ Waiting for 1 background agent to finish
+
+        > ▌
+          ctx: 9% used / 91% left  [Fable 5]  /Users/bl4ko/Projects/github
+          ⏸ plan mode on (shift+tab to cycle) · ← for agents
+
+        ● main
+        ○ Plan  Reading alloy networkpolicy.yaml            4m 54s · ↓ 73.0k tokens
+        """
+    #expect(AgentStatus.classify(pane) == .busy)
+    #expect(AgentStatus.detectAgent(pane) == .busy)
+}
+
 @Test func classifyIdleForFinishedSpinnerLine() {
     #expect(AgentStatus.classify("✻ Baked for 12m 3s") == .idle)
 }

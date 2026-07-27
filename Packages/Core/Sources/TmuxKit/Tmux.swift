@@ -91,6 +91,9 @@ public enum AgentStatus: Equatable, Sendable {
         if lowered.contains("compacting conversation") || lowered.contains(/esc\b.{0,12}interrupt/) {
             return .busy
         }
+        if lowered.contains(/waiting for \d+ background agents? to finish/) {
+            return .busy
+        }
         if tail.contains(/\p{L}…\s*\(\d+[hms]/) {
             return .busy
         }

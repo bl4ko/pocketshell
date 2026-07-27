@@ -33,6 +33,8 @@ enum PocketshellTheme {
     }
     static let busy = Color(hexRGB: "D97706")
     static var busyText: Color { isPocketshell ? Color(hexRGB: "B45309") : busy }
+    static let waiting = Color(hexRGB: "7C3AED")
+    static var waitingText: Color { isPocketshell ? Color(hexRGB: "6D28D9") : waiting }
     static let idle = Color(hexRGB: "22A04D")
     static var idleText: Color { isPocketshell ? Color(hexRGB: "15803D") : idle }
 
@@ -67,7 +69,7 @@ extension AgentStatus {
     var chromeColor: Color {
         switch self {
         case .busy: PocketshellTheme.busy
-        case .waiting: PocketshellTheme.accent
+        case .waiting: PocketshellTheme.waiting
         case .idle: PocketshellTheme.idle
         }
     }
@@ -75,7 +77,7 @@ extension AgentStatus {
     var chromeTextColor: Color {
         switch self {
         case .busy: PocketshellTheme.busyText
-        case .waiting: PocketshellTheme.accentDark
+        case .waiting: PocketshellTheme.waitingText
         case .idle: PocketshellTheme.idleText
         }
     }

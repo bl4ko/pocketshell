@@ -646,7 +646,7 @@ struct HostTabsScreen: View {
     private func statusColor(_ status: AgentStatus) -> Color {
         switch status {
         case .busy: PocketshellTheme.busy
-        case .waiting: PocketshellTheme.accent
+        case .waiting: PocketshellTheme.waiting
         case .idle: PocketshellTheme.idle
         }
     }
@@ -1258,9 +1258,9 @@ struct TmuxJumpSheet: View {
 
     private func tabStatusColor(_ status: AgentStatus) -> Color {
         switch status {
-        case .busy: .orange
-        case .waiting: .purple
-        case .idle: .green
+        case .busy: PocketshellTheme.busy
+        case .waiting: PocketshellTheme.waiting
+        case .idle: PocketshellTheme.idle
         }
     }
 

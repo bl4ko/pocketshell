@@ -353,7 +353,7 @@ struct HostsListView: View {
     private func statusColor(_ status: String) -> Color {
         switch status {
         case "busy": PocketshellTheme.busy
-        case "needs input": PocketshellTheme.accent
+        case "needs input": PocketshellTheme.waiting
         default: PocketshellTheme.idle
         }
     }
@@ -361,7 +361,7 @@ struct HostsListView: View {
     private func statusTextColor(_ status: String) -> Color {
         switch status {
         case "busy": PocketshellTheme.busyText
-        case "needs input": PocketshellTheme.accentDark
+        case "needs input": PocketshellTheme.waitingText
         default: PocketshellTheme.idleText
         }
     }

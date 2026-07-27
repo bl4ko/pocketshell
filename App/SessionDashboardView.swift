@@ -42,9 +42,9 @@ struct DashboardRow: View {
 
     private var statusColor: Color {
         switch item.status {
-        case .busy: .orange
-        case .waiting: .purple
-        case .idle: .green
+        case .busy: PocketshellTheme.busy
+        case .waiting: PocketshellTheme.waiting
+        case .idle: PocketshellTheme.idle
         }
     }
 

@@ -2,7 +2,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-xcodebuild build -scheme pocketshell -destination "platform=macOS,variant=Mac Catalyst" -quiet
+xcodebuild build -scheme pocketshell -destination "platform=macOS,variant=Mac Catalyst" -allowProvisioningUpdates -quiet
 built=$(xcodebuild -scheme pocketshell -destination "platform=macOS,variant=Mac Catalyst" -showBuildSettings 2>/dev/null |
     awk '$1 == "BUILT_PRODUCTS_DIR" { print $3 }')/pocketshell.app
 
@@ -12,7 +12,7 @@ built=$(xcodebuild -scheme pocketshell -destination "platform=macOS,variant=Mac 
 signed() { codesign -dv "$built" 2>&1 | grep -q "^TeamIdentifier=[A-Z0-9]"; }
 if ! signed; then
     echo "built app is unsigned, rebuilding clean" >&2
-    xcodebuild clean build -scheme pocketshell -destination "platform=macOS,variant=Mac Catalyst" -quiet
+    xcodebuild clean build -scheme pocketshell -destination "platform=macOS,variant=Mac Catalyst" -allowProvisioningUpdates -quiet
 fi
 signed || {
     echo "refusing to install: $built is not development-signed" >&2

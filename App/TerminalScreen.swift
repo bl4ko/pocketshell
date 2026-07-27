@@ -70,7 +70,6 @@ struct TerminalScreen: View {
                             set: { connection.bridge.ctrlActive = $0 }
                         ),
                         quickReplyOptions: quickReplyOptions,
-                        onQuickReply: { onQuickReply?() },
                         onKey: { connection.bridge.handleToolbar($0) },
                         onHideKeyboard: {
                             connection.bridge.toggleKeyboard()
@@ -97,6 +96,7 @@ struct TerminalScreen: View {
             windowPicker
         }
         .task {
+            connection.bridge.userSentInput = { onQuickReply?() }
             await connection.start()
         }
         .onChange(of: scenePhase) { _, phase in

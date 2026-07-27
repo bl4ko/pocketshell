@@ -13,6 +13,7 @@
         public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
         public var imagePaste: ((Data) -> Void)?
         public var userInteracted: (() -> Void)?
+        public var userSentInput: (() -> Void)?
         weak var view: TerminalView?
         private var theme: TerminalTheme?
         private var gate = FeedGate()
@@ -169,6 +170,7 @@
                 return
             }
             if let data = ToolbarKeyEncoder.data(for: action) {
+                userSentInput?()
                 sendToHost?(data)
             }
         }
@@ -177,6 +179,7 @@
             if feedingView, AutomaticReplyFilter.shouldSuppress(data) {
                 return
             }
+            userSentInput?()
             if ctrlActive,
                 let text = String(data: data, encoding: .utf8),
                 text.count == 1,

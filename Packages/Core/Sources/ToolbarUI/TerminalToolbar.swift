@@ -60,7 +60,6 @@
         let theme: TerminalTheme
         @Binding var ctrlActive: Bool
         let quickReplyOptions: [Int]
-        let onQuickReply: (() -> Void)?
         let onKey: (ToolbarKey.Action) -> Void
         let onHideKeyboard: (() -> Void)?
         let onPaste: (() -> Void)?
@@ -75,7 +74,6 @@
             theme: TerminalTheme = .pocketshell,
             ctrlActive: Binding<Bool>,
             quickReplyOptions: [Int] = [],
-            onQuickReply: (() -> Void)? = nil,
             onKey: @escaping (ToolbarKey.Action) -> Void,
             onHideKeyboard: (() -> Void)? = nil,
             onPaste: (() -> Void)? = nil,
@@ -87,7 +85,6 @@
             self.theme = theme
             self._ctrlActive = ctrlActive
             self.quickReplyOptions = quickReplyOptions
-            self.onQuickReply = onQuickReply
             self.onKey = onKey
             self.onHideKeyboard = onHideKeyboard
             self.onPaste = onPaste
@@ -138,7 +135,6 @@
                                 ForEach(quickReplyOptions, id: \.self) { option in
                                     Button {
                                         onKey(.sequence("\(option)\n"))
-                                        onQuickReply?()
                                     } label: {
                                         keyLabel(
                                             "\(option)↵",

@@ -50,6 +50,7 @@ struct TerminalScreen: View {
     let host: HostConfig
     var isActive = true
     var quickReplyOptions: [Int] = []
+    var onQuickReply: (() -> Void)?
 
     var body: some View {
         GeometryReader { proxy in
@@ -69,6 +70,7 @@ struct TerminalScreen: View {
                             set: { connection.bridge.ctrlActive = $0 }
                         ),
                         quickReplyOptions: quickReplyOptions,
+                        onQuickReply: { onQuickReply?() },
                         onKey: { connection.bridge.handleToolbar($0) },
                         onHideKeyboard: {
                             connection.bridge.toggleKeyboard()

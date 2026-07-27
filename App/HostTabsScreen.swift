@@ -70,7 +70,8 @@ struct HostTabsScreen: View {
                         connection: tab.controller,
                         host: host,
                         isActive: tab.id == selectedTab,
-                        quickReplyOptions: tabQuickReplies[tab.id] ?? []
+                        quickReplyOptions: tabQuickReplies[tab.id] ?? [],
+                        onQuickReply: { tabQuickReplies[tab.id] = [] }
                     )
                     .opacity(tab.id == selectedTab ? 1 : 0)
                     .allowsHitTesting(tab.id == selectedTab)

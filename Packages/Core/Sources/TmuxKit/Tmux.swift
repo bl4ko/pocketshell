@@ -97,10 +97,16 @@ public enum AgentStatus: Equatable, Sendable {
         if tail.contains(/\p{L}…\s*\(\d+[hms]/) {
             return .busy
         }
-        if waitingMarkers.contains(where: lowered.contains) {
+        if waitingMarkers.contains(where: lowered.contains) || hasSelectedOption(tail) {
             return .waiting
         }
         return .idle
+    }
+
+    private static func hasSelectedOption(_ tail: String) -> Bool {
+        tail.split(separator: "\n").contains {
+            $0.trimmingPrefix(while: \.isWhitespace).contains(/^[❯›>]\s*[1-9][.):]\s/)
+        }
     }
 }
 

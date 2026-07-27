@@ -52,6 +52,25 @@ import Testing
     #expect(AgentStatus.detectAgent(pane) == .busy)
 }
 
+@Test func classifyWaitingOnPlanApproval() {
+    let pane = """
+        - gitops-home/internal/resources/metallb/ — retired in 5.3
+        - Update /ansible + /gitops + /security skills after each phase (house rule)
+
+        Claude has written up a plan and is ready to execute. Would you like to proceed?
+
+        ❯ 1. Yes, and use auto mode
+          2. Yes, manually approve edits
+          3. No, refine with Ultraplan on Claude Code on the web
+          4. Tell Claude what to change
+            shift+tab to approve with this feedback
+
+        ctrl+g to edit in Nvim · ~/.claude/plans/snoopy-dazzling-garden.md
+        """
+    #expect(AgentStatus.classify(pane) == .waiting)
+    #expect(AgentStatus.detectAgent(pane) == .waiting)
+}
+
 @Test func classifyIdleForFinishedSpinnerLine() {
     #expect(AgentStatus.classify("✻ Baked for 12m 3s") == .idle)
 }

@@ -7,6 +7,7 @@
 
     @MainActor
     public final class TerminalBridge: ObservableObject {
+        public static var bytesFed = 0
         @Published public var ctrlActive = false
         @Published public var selectMode = false
         public var sendToHost: ((Data) -> Void)?
@@ -51,6 +52,7 @@
 
         private func feedView(_ out: Data) {
             guard let view else { return }
+            Self.bytesFed += out.count
             feedingView = true
             defer { feedingView = false }
             view.feed(byteArray: [UInt8](out)[...])

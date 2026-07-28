@@ -319,26 +319,29 @@
                             view.clearSelection()
                         }
                     #endif
-                    let terminal = view.getTerminal()
-                    guard terminal.mouseMode != .off else { return }
-                    let location = gesture.location(in: view)
-                    let col = clamp(
-                        Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
-                    let row = clamp(
-                        Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
-                    terminal.sendEvent(
-                        buttonFlags: terminal.encodeButton(
-                            button: 0, release: false, shift: false, meta: false, control: false),
-                        x: col,
-                        y: row
-                    )
-                    terminal.sendEvent(
-                        buttonFlags: terminal.encodeButton(
-                            button: 0, release: true, shift: false, meta: false, control: false),
-                        x: col,
-                        y: row
-                    )
+                    sendMouseClick(in: view, at: gesture.location(in: view))
                 }
+            }
+
+            @MainActor private func sendMouseClick(in view: TerminalView, at location: CGPoint) {
+                let terminal = view.getTerminal()
+                guard terminal.mouseMode != .off else { return }
+                let col = clamp(
+                    Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
+                let row = clamp(
+                    Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                terminal.sendEvent(
+                    buttonFlags: terminal.encodeButton(
+                        button: 0, release: false, shift: false, meta: false, control: false),
+                    x: col,
+                    y: row
+                )
+                terminal.sendEvent(
+                    buttonFlags: terminal.encodeButton(
+                        button: 0, release: true, shift: false, meta: false, control: false),
+                    x: col,
+                    y: row
+                )
             }
 
             // Attaching from another device wins tmux's window-size latest with no
@@ -353,6 +356,8 @@
             }
 
             #if targetEnvironment(macCatalyst)
+                private var selectionStart: CGPoint?
+
                 @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
                     MainActor.assumeIsolated {
                         guard gesture.view?.window?.isKeyWindow == true else { return }
@@ -365,11 +370,23 @@
                         guard gesture.buttonMask.contains(.primary),
                             let view = gesture.view as? TerminalView
                         else { return }
+                        let point = gesture.location(in: view)
                         switch gesture.state {
                         case .began:
-                            view.startPointerSelection(at: gesture.location(in: view))
-                        case .changed, .ended:
-                            view.extendPointerSelection(to: gesture.location(in: view))
+                            selectionStart = point
+                            view.startPointerSelection(at: point)
+                        case .changed:
+                            view.extendPointerSelection(to: point)
+                        case .ended:
+                            view.extendPointerSelection(to: point)
+                            // A click that drifts past the pan slop never reaches the
+                            // tap handler, and tmux only moves its active pane on a
+                            // mouse report.
+                            if let start = selectionStart, hypot(point.x - start.x, point.y - start.y) < 6 {
+                                view.clearSelection()
+                                sendMouseClick(in: view, at: point)
+                            }
+                            selectionStart = nil
                         default:
                             break
                         }

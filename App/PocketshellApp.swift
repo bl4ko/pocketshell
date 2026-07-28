@@ -66,6 +66,7 @@ struct PocketshellApp: App {
                     }
                 }
                 .task {
+                    MainThreadWatchdog.shared.start()
                     store.refreshCloudConfig()
                     try? await Task.sleep(for: .seconds(1))
                     store.refreshCloudConfig()

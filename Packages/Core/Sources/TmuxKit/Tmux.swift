@@ -121,8 +121,17 @@ public enum Tmux {
         "\(tmux) list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_group}'"
     }
 
+    // tmux-resurrect saves whatever sessions exist, clones included, so a restored
+    // session can already carry a clone suffix. Cloning that again nests forever.
     public static func cloneName(session: String, clientTag: String) -> String {
-        "\(session)-psh-\(clientTag)"
+        "\(baseSessionName(session))-psh-\(clientTag)"
+    }
+
+    public static func baseSessionName(_ session: String) -> String {
+        guard let chain = session.range(of: "(-psh-[0-9a-f]{8})+$", options: .regularExpression) else {
+            return session
+        }
+        return String(session[..<chain.lowerBound])
     }
 
     public static func currentWindowCommand(clone: String) -> String {

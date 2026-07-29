@@ -208,6 +208,21 @@ import Testing
             == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux kill-window -t 'agents':2")
 }
 
+@Test func cloneNameDoesNotNestOnRestoredCloneNames() {
+    #expect(Tmux.baseSessionName("vibe-apps") == "vibe-apps")
+    #expect(Tmux.baseSessionName("vibe-apps-psh-a5fcd501") == "vibe-apps")
+    #expect(Tmux.baseSessionName("vibe-apps-psh-4363b8ed-psh-12f81680-psh-2d7868e5") == "vibe-apps")
+    #expect(Tmux.baseSessionName("my-psh-session") == "my-psh-session")
+    #expect(
+        Tmux.cloneName(session: "vibe-apps-psh-4363b8ed-psh-12f81680", clientTag: "0badf00d")
+            == "vibe-apps-psh-0badf00d"
+    )
+    #expect(
+        Tmux.attachCommand(session: "vibe-apps-psh-a5fcd501", windowIndex: nil, clientTag: "0badf00d")
+            .contains("-t 'vibe-apps-psh-a5fcd501' -s 'vibe-apps-psh-0badf00d'")
+    )
+}
+
 @Test func cloneNameMatchesAttachCommand() {
     #expect(Tmux.cloneName(session: "claude", clientTag: "ab12cd") == "claude-psh-ab12cd")
     #expect(

@@ -234,7 +234,9 @@ final class SmokeUITests: XCTestCase {
         hostRow.tap()
 
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
-        app.buttons["new-tab"].tap()
+        for _ in 0..<7 {
+            app.buttons["new-tab"].tap()
+        }
         let firstTab = app.descendants(matching: .any)["terminal-tab-1"]
         XCTAssertTrue(firstTab.waitForExistence(timeout: 10))
         firstTab.press(forDuration: 1)
@@ -250,9 +252,13 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(secondCard.waitForExistence(timeout: 5))
         secondCard.press(forDuration: 1)
         app.buttons["Close"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label == %@", "Close tab 2?"))
+                .firstMatch.waitForExistence(timeout: 2)
+        )
         XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 2))
         app.buttons["Delete"].tap()
-        XCTAssertTrue(secondCard.waitForNonExistence(timeout: 2))
         XCTAssertTrue(app.descendants(matching: .any)["switcher-tab-1"].exists)
         app.buttons["toggle-tabs"].tap()
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.exists)

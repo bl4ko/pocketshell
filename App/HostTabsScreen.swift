@@ -64,6 +64,7 @@ struct HostTabsScreen: View {
     @State private var dragGrabDelta: CGFloat = 0
 
     let host: HostConfig
+    var onSwitchHost: ((HostConfig) -> Void)?
 
     private let tabSpacing: CGFloat = 4
     private let tabStripInset: CGFloat = 8
@@ -96,14 +97,29 @@ struct HostTabsScreen: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 7) {
-                    Text(host.name)
-                        .font(PocketshellTheme.mono(14, weight: .bold))
-                        .foregroundStyle(PocketshellTheme.ink)
-                    Circle()
-                        .fill(connectionColor)
-                        .frame(width: 7, height: 7)
+                Menu {
+                    ForEach(store.hosts) { candidate in
+                        Button {
+                            onSwitchHost?(candidate)
+                        } label: {
+                            Label(candidate.name, systemImage: candidate.id == host.id ? "checkmark" : "server.rack")
+                        }
+                        .disabled(candidate.id == host.id)
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        Text(host.name)
+                            .font(PocketshellTheme.mono(14, weight: .bold))
+                            .foregroundStyle(PocketshellTheme.ink)
+                        Circle()
+                            .fill(connectionColor)
+                            .frame(width: 7, height: 7)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(PocketshellTheme.muted)
+                    }
                 }
+                .accessibilityIdentifier("host-switcher")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

@@ -48,7 +48,10 @@ struct HostsListView: View {
             .id(themeName)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: HostConfig.self) { host in
-                HostTabsScreen(host: host)
+                HostTabsScreen(host: host) { newHost in
+                    path.removeLast()
+                    path.append(newHost)
+                }
             }
             .navigationDestination(for: VNCHostConfig.self) { host in
                 VNCDesktopScreen(host: host)

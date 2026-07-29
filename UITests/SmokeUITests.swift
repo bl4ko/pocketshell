@@ -234,6 +234,7 @@ final class SmokeUITests: XCTestCase {
         hostRow.tap()
 
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["host-switcher"].exists)
         for _ in 0..<7 {
             app.buttons["new-tab"].tap()
         }

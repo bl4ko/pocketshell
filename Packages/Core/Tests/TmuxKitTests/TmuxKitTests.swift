@@ -139,6 +139,7 @@ import Testing
     #expect(command.contains("[ \"$a\" = 0 ]"))
     #expect(command.contains("[ -n \"$g\" ]"))
     #expect(command.contains("[ $((now - c)) -gt 60 ]"))
+    #expect(command.contains("grep -Fxq \"${n%-psh-*}\""))
     #expect(command.contains("kill-session -t \"$n\""))
 }
 

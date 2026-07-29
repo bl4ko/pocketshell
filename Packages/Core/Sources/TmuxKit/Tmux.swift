@@ -152,14 +152,19 @@ public enum Tmux {
     }
 
     // Clones left behind by older builds, or by a tmux that never ran the
-    // destroy-unattached check. Only grouped ones are touched: those share
-    // their windows with the session they clone, so killing them destroys
-    // nothing, while a same-named session restored by tmux-resurrect is
-    // standalone and holds the only copy of its panes.
+    // destroy-unattached check. A clone is only safe to kill while the session
+    // it clones is still there to hold the windows they share: once the base is
+    // gone the clones are the only reference left, and a same-named session
+    // restored by tmux-resurrect is standalone and holds the only copy of its
+    // panes. grep -Fx, not has-session, because tmux resolves a missing target
+    // by prefix and would match the clone itself.
     public static func cleanupClonesCommand() -> String {
         let list = "\(tmux) list-sessions -F '#{session_name}|#{session_attached}|#{session_group}|#{session_created}'"
-        let guards = "[ \"$a\" = 0 ] && [ -n \"$g\" ] && [ -n \"$c\" ] && [ $((now - c)) -gt 60 ]"
-        return "now=$(date +%s); \(list) 2>/dev/null | while IFS='|' read -r n a g c; do"
+        let guards =
+            "[ \"$a\" = 0 ] && [ -n \"$g\" ] && [ -n \"$c\" ] && [ $((now - c)) -gt 60 ]"
+            + " && printf '%s\\n' \"$names\" | grep -Fxq \"${n%-psh-*}\""
+        return "s=$(\(list) 2>/dev/null); now=$(date +%s); names=$(printf '%s\\n' \"$s\" | cut -d'|' -f1);"
+            + " printf '%s\\n' \"$s\" | while IFS='|' read -r n a g c; do"
             + " case \"$n\" in *-psh-????????) \(guards) && \(tmux) kill-session -t \"$n\";; esac;"
             + " done; true"
     }

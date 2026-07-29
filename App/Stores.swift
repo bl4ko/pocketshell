@@ -59,14 +59,12 @@ final class AppStore: ObservableObject {
         didSet {
             markWorkspaceChanged(old: oldValue, new: savedTabs)
             savedTabsStore.save(savedTabs)
-            saveConfigToCloud()
         }
     }
     @Published var sessionOrder: [String: [String]] {
         didSet {
             markWorkspaceChanged(old: oldValue, new: sessionOrder)
             sessionOrderStore.save(sessionOrder)
-            saveConfigToCloud()
         }
     }
     @Published private(set) var configSyncError: String?
@@ -85,6 +83,7 @@ final class AppStore: ObservableObject {
     private var workspaceUpdatedAt: [String: Date]
     private var applyingConfig = false
     private var applyingCredentials = false
+    private var liveWorkspaceHosts: Set<String> = []
 
     private static let cloudConfigAccount = "config-v1"
     private static let cloudCredentialsAccount = "credentials-v1"
@@ -225,17 +224,15 @@ final class AppStore: ObservableObject {
         vncHosts = config.vncHosts
         snippets = config.snippets
         toolbarKeys = config.toolbarKeys
-        if let workspace = config.workspace {
-            applyWorkspace(WorkspaceConfig.merged(local: localWorkspace, remote: workspace))
-        }
         try? knownHosts.merge(config.knownHosts)
         applyingConfig = false
     }
 
     func saveConfigToCloud() {
-        guard cloudSyncEnabled, !applyingConfig,
-            let data = try? JSONEncoder().encode(exportConfig())
-        else { return }
+        guard cloudSyncEnabled, !applyingConfig else { return }
+        var config = exportConfig()
+        config.workspace = nil
+        guard let data = try? JSONEncoder().encode(config) else { return }
         do {
             try SynchronizableStore.set(data, account: Self.cloudConfigAccount)
             configSyncError = nil
@@ -271,6 +268,36 @@ final class AppStore: ObservableObject {
         for hostID in changed {
             workspaceUpdatedAt[hostID] = now
         }
+        workspaceUpdatedAtStore.save(workspaceUpdatedAt)
+    }
+
+    func beginLiveWorkspace(hostID: String) {
+        liveWorkspaceHosts.insert(hostID)
+    }
+
+    func endLiveWorkspace(hostID: String) {
+        liveWorkspaceHosts.remove(hostID)
+    }
+
+    func workspaceUpdatedAt(hostID: String) -> Date? {
+        workspaceUpdatedAt[hostID]
+    }
+
+    func localWorkspace(hostID: String) -> HostWorkspace {
+        HostWorkspace(
+            tabs: savedTabs[hostID] ?? [],
+            sessionOrder: sessionOrder[hostID] ?? [],
+            updatedAt: workspaceUpdatedAt[hostID] ?? Date()
+        )
+    }
+
+    func applyRemoteWorkspace(hostID: String, _ remote: HostWorkspace) {
+        guard !liveWorkspaceHosts.contains(hostID) else { return }
+        applyingConfig = true
+        savedTabs[hostID] = remote.tabs.isEmpty ? nil : remote.tabs
+        sessionOrder[hostID] = remote.sessionOrder.isEmpty ? nil : remote.sessionOrder
+        applyingConfig = false
+        workspaceUpdatedAt[hostID] = remote.updatedAt
         workspaceUpdatedAtStore.save(workspaceUpdatedAt)
     }
 

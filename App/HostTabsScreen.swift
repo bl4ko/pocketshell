@@ -9,6 +9,7 @@ struct TerminalTab: Identifiable {
     let controller: ConnectionController
     var name: String?
     var tmuxWindowName: String?
+    let number: Int
 }
 
 private struct TabReorderModifier: ViewModifier {
@@ -183,6 +184,7 @@ struct HostTabsScreen: View {
             PortForwardSheet(controller: activeController)
         }
         .onAppear {
+            store.beginLiveWorkspace(hostID: host.id.uuidString)
             if tabs.isEmpty {
                 restoreTabs()
             }
@@ -210,6 +212,7 @@ struct HostTabsScreen: View {
             activeController?.nudgeTmuxSizing()
         }
         .onDisappear {
+            store.endLiveWorkspace(hostID: host.id.uuidString)
             for tab in tabs {
                 Task { await tab.controller.stop() }
             }
@@ -231,11 +234,11 @@ struct HostTabsScreen: View {
     }
 
     private var tabJumpItems: [TabJumpItem] {
-        tabs.enumerated().map { index, tab in
+        tabs.map { tab in
             let text = tab.controller.bridge.visibleText()
             return TabJumpItem(
                 id: tab.id,
-                label: tabLabel(tab, index: index),
+                label: tabLabel(tab),
                 status: tabStatuses[tab.id],
                 preview: Tmux.previewLines(text, count: 3),
                 selected: tab.id == selectedTab,
@@ -257,7 +260,7 @@ struct HostTabsScreen: View {
 
     private func addTab() {
         let controller = makeController()
-        let tab = TerminalTab(controller: controller)
+        let tab = TerminalTab(controller: controller, number: nextTabNumber)
         controller.onExit = { closeTab(id: tab.id) }
         tabs.append(tab)
         selectedTab = tab.id
@@ -267,7 +270,7 @@ struct HostTabsScreen: View {
     private func openWindowInNewTab(session: String, windowIndex: Int?, name: String? = nil) {
         let controller = makeController()
         controller.preset(session: session, windowIndex: windowIndex)
-        let tab = TerminalTab(controller: controller, tmuxWindowName: name)
+        let tab = TerminalTab(controller: controller, tmuxWindowName: name, number: nextTabNumber)
         controller.onExit = { closeTab(id: tab.id) }
         tabs.append(tab)
         selectedTab = tab.id
@@ -297,7 +300,7 @@ struct HostTabsScreen: View {
                 for (name, session) in fixtures {
                     let controller = makeController()
                     controller.preset(session: session, windowIndex: 0)
-                    let tab = TerminalTab(controller: controller, name: name)
+                    let tab = TerminalTab(controller: controller, name: name, number: nextTabNumber)
                     controller.onExit = { closeTab(id: tab.id) }
                     tabs.append(tab)
                 }
@@ -317,11 +320,12 @@ struct HostTabsScreen: View {
             } else {
                 controller.presetPlain()
             }
-            let tab = TerminalTab(controller: controller, name: record.name)
+            let tab = TerminalTab(controller: controller, name: record.name, number: record.number ?? nextTabNumber)
             controller.onExit = { closeTab(id: tab.id) }
             tabs.append(tab)
         }
         selectedTab = tabs.first?.id
+        persistTabs()
     }
 
     private func consumePendingTarget() {
@@ -334,7 +338,7 @@ struct HostTabsScreen: View {
         } else {
             let controller = makeController()
             controller.preset(session: session, windowIndex: target.windowIndex)
-            let tab = TerminalTab(controller: controller)
+            let tab = TerminalTab(controller: controller, number: nextTabNumber)
             controller.onExit = { closeTab(id: tab.id) }
             tabs.append(tab)
             selectedTab = tab.id
@@ -362,7 +366,12 @@ struct HostTabsScreen: View {
     private func persistTabs() {
         let records = tabs.map { tab in
             let target = tab.controller.tmuxTarget
-            return TabRecord(name: tab.name, tmuxSession: target?.session, windowIndex: target?.windowIndex)
+            return TabRecord(
+                name: tab.name,
+                tmuxSession: target?.session,
+                windowIndex: target?.windowIndex,
+                number: tab.number
+            )
         }
         if store.savedTabs[host.id.uuidString] != records {
             store.savedTabs[host.id.uuidString] = records
@@ -371,7 +380,7 @@ struct HostTabsScreen: View {
 
     private func pollTabs() async {
         var samples: [AgentActivityTracker.Sample] = []
-        for (index, tab) in tabs.enumerated() {
+        for tab in tabs {
             let text: String
             let agentRunning: Bool?
             if tab.controller.isTmuxAttached {
@@ -399,7 +408,7 @@ struct HostTabsScreen: View {
             samples.append(
                 .init(
                     key: "tab-\(tab.id.uuidString)",
-                    title: "\(host.name) \(tabLabel(tab, index: index))",
+                    title: "\(host.name) \(tabLabel(tab))",
                     status: status
                 ))
         }
@@ -497,7 +506,7 @@ struct HostTabsScreen: View {
                 ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                     HStack(spacing: 5) {
                         statusDotView(for: tab)
-                        Text(tabLabel(tab, index: index))
+                        Text(tabLabel(tab))
                             .font(.footnote.monospaced())
                             .lineLimit(1)
                     }
@@ -519,8 +528,8 @@ struct HostTabsScreen: View {
                             )
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(tabAccessibilityLabel(tab, index: index))
-                    .accessibilityIdentifier("terminal-tab-\(index + 1)")
+                    .accessibilityLabel(tabAccessibilityLabel(tab))
+                    .accessibilityIdentifier("terminal-tab-\(tab.number)")
                     .background {
                         GeometryReader { geometry in
                             Color.clear
@@ -604,14 +613,18 @@ struct HostTabsScreen: View {
         persistTabs()
     }
 
-    private func tabLabel(_ tab: TerminalTab, index: Int) -> String {
-        tab.name ?? tab.tmuxWindowName ?? "\(index + 1)"
+    private var nextTabNumber: Int {
+        (tabs.map(\.number).max() ?? 0) + 1
     }
 
-    private func tabAccessibilityLabel(_ tab: TerminalTab, index: Int) -> String {
+    private func tabLabel(_ tab: TerminalTab) -> String {
+        tab.name ?? tab.tmuxWindowName ?? "\(tab.number)"
+    }
+
+    private func tabAccessibilityLabel(_ tab: TerminalTab) -> String {
         let status = tabStatuses[tab.id]?.label ?? "no status"
         let unseen = isUnseen(tab) ? ", unseen" : ""
-        return "\(tabLabel(tab, index: index)), \(status)\(unseen)"
+        return "\(tabLabel(tab)), \(status)\(unseen)"
     }
 
     private func applyRename() {
@@ -789,7 +802,6 @@ struct TmuxJumpSheet: View {
     private enum KillTarget {
         case session(String)
         case window(session: String, index: Int, name: String)
-        case tab(id: UUID, label: String)
 
         var confirmTitle: String {
             switch self {
@@ -797,8 +809,6 @@ struct TmuxJumpSheet: View {
                 "Delete tmux session \(name)? Kills all its windows."
             case .window(_, _, let name):
                 "Delete window \(name)? Kills its shell."
-            case .tab(_, let label):
-                "Close tab \(label)?"
             }
         }
     }
@@ -1026,7 +1036,7 @@ struct TmuxJumpSheet: View {
                                         prompt = .renameTab(item.id)
                                     }
                                     Button("Close", role: .destructive) {
-                                        killTarget = .tab(id: item.id, label: item.label)
+                                        onCloseTab?(item.id)
                                     }
                                 }
                         }
@@ -1263,8 +1273,6 @@ struct TmuxJumpSheet: View {
                 await controller?.killTmuxWindow(session: session, windowIndex: index)
                 await load()
             }
-        case .tab(let id, _):
-            onCloseTab?(id)
         }
     }
 

@@ -22,6 +22,53 @@ import Testing
     #expect(decoded.version == 1)
 }
 
+@Test func hostWorkspaceRoundTripsThroughJSON() throws {
+    let workspace = HostWorkspace(
+        tabs: [TabRecord(name: "agent", tmuxSession: "agents", windowIndex: 2)],
+        sessionOrder: ["agents", "infra"],
+        updatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+    )
+    let data = try JSONEncoder().encode(workspace)
+    let decoded = try JSONDecoder().decode(HostWorkspace.self, from: data)
+    #expect(decoded == workspace)
+}
+
+@Test func workspaceSyncWriteCommandEmbedsDecodablePayload() throws {
+    let workspace = HostWorkspace(
+        tabs: [TabRecord(tmuxSession: "agents", windowIndex: 0)],
+        sessionOrder: ["agents"],
+        updatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+    )
+    let command = try #require(WorkspaceSync.writeCommand(workspace))
+    #expect(command.contains("mkdir -p \"$HOME/.config/pocketshell\""))
+    #expect(command.contains("base64 -d > \"$HOME/.config/pocketshell/workspace.json\""))
+    let payload = try #require(command.components(separatedBy: "'").dropFirst(3).first)
+    let data = try #require(Data(base64Encoded: payload))
+    let decoded = try JSONDecoder().decode(HostWorkspace.self, from: data)
+    #expect(decoded == workspace)
+    #expect(WorkspaceSync.decode(String(decoding: data, as: UTF8.self)) == workspace)
+}
+
+@Test func workspaceSyncActionUsesLastWriterWins() {
+    let old = Date(timeIntervalSince1970: 1_800_000_000)
+    let new = Date(timeIntervalSince1970: 1_800_000_100)
+    let remote = HostWorkspace(tabs: [], sessionOrder: [], updatedAt: new)
+
+    #expect(WorkspaceSync.action(localUpdatedAt: nil, remote: nil) == .none)
+    #expect(WorkspaceSync.action(localUpdatedAt: old, remote: nil) == .push)
+    #expect(WorkspaceSync.action(localUpdatedAt: nil, remote: remote) == .apply(remote))
+    #expect(WorkspaceSync.action(localUpdatedAt: old, remote: remote) == .apply(remote))
+    #expect(WorkspaceSync.action(localUpdatedAt: new, remote: remote) == .none)
+    #expect(
+        WorkspaceSync.action(
+            localUpdatedAt: new,
+            remote: HostWorkspace(tabs: [], sessionOrder: [], updatedAt: old)
+        ) == .push
+    )
+    #expect(WorkspaceSync.decode("") == nil)
+    #expect(WorkspaceSync.decode("no session") == nil)
+}
+
 @Test func workspaceDerivesUniqueTmuxSessionsFromHostAndTabs() {
     let hostID = UUID()
     let workspace = WorkspaceConfig(

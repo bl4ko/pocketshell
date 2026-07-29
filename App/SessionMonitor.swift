@@ -116,6 +116,7 @@ final class SessionMonitor: ObservableObject {
                 for: host,
                 using: Tmux.canonicalSessionMap(sessionsOutput, requested: requestedSessions)
             )
+            await syncWorkspace(for: host, using: connection)
             let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
             for session in sessions {
                 let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
@@ -158,6 +159,24 @@ final class SessionMonitor: ObservableObject {
         WatchRelay.shared.push(snapshot)
         for transition in transitions {
             notify(transition, userInfo: targets[transition.key])
+        }
+    }
+
+    private func syncWorkspace(for host: HostConfig, using connection: SSHConnection) async {
+        let hostID = host.id.uuidString
+        let output = (try? await connection.exec(WorkspaceSync.readCommand)) ?? ""
+        switch WorkspaceSync.action(
+            localUpdatedAt: store.workspaceUpdatedAt(hostID: hostID),
+            remote: WorkspaceSync.decode(output)
+        ) {
+        case .push:
+            if let command = WorkspaceSync.writeCommand(store.localWorkspace(hostID: hostID)) {
+                _ = try? await connection.exec(command)
+            }
+        case .apply(let remote):
+            store.applyRemoteWorkspace(hostID: hostID, remote)
+        case .none:
+            break
         }
     }
 

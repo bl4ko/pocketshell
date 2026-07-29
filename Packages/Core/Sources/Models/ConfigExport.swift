@@ -4,11 +4,25 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var name: String?
     public var tmuxSession: String?
     public var windowIndex: Int?
+    public var number: Int?
 
-    public init(name: String? = nil, tmuxSession: String? = nil, windowIndex: Int? = nil) {
+    public init(name: String? = nil, tmuxSession: String? = nil, windowIndex: Int? = nil, number: Int? = nil) {
         self.name = name
         self.tmuxSession = tmuxSession
         self.windowIndex = windowIndex
+        self.number = number
+    }
+}
+
+public struct HostWorkspace: Codable, Equatable, Sendable {
+    public var tabs: [TabRecord]
+    public var sessionOrder: [String]
+    public var updatedAt: Date
+
+    public init(tabs: [TabRecord] = [], sessionOrder: [String] = [], updatedAt: Date) {
+        self.tabs = tabs
+        self.sessionOrder = sessionOrder
+        self.updatedAt = updatedAt
     }
 }
 

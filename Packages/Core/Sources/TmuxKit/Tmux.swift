@@ -133,13 +133,35 @@ public enum Tmux {
         Int(output.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    // Every option needs an explicit -t: an untargeted set-option in the attach
+    // chain resolves against a client that has not attached yet, so it lands
+    // either nowhere (clones never expire) or on the whole server (which turns
+    // destroy-unattached into "kill every detached session").
     public static func attachCommand(session: String, windowIndex: Int?, clientTag: String) -> String {
-        let clone = cloneName(session: session, clientTag: clientTag)
-        let attach =
-            "\(tmux) -u new-session -t \(shellQuote(session)) -s \(shellQuote(clone))"
-            + " \\; set-option destroy-unattached on \\; set-option status off"
-        guard let windowIndex else { return attach }
-        return "\(attach) \\; select-window -t \(windowIndex)"
+        let clone = shellQuote(cloneName(session: session, clientTag: clientTag))
+        var parts = ["\(tmux) -u new-session -d -t \(shellQuote(session)) -s \(clone)"]
+        if let windowIndex {
+            parts.append("select-window -t \(clone):\(windowIndex)")
+        }
+        // destroy-unattached has to be set after the client is on the clone:
+        // set while the -d session is still unattached, it destroys it at once.
+        parts.append("attach-session -t \(clone)")
+        parts.append("set-option -t \(clone) destroy-unattached on")
+        parts.append("set-option -t \(clone) status off")
+        return parts.joined(separator: " \\; ")
+    }
+
+    // Clones left behind by older builds, or by a tmux that never ran the
+    // destroy-unattached check. Only grouped ones are touched: those share
+    // their windows with the session they clone, so killing them destroys
+    // nothing, while a same-named session restored by tmux-resurrect is
+    // standalone and holds the only copy of its panes.
+    public static func cleanupClonesCommand() -> String {
+        let list = "\(tmux) list-sessions -F '#{session_name}|#{session_attached}|#{session_group}|#{session_created}'"
+        let guards = "[ \"$a\" = 0 ] && [ -n \"$g\" ] && [ -n \"$c\" ] && [ $((now - c)) -gt 60 ]"
+        return "now=$(date +%s); \(list) 2>/dev/null | while IFS='|' read -r n a g c; do"
+            + " case \"$n\" in *-psh-????????) \(guards) && \(tmux) kill-session -t \"$n\";; esac;"
+            + " done; true"
     }
 
     public static func sendKeysCommand(session: String, windowIndex: Int, text: String, pressEnter: Bool) -> String {

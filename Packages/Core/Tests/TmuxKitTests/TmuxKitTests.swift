@@ -111,15 +111,35 @@ import Testing
 @Test func attachCommandWithWindow() {
     #expect(
         Tmux.attachCommand(session: "claude", windowIndex: 3, clientTag: "ab12cd")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on \\; set-option status off \\; select-window -t 3"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -d -t 'claude' -s 'claude-psh-ab12cd' \\; select-window -t 'claude-psh-ab12cd':3 \\; attach-session -t 'claude-psh-ab12cd' \\; set-option -t 'claude-psh-ab12cd' destroy-unattached on \\; set-option -t 'claude-psh-ab12cd' status off"
     )
 }
 
 @Test func attachCommandWithoutWindow() {
     #expect(
         Tmux.attachCommand(session: "claude", windowIndex: nil, clientTag: "ab12cd")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -t 'claude' -s 'claude-psh-ab12cd' \\; set-option destroy-unattached on \\; set-option status off"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux -u new-session -d -t 'claude' -s 'claude-psh-ab12cd' \\; attach-session -t 'claude-psh-ab12cd' \\; set-option -t 'claude-psh-ab12cd' destroy-unattached on \\; set-option -t 'claude-psh-ab12cd' status off"
     )
+}
+
+@Test func attachCommandTargetsEveryOptionAtTheClone() {
+    let parts = Tmux.attachCommand(session: "claude", windowIndex: 3, clientTag: "ab12cd")
+        .components(separatedBy: " \\; ")
+    for part in parts where part.contains("set-option") {
+        #expect(part.contains("-t 'claude-psh-ab12cd'"))
+    }
+    let attach = parts.firstIndex { $0.hasPrefix("attach-session") }
+    let firstOption = parts.firstIndex { $0.contains("set-option") }
+    #expect(attach != nil && firstOption != nil && attach! < firstOption!)
+}
+
+@Test func cleanupClonesCommandSkipsAttachedAndUngroupedSessions() {
+    let command = Tmux.cleanupClonesCommand()
+    #expect(command.contains("*-psh-????????)"))
+    #expect(command.contains("[ \"$a\" = 0 ]"))
+    #expect(command.contains("[ -n \"$g\" ]"))
+    #expect(command.contains("[ $((now - c)) -gt 60 ]"))
+    #expect(command.contains("kill-session -t \"$n\""))
 }
 
 @Test func sessionNameWithSingleQuoteIsEscaped() {

@@ -269,6 +269,10 @@ final class ConnectionController: ObservableObject {
             return
         }
 
+        if host.tmuxSession != nil {
+            Task { _ = try? await connection.exec(Tmux.cleanupClonesCommand()) }
+        }
+
         if let session = host.tmuxSession, pendingShell == nil {
             await listTmuxWindows(connection: connection, session: session)
         } else {

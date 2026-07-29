@@ -870,6 +870,15 @@ struct TmuxJumpSheet: View {
                                             )
                                             return true
                                         }
+                                        .contextMenu {
+                                            Button("Rename…") {
+                                                promptText = item.label
+                                                prompt = .renameTab(item.id)
+                                            }
+                                            Button("Close", role: .destructive) {
+                                                killTarget = .tab(id: item.id, label: item.label)
+                                            }
+                                        }
                                 }
                             }
                             .padding(.vertical, 3)
@@ -1137,15 +1146,7 @@ struct TmuxJumpSheet: View {
             }
         }
         .buttonStyle(.plain)
-        .contextMenu {
-            Button("Rename…") {
-                promptText = item.label
-                prompt = .renameTab(item.id)
-            }
-            Button("Close", role: .destructive) {
-                killTarget = .tab(id: item.id, label: item.label)
-            }
-        }
+        .accessibilityIdentifier("switcher-tab-\(item.label)")
     }
 
     private func tabAttachment(_ item: TabJumpItem) -> String {

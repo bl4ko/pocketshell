@@ -240,11 +240,20 @@ final class SmokeUITests: XCTestCase {
         firstTab.press(forDuration: 1)
         XCTAssertTrue(app.buttons["Close Tab"].waitForExistence(timeout: 2))
         app.buttons["Close Tab"].tap()
+        app.buttons["new-tab"].tap()
         app.buttons["tmux-sessions"].firstMatch.tap()
 
         let sessionRow = app.descendants(matching: .any)["tmux-session-\(session)"]
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.searchFields["Search tabs, sessions, windows"].waitForExistence(timeout: 5))
+        let secondCard = app.descendants(matching: .any)["switcher-tab-2"]
+        XCTAssertTrue(secondCard.waitForExistence(timeout: 5))
+        secondCard.press(forDuration: 1)
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 2))
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(secondCard.waitForNonExistence(timeout: 2))
+        XCTAssertTrue(app.descendants(matching: .any)["switcher-tab-1"].exists)
         app.buttons["toggle-tabs"].tap()
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.exists)
         app.buttons["toggle-tabs"].tap()

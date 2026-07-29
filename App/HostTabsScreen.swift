@@ -11,6 +11,20 @@ struct TerminalTab: Identifiable {
     var tmuxWindowName: String?
 }
 
+private struct TabReorderModifier: ViewModifier {
+    let identifier: String
+    let move: (String) -> Bool
+
+    func body(content: Content) -> some View {
+        content
+            .draggable(identifier)
+            .dropDestination(for: String.self) { identifiers, _ in
+                guard let identifier = identifiers.first else { return false }
+                return move(identifier)
+            }
+    }
+}
+
 struct TabJumpItem: Identifiable {
     let id: UUID
     let label: String
@@ -53,11 +67,6 @@ struct HostTabsScreen: View {
     private let tabSpacing: CGFloat = 4
     private let tabStripInset: CGFloat = 8
     private let tabStripSpace = "tabstrip"
-    #if targetEnvironment(macCatalyst)
-        private let dragActivationDistance: CGFloat = 4
-    #else
-        private let dragActivationDistance: CGFloat = 0
-    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -474,20 +483,13 @@ struct HostTabsScreen: View {
         persistTabs()
     }
 
-    private func reorderGesture(for id: UUID) -> some Gesture {
-        let drag = DragGesture(minimumDistance: dragActivationDistance, coordinateSpace: .named(tabStripSpace))
-            .onChanged { applyDrag(id: id, start: $0.startLocation, location: $0.location) }
-            .onEnded { _ in endDrag() }
-        #if targetEnvironment(macCatalyst)
-            return drag
-        #else
-            // A plain drag would be swallowed by the strip's horizontal scroll,
-            // so touch reordering starts the way the system drag it replaces did.
-            return LongPressGesture(minimumDuration: 0.3)
-                .sequenced(before: drag)
+    #if targetEnvironment(macCatalyst)
+        private func reorderGesture(for id: UUID) -> some Gesture {
+            DragGesture(minimumDistance: 4, coordinateSpace: .named(tabStripSpace))
+                .onChanged { applyDrag(id: id, start: $0.startLocation, location: $0.location) }
                 .onEnded { _ in endDrag() }
-        #endif
-    }
+        }
+    #endif
 
     private var tabStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -542,7 +544,29 @@ struct HostTabsScreen: View {
                     .onTapGesture {
                         selectedTab = tab.id
                     }
-                    .gesture(reorderGesture(for: tab.id))
+                    #if targetEnvironment(macCatalyst)
+                        .gesture(reorderGesture(for: tab.id))
+                    #else
+                        .modifier(
+                            TabReorderModifier(identifier: tab.id.uuidString) { identifier in
+                                guard
+                                    let sourceIndex = tabs.firstIndex(where: {
+                                        $0.id.uuidString == identifier
+                                    }),
+                                    let targetIndex = tabs.firstIndex(where: { $0.id == tab.id }),
+                                    sourceIndex != targetIndex
+                                else { return false }
+                                withAnimation(.snappy(duration: 0.18)) {
+                                    tabs.move(
+                                        fromOffsets: IndexSet(integer: sourceIndex),
+                                        toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+                                    )
+                                }
+                                persistTabs()
+                                return true
+                            }
+                        )
+                    #endif
                     .contextMenu {
                         Button("Rename Tab") {
                             renameText = tab.name ?? ""
@@ -1047,9 +1071,12 @@ struct TmuxJumpSheet: View {
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(PocketshellTheme.muted)
             }
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("toggle-tabs")
             Button(action, action: perform)
                 .font(PocketshellTheme.mono(10, weight: .bold))
                 .foregroundStyle(PocketshellTheme.accent)
+                .buttonStyle(.borderless)
         }
         .textCase(nil)
     }

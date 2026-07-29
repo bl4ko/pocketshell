@@ -234,11 +234,20 @@ final class SmokeUITests: XCTestCase {
         hostRow.tap()
 
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["new-tab"].tap()
+        let firstTab = app.descendants(matching: .any)["terminal-tab-1"]
+        XCTAssertTrue(firstTab.waitForExistence(timeout: 10))
+        firstTab.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["Close Tab"].waitForExistence(timeout: 2))
+        app.buttons["Close Tab"].tap()
         app.buttons["tmux-sessions"].firstMatch.tap()
 
         let sessionRow = app.descendants(matching: .any)["tmux-session-\(session)"]
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.searchFields["Search tabs, sessions, windows"].waitForExistence(timeout: 5))
+        app.buttons["toggle-tabs"].tap()
+        XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.exists)
+        app.buttons["toggle-tabs"].tap()
         var swipes = 0
         while !sessionRow.exists && swipes < 8 {
             app.swipeUp()

@@ -30,28 +30,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT/PS_TEST_USER not set; sshd-backed smoke skipped")
         }
 
-        app.buttons["plus"].firstMatch.tap()
-        let sshHostItem = app.buttons["SSH Host"].firstMatch
-        XCTAssertTrue(sshHostItem.waitForExistence(timeout: 5))
-        sshHostItem.tap()
-        let nameField = app.textFields["Name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.tap()
-        nameField.typeText("localbox")
-        app.textFields["Hostname or IP"].tap()
-        app.textFields["Hostname or IP"].typeText("127.0.0.1")
-        let portField = app.textFields["Port"]
-        portField.tap()
-        portField.press(forDuration: 1.0)
-        if app.menuItems["Select All"].waitForExistence(timeout: 2) {
-            app.menuItems["Select All"].tap()
-        }
-        portField.typeText(port)
-        app.textFields["Username"].tap()
-        app.textFields["Username"].typeText(user)
-        app.textFields["Group (optional)"].tap()
-        app.textFields["Group (optional)"].typeText("lab")
-        app.buttons["Save"].tap()
+        addHost(named: "localbox", port: port, user: user)
 
         XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
 
@@ -225,16 +204,30 @@ final class SmokeUITests: XCTestCase {
 
     func testTmuxSessionListedAndAttaches() throws {
         let env = ProcessInfo.processInfo.environment
-        guard env["PS_TEST_PORT"] != nil, let session = env["PS_TEST_TMUX"] else {
+        guard let port = env["PS_TEST_PORT"], let user = env["PS_TEST_USER"],
+            let session = env["PS_TEST_TMUX"]
+        else {
             throw XCTSkip("PS_TEST_TMUX not set; tmux e2e skipped")
         }
 
+        addHost(named: "backupbox", port: port, user: user)
         let hostRow = app.staticTexts["localbox"].firstMatch
         XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
         hostRow.tap()
 
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["host-switcher"].isHittable)
+        let hostSwitcher = app.descendants(matching: .any)["host-switcher"]
+        XCTAssertTrue(hostSwitcher.isHittable)
+        let hostTitleScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        hostTitleScreenshot.name = "host-title-visible"
+        hostTitleScreenshot.lifetime = .keepAlways
+        add(hostTitleScreenshot)
+        hostSwitcher.tap()
+        XCTAssertTrue(app.buttons["backupbox"].waitForExistence(timeout: 2))
+        app.buttons["backupbox"].tap()
+        let switchedHost = app.descendants(matching: .any)["host-switcher"]
+        XCTAssertTrue(switchedHost.waitForExistence(timeout: 10))
+        XCTAssertTrue(switchedHost.label.contains("backupbox"))
         for _ in 0..<7 {
             app.buttons["new-tab"].tap()
         }
@@ -382,6 +375,31 @@ final class SmokeUITests: XCTestCase {
         let accent = pixel(XCUIScreen.main.screenshot().image, x: 0.91, y: 0.11)
         XCTAssertGreaterThan(accent.red, 150)
         XCTAssertLessThan(accent.blue, 100)
+    }
+
+    private func addHost(named name: String, port: String, user: String) {
+        app.buttons["plus"].firstMatch.tap()
+        let sshHostItem = app.buttons["SSH Host"].firstMatch
+        XCTAssertTrue(sshHostItem.waitForExistence(timeout: 5))
+        sshHostItem.tap()
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText(name)
+        app.textFields["Hostname or IP"].tap()
+        app.textFields["Hostname or IP"].typeText("127.0.0.1")
+        let portField = app.textFields["Port"]
+        portField.tap()
+        portField.press(forDuration: 1.0)
+        if app.menuItems["Select All"].waitForExistence(timeout: 2) {
+            app.menuItems["Select All"].tap()
+        }
+        portField.typeText(port)
+        app.textFields["Username"].tap()
+        app.textFields["Username"].typeText(user)
+        app.textFields["Group (optional)"].tap()
+        app.textFields["Group (optional)"].typeText("lab")
+        app.buttons["Save"].tap()
     }
 
 }

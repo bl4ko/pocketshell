@@ -98,22 +98,21 @@ struct HostTabsScreen: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Button {
-                    showHostSwitcher = true
-                } label: {
-                    HStack(spacing: 7) {
-                        Text(host.name)
-                            .font(PocketshellTheme.mono(14, weight: .bold))
-                            .foregroundStyle(PocketshellTheme.ink)
-                        Circle()
-                            .fill(connectionColor)
-                            .frame(width: 7, height: 7)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2)
-                            .foregroundStyle(PocketshellTheme.muted)
-                    }
+                HStack(spacing: 7) {
+                    Text(host.name)
+                        .font(PocketshellTheme.mono(14, weight: .bold))
+                        .foregroundStyle(PocketshellTheme.ink)
+                    Circle()
+                        .fill(connectionColor)
+                        .frame(width: 7, height: 7)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(PocketshellTheme.muted)
                 }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .onTapGesture { showHostSwitcher = true }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("host-switcher")
             }
             ToolbarItem(placement: .topBarTrailing) {

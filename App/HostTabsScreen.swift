@@ -93,28 +93,29 @@ struct HostTabsScreen: View {
         .background(tabShortcuts)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(hidesSystemBackButton)
         .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(PocketshellTheme.paper, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 7) {
-                    Text(host.name)
-                        .font(PocketshellTheme.mono(14, weight: .bold))
-                        .foregroundStyle(PocketshellTheme.ink)
-                    Circle()
-                        .fill(connectionColor)
-                        .frame(width: 7, height: 7)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(PocketshellTheme.muted)
+            #if targetEnvironment(macCatalyst)
+                ToolbarItem(placement: .principal) {
+                    hostSwitcher
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { showHostSwitcher = true }
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityIdentifier("host-switcher")
-            }
+            #else
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 10) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .accessibilityLabel("Back")
+                        hostSwitcher
+                            .frame(width: 90, alignment: .leading)
+                    }
+                }
+            #endif
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showTmuxJump = true
@@ -267,6 +268,34 @@ struct HostTabsScreen: View {
 
     private var activeController: ConnectionController? {
         tabs.first { $0.id == selectedTab }?.controller
+    }
+
+    private var hidesSystemBackButton: Bool {
+        #if targetEnvironment(macCatalyst)
+            false
+        #else
+            true
+        #endif
+    }
+
+    private var hostSwitcher: some View {
+        HStack(spacing: 7) {
+            Text(host.name)
+                .lineLimit(1)
+                .font(PocketshellTheme.mono(14, weight: .bold))
+                .foregroundStyle(PocketshellTheme.ink)
+            Circle()
+                .fill(connectionColor)
+                .frame(width: 7, height: 7)
+            Image(systemName: "chevron.down")
+                .font(.caption2)
+                .foregroundStyle(PocketshellTheme.muted)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { showHostSwitcher = true }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("host-switcher")
     }
 
     private var tabJumpItems: [TabJumpItem] {

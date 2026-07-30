@@ -218,10 +218,6 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         let hostSwitcher = app.descendants(matching: .any)["host-switcher"]
         XCTAssertTrue(hostSwitcher.isHittable)
-        let hostTitleScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        hostTitleScreenshot.name = "host-title-visible"
-        hostTitleScreenshot.lifetime = .keepAlways
-        add(hostTitleScreenshot)
         hostSwitcher.tap()
         XCTAssertTrue(app.buttons["backupbox"].waitForExistence(timeout: 2))
         app.buttons["backupbox"].tap()
@@ -231,7 +227,14 @@ final class SmokeUITests: XCTestCase {
         for _ in 0..<7 {
             app.buttons["new-tab"].tap()
         }
-        let firstTab = app.descendants(matching: .any)["terminal-tab-1"]
+        XCTAssertTrue(hostSwitcher.isHittable)
+        let hostTitleScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        hostTitleScreenshot.name = "host-title-visible-with-tabs"
+        hostTitleScreenshot.lifetime = .keepAlways
+        add(hostTitleScreenshot)
+        let firstTab = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'terminal-tab-'"))
+            .firstMatch
         XCTAssertTrue(firstTab.waitForExistence(timeout: 10))
         firstTab.press(forDuration: 1)
         XCTAssertTrue(app.buttons["Close Tab"].waitForExistence(timeout: 2))
@@ -242,12 +245,16 @@ final class SmokeUITests: XCTestCase {
         let sessionRow = app.descendants(matching: .any)["tmux-session-\(session)"]
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.searchFields["Search tabs, sessions, windows"].waitForExistence(timeout: 5))
-        let secondCard = app.descendants(matching: .any)["switcher-tab-2"]
+        let cards = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'switcher-tab-'"))
+        let secondCard = cards.element(boundBy: 1)
         XCTAssertTrue(secondCard.waitForExistence(timeout: 5))
+        let closedCardID = secondCard.identifier
+        let retainedCardID = cards.element(boundBy: 2).identifier
         secondCard.press(forDuration: 1)
         app.buttons["Close"].tap()
-        XCTAssertTrue(secondCard.waitForNonExistence(timeout: 2))
-        XCTAssertTrue(app.descendants(matching: .any)["switcher-tab-9"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)[closedCardID].waitForNonExistence(timeout: 2))
+        XCTAssertTrue(app.descendants(matching: .any)[retainedCardID].exists)
         app.buttons["toggle-tabs"].tap()
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.exists)
         app.buttons["toggle-tabs"].tap()

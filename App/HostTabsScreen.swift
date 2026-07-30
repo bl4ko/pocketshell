@@ -54,6 +54,7 @@ struct HostTabsScreen: View {
     @State private var showTmuxJump = false
     @State private var showFiles = false
     @State private var showForward = false
+    @State private var showHostSwitcher = false
     @State private var addingSnippet = false
     @State private var editingSnippet: Snippet?
     @State private var renamingTab: UUID?
@@ -97,15 +98,8 @@ struct HostTabsScreen: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Menu {
-                    ForEach(store.hosts) { candidate in
-                        Button {
-                            onSwitchHost?(candidate)
-                        } label: {
-                            Label(candidate.name, systemImage: candidate.id == host.id ? "checkmark" : "server.rack")
-                        }
-                        .disabled(candidate.id == host.id)
-                    }
+                Button {
+                    showHostSwitcher = true
                 } label: {
                     HStack(spacing: 7) {
                         Text(host.name)
@@ -119,6 +113,7 @@ struct HostTabsScreen: View {
                             .foregroundStyle(PocketshellTheme.muted)
                     }
                 }
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("host-switcher")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -199,12 +194,32 @@ struct HostTabsScreen: View {
         .sheet(isPresented: $showForward) {
             PortForwardSheet(controller: activeController)
         }
-        .onAppear {
-            store.beginLiveWorkspace(hostID: host.id.uuidString)
-            if tabs.isEmpty {
-                restoreTabs()
+        .confirmationDialog(
+            "Switch Host",
+            isPresented: $showHostSwitcher,
+            titleVisibility: .visible
+        ) {
+            ForEach(store.hosts.filter { $0.id != host.id }) { candidate in
+                Button(candidate.name) {
+                    onSwitchHost?(candidate)
+                }
             }
-            consumePendingTarget()
+            Button("Cancel", role: .cancel) {}
+        }
+        .onAppear {
+            if tabs.isEmpty {
+                Task {
+                    await monitor.syncWorkspaceNow(for: host)
+                    store.beginLiveWorkspace(hostID: host.id.uuidString)
+                    if tabs.isEmpty {
+                        restoreTabs()
+                    }
+                    consumePendingTarget()
+                }
+            } else {
+                store.beginLiveWorkspace(hostID: host.id.uuidString)
+                consumePendingTarget()
+            }
         }
         .onChange(of: router.pending) { _, _ in
             consumePendingTarget()
@@ -232,6 +247,7 @@ struct HostTabsScreen: View {
             for tab in tabs {
                 Task { await tab.controller.stop() }
             }
+            Task { await monitor.syncWorkspaceNow(for: host) }
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }

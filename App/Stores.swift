@@ -83,7 +83,6 @@ final class AppStore: ObservableObject {
     private var workspaceUpdatedAt: [String: Date]
     private var applyingConfig = false
     private var applyingCredentials = false
-    private var liveWorkspaceHosts: Set<String> = []
 
     private static let cloudConfigAccount = "config-v1"
     private static let cloudCredentialsAccount = "credentials-v1"
@@ -271,14 +270,6 @@ final class AppStore: ObservableObject {
         workspaceUpdatedAtStore.save(workspaceUpdatedAt)
     }
 
-    func beginLiveWorkspace(hostID: String) {
-        liveWorkspaceHosts.insert(hostID)
-    }
-
-    func endLiveWorkspace(hostID: String) {
-        liveWorkspaceHosts.remove(hostID)
-    }
-
     func workspaceUpdatedAt(hostID: String) -> Date? {
         workspaceUpdatedAt[hostID]
     }
@@ -292,7 +283,6 @@ final class AppStore: ObservableObject {
     }
 
     func applyRemoteWorkspace(hostID: String, _ remote: HostWorkspace) {
-        guard !liveWorkspaceHosts.contains(hostID) else { return }
         applyingConfig = true
         savedTabs[hostID] = remote.tabs.isEmpty ? nil : remote.tabs
         sessionOrder[hostID] = remote.sessionOrder.isEmpty ? nil : remote.sessionOrder

@@ -210,19 +210,20 @@ struct HostTabsScreen: View {
             if tabs.isEmpty {
                 Task {
                     await monitor.syncWorkspaceNow(for: host)
-                    store.beginLiveWorkspace(hostID: host.id.uuidString)
                     if tabs.isEmpty {
                         restoreTabs()
                     }
                     consumePendingTarget()
                 }
             } else {
-                store.beginLiveWorkspace(hostID: host.id.uuidString)
                 consumePendingTarget()
             }
         }
         .onChange(of: router.pending) { _, _ in
             consumePendingTarget()
+        }
+        .onChange(of: store.savedTabs[host.id.uuidString]) { _, _ in
+            reconcileTabs()
         }
         .onChange(of: monitor.unseenFinished) { old, new in
             for tab in tabs where tab.id != selectedTab {
@@ -243,7 +244,6 @@ struct HostTabsScreen: View {
             activeController?.nudgeTmuxSizing()
         }
         .onDisappear {
-            store.endLiveWorkspace(hostID: host.id.uuidString)
             for tab in tabs {
                 Task { await tab.controller.stop() }
             }
@@ -253,8 +253,13 @@ struct HostTabsScreen: View {
             guard scenePhase == .active else { return }
             activeController?.nudgeTmuxSizing()
             try? await Task.sleep(for: .seconds(1))
+            var tick = 0
             while !Task.isCancelled {
                 await pollTabs()
+                if tick % 3 == 0 {
+                    await monitor.syncWorkspaceNow(for: host)
+                }
+                tick += 1
                 try? await Task.sleep(for: .seconds(5))
             }
         }
@@ -346,15 +351,7 @@ struct HostTabsScreen: View {
             return
         }
         for record in records {
-            let controller = makeController()
-            if let session = record.tmuxSession {
-                controller.preset(session: session, windowIndex: record.windowIndex)
-            } else {
-                controller.presetPlain()
-            }
-            let tab = TerminalTab(controller: controller, name: record.name, number: record.number ?? nextTabNumber)
-            controller.onExit = { closeTab(id: tab.id) }
-            tabs.append(tab)
+            tabs.append(makeTab(from: record))
         }
         selectedTab = tabs.first?.id
         persistTabs()
@@ -395,8 +392,8 @@ struct HostTabsScreen: View {
         }
     }
 
-    private func persistTabs() {
-        let records = tabs.map { tab in
+    private var currentRecords: [TabRecord] {
+        tabs.map { tab in
             let target = tab.controller.tmuxTarget
             return TabRecord(
                 name: tab.name,
@@ -405,9 +402,57 @@ struct HostTabsScreen: View {
                 number: tab.number
             )
         }
+    }
+
+    private func persistTabs() {
+        let records = currentRecords
         if store.savedTabs[host.id.uuidString] != records {
             store.savedTabs[host.id.uuidString] = records
         }
+    }
+
+    private func makeTab(from record: TabRecord) -> TerminalTab {
+        let controller = makeController()
+        if let session = record.tmuxSession {
+            controller.preset(session: session, windowIndex: record.windowIndex)
+        } else {
+            controller.presetPlain()
+        }
+        let tab = TerminalTab(controller: controller, name: record.name, number: record.number ?? nextTabNumber)
+        controller.onExit = { closeTab(id: tab.id) }
+        return tab
+    }
+
+    private func reconcileTabs() {
+        let records = store.savedTabs[host.id.uuidString] ?? []
+        guard !tabs.isEmpty, !records.isEmpty, records != currentRecords else { return }
+        var remaining = tabs
+        var reconciled: [TerminalTab] = []
+        for record in records {
+            if let index = remaining.firstIndex(where: { tabMatches($0, record) }) {
+                var tab = remaining.remove(at: index)
+                tab.name = record.name
+                reconciled.append(tab)
+            } else {
+                reconciled.append(makeTab(from: record))
+            }
+        }
+        for tab in remaining {
+            Task { await tab.controller.stop() }
+            tabStatuses[tab.id] = nil
+            lastTabStatus[tab.id] = nil
+            unseenFinished.remove(tab.id)
+            tabResolver.forget(key: tab.id.uuidString)
+        }
+        tabs = reconciled
+        if !tabs.contains(where: { $0.id == selectedTab }) {
+            selectedTab = tabs.first?.id
+        }
+    }
+
+    private func tabMatches(_ tab: TerminalTab, _ record: TabRecord) -> Bool {
+        guard let number = record.number else { return false }
+        return tab.number == number && tab.controller.tmuxTarget?.session == record.tmuxSession
     }
 
     private func pollTabs() async {

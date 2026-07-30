@@ -162,6 +162,11 @@ final class SessionMonitor: ObservableObject {
         }
     }
 
+    func syncWorkspaceNow(for host: HostConfig) async {
+        guard let connection = await connection(for: host) else { return }
+        await syncWorkspace(for: host, using: connection)
+    }
+
     private func syncWorkspace(for host: HostConfig, using connection: SSHConnection) async {
         let hostID = host.id.uuidString
         let output = (try? await connection.exec(WorkspaceSync.readCommand)) ?? ""

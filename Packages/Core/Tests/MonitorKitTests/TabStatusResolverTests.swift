@@ -110,6 +110,13 @@ private let compactingTail = """
     #expect(resolver.resolve(key: "t1", text: idleScreen) == .idle)
 }
 
+@Test func singleIdleFrameDuringWaitingHoldsWaiting() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: waitingScreen)
+    #expect(resolver.resolve(key: "t1", text: idleScreen) == .waiting)
+    #expect(resolver.resolve(key: "t1", text: idleScreen) == .idle)
+}
+
 @Test func waitingFlipsImmediatelyFromBusy() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)

@@ -10,9 +10,9 @@ public struct TabStatusResolver: Sendable {
     public mutating func resolve(key: String, text: String, agentRunning: Bool? = nil) -> AgentStatus? {
         if let detected = AgentStatus.detectAgent(text) {
             blankStreak[key] = 0
-            if detected == .idle, lastStatus[key] == .busy, !pendingIdle.contains(key) {
+            if detected == .idle, let previous = lastStatus[key], previous != .idle, !pendingIdle.contains(key) {
                 pendingIdle.insert(key)
-                return .busy
+                return previous
             }
             pendingIdle.remove(key)
             lastStatus[key] = detected

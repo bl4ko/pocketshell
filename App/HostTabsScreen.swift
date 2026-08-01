@@ -208,6 +208,10 @@ struct HostTabsScreen: View {
         }
         .onAppear {
             if tabs.isEmpty {
+                if !(store.savedTabs[host.id.uuidString] ?? []).isEmpty {
+                    restoreTabs()
+                    consumePendingTarget()
+                }
                 Task {
                     await monitor.syncWorkspaceNow(for: host)
                     if tabs.isEmpty {
@@ -255,12 +259,16 @@ struct HostTabsScreen: View {
             try? await Task.sleep(for: .seconds(1))
             var tick = 0
             while !Task.isCancelled {
-                await pollTabs()
                 if tick % 3 == 0 {
+                    await pollTabs()
+                } else {
+                    await pollSelectedTab()
+                }
+                if tick % 9 == 0 {
                     await monitor.syncWorkspaceNow(for: host)
                 }
                 tick += 1
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(1.7))
             }
         }
         .paperScreen()
@@ -427,7 +435,8 @@ struct HostTabsScreen: View {
                 name: tab.name,
                 tmuxSession: target?.session,
                 windowIndex: target?.windowIndex,
-                number: tab.number
+                number: tab.number,
+                windowName: tab.tmuxWindowName
             )
         }
     }
@@ -446,7 +455,12 @@ struct HostTabsScreen: View {
         } else {
             controller.presetPlain()
         }
-        let tab = TerminalTab(controller: controller, name: record.name, number: record.number ?? nextTabNumber)
+        let tab = TerminalTab(
+            controller: controller,
+            name: record.name,
+            tmuxWindowName: record.windowName,
+            number: record.number ?? nextTabNumber
+        )
         controller.onExit = { closeTab(id: tab.id) }
         return tab
     }
@@ -460,6 +474,7 @@ struct HostTabsScreen: View {
             if let index = remaining.firstIndex(where: { tabMatches($0, record) }) {
                 var tab = remaining.remove(at: index)
                 tab.name = record.name
+                if tab.tmuxWindowName == nil { tab.tmuxWindowName = record.windowName }
                 reconciled.append(tab)
             } else {
                 reconciled.append(makeTab(from: record))
@@ -479,43 +494,19 @@ struct HostTabsScreen: View {
     }
 
     private func tabMatches(_ tab: TerminalTab, _ record: TabRecord) -> Bool {
+        let target = tab.controller.tmuxTarget
+        if let session = record.tmuxSession {
+            return target?.session == session && target?.windowIndex == record.windowIndex
+        }
         guard let number = record.number else { return false }
-        return tab.number == number && tab.controller.tmuxTarget?.session == record.tmuxSession
+        return target == nil && tab.number == number
     }
 
     private func pollTabs() async {
         var samples: [AgentActivityTracker.Sample] = []
         for tab in tabs {
-            let text: String
-            let agentRunning: Bool?
-            if tab.controller.isTmuxAttached {
-                guard let snapshot = await tab.controller.currentTmuxPaneSnapshot() else { continue }
-                if let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }) {
-                    tabs[currentIndex].tmuxWindowName = snapshot.windowName
-                }
-                text = snapshot.text
-                agentRunning = !Tmux.isInteractiveShell(snapshot.command)
-            } else {
-                text = tab.controller.bridge.visibleText()
-                agentRunning = nil
-            }
-            let previous = lastTabStatus[tab.id]
-            let status = tabResolver.resolve(key: tab.id.uuidString, text: text, agentRunning: agentRunning)
-            tabStatuses[tab.id] = status
-            if let status { lastTabStatus[tab.id] = status }
-            if tab.id == selectedTab {
-                clearUnseen(tab)
-            } else if status == .idle, previous == .busy || previous == .waiting {
-                markUnseen(tab)
-            }
-            tabQuickReplies[tab.id] = status == .waiting ? AgentQuickReply.options(in: text) : []
-            guard let status, !tab.controller.isTmuxAttached else { continue }
-            samples.append(
-                .init(
-                    key: "tab-\(tab.id.uuidString)",
-                    title: "\(host.name) \(tabLabel(tab))",
-                    status: status
-                ))
+            guard let sample = await pollTab(tab) else { continue }
+            samples.append(sample)
         }
         let transitions = tabTracker.update(samples)
         persistTabs()
@@ -533,6 +524,66 @@ struct HostTabsScreen: View {
                     trigger: nil
                 ))
         }
+    }
+
+    private func pollSelectedTab() async {
+        guard let tab = tabs.first(where: { $0.id == selectedTab }) else { return }
+        _ = await pollTab(tab)
+    }
+
+    private func pollTab(_ tab: TerminalTab) async -> AgentActivityTracker.Sample? {
+        let text: String
+        let agentRunning: Bool?
+        if tab.controller.isTmuxAttached {
+            guard let snapshot = await tab.controller.currentTmuxPaneSnapshot() else { return nil }
+            if let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }) {
+                tabs[currentIndex].tmuxWindowName = snapshot.windowName
+            }
+            text = snapshot.text
+            agentRunning = !Tmux.isInteractiveShell(snapshot.command)
+        } else {
+            text = tab.controller.bridge.visibleText()
+            agentRunning = nil
+        }
+        let previous = lastTabStatus[tab.id]
+        let status = tabResolver.resolve(key: tab.id.uuidString, text: text, agentRunning: agentRunning)
+        tabStatuses[tab.id] = status
+        if let status { lastTabStatus[tab.id] = status }
+        if tab.id == selectedTab {
+            clearUnseen(tab)
+        } else if status == .idle, previous == .busy || previous == .waiting {
+            markUnseen(tab)
+        }
+        if status == .waiting, previous != .waiting, tab.id != selectedTab, tab.controller.isTmuxAttached,
+            UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey),
+            let key = tmuxKey(tab), monitor.shouldNotify(key: key)
+        {
+            notifyNeedsInput(tab)
+        }
+        tabQuickReplies[tab.id] = status == .waiting ? AgentQuickReply.options(in: text) : []
+        guard let status, !tab.controller.isTmuxAttached else { return nil }
+        return .init(
+            key: "tab-\(tab.id.uuidString)",
+            title: "\(host.name) \(tabLabel(tab))",
+            status: status
+        )
+    }
+
+    private func notifyNeedsInput(_ tab: TerminalTab) {
+        guard let target = tab.controller.tmuxTarget else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Agent needs input"
+        content.body = "\(host.name) \(tabLabel(tab))"
+        content.sound = .default
+        var info: [String: Any] = ["hostID": host.id.uuidString, "session": target.session]
+        if let windowIndex = target.windowIndex { info["windowIndex"] = windowIndex }
+        content.userInfo = info
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(
+                identifier: "needs-input-\(tab.id)-\(Date().timeIntervalSince1970)",
+                content: content,
+                trigger: nil
+            ))
     }
 
     private var tabShortcuts: some View {

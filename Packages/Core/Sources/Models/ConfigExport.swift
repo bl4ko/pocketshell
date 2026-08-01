@@ -5,12 +5,20 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var tmuxSession: String?
     public var windowIndex: Int?
     public var number: Int?
+    public var windowName: String?
 
-    public init(name: String? = nil, tmuxSession: String? = nil, windowIndex: Int? = nil, number: Int? = nil) {
+    public init(
+        name: String? = nil,
+        tmuxSession: String? = nil,
+        windowIndex: Int? = nil,
+        number: Int? = nil,
+        windowName: String? = nil
+    ) {
         self.name = name
         self.tmuxSession = tmuxSession
         self.windowIndex = windowIndex
         self.number = number
+        self.windowName = windowName
     }
 }
 

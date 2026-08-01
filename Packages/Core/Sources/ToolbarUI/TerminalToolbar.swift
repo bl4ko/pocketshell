@@ -26,7 +26,7 @@
             }
 
             private static func themed(_ light: String, _ theme: TerminalTheme, dark: String) -> Color {
-                color(theme == .pocketshell ? light : dark)
+                color(theme.lightChrome ? light : dark)
             }
 
             private static func themed(_ light: String, _ theme: TerminalTheme, mix: Double) -> Color {

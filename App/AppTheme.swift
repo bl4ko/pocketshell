@@ -11,7 +11,7 @@ enum PocketshellTheme {
         )
     }
 
-    private static var isPocketshell: Bool { selected == .pocketshell }
+    private static var isLightChrome: Bool { selected.lightChrome }
 
     static var paper: Color { color(light: "F2F1EC", dark: selected.background) }
     static var surface: Color { color(light: "FFFFFF", darkMix: 0.08) }
@@ -32,14 +32,14 @@ enum PocketshellTheme {
         color(light: "EAB896", dark: mixed(selected.background, selected.accentHex, 0.50))
     }
     static let busy = Color(hexRGB: "D97706")
-    static var busyText: Color { isPocketshell ? Color(hexRGB: "B45309") : busy }
+    static var busyText: Color { isLightChrome ? Color(hexRGB: "B45309") : busy }
     static let waiting = Color(hexRGB: "7C3AED")
-    static var waitingText: Color { isPocketshell ? Color(hexRGB: "6D28D9") : waiting }
+    static var waitingText: Color { isLightChrome ? Color(hexRGB: "6D28D9") : waiting }
     static let idle = Color(hexRGB: "22A04D")
-    static var idleText: Color { isPocketshell ? Color(hexRGB: "15803D") : idle }
+    static var idleText: Color { isLightChrome ? Color(hexRGB: "15803D") : idle }
 
     private static func color(light: String, dark: String) -> Color {
-        Color(hexRGB: isPocketshell ? light : dark)
+        Color(hexRGB: isLightChrome ? light : dark)
     }
 
     private static func color(light: String, darkMix amount: Double) -> Color {
@@ -99,17 +99,17 @@ private struct AppScreen: ViewModifier {
 
     func body(content: Content) -> some View {
         let theme = TerminalTheme.named(themeName)
-        let style: UIUserInterfaceStyle = theme == .pocketshell ? .light : .dark
+        let style: UIUserInterfaceStyle = theme.lightChrome ? .light : .dark
         content
             .scrollContentBackground(.hidden)
             .background(PocketshellTheme.paper.ignoresSafeArea())
             .tint(PocketshellTheme.accent)
             .toolbarBackground(PocketshellTheme.paper, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .preferredColorScheme(theme == .pocketshell ? .light : .dark)
+            .preferredColorScheme(theme.lightChrome ? .light : .dark)
             .onAppear { Self.overrideWindows(style) }
             .onChange(of: themeName) { _, name in
-                Self.overrideWindows(TerminalTheme.named(name) == .pocketshell ? .light : .dark)
+                Self.overrideWindows(TerminalTheme.named(name).lightChrome ? .light : .dark)
             }
     }
 

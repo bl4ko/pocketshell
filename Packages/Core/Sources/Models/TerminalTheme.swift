@@ -27,6 +27,7 @@ public struct TerminalTheme: Equatable, Sendable, Identifiable {
     public let foreground: String
     public let cursor: String
     public let ansi: [String]
+    public var lightChrome = false
 
     public var id: String { name }
 
@@ -55,11 +56,25 @@ public struct TerminalTheme: Equatable, Sendable, Identifiable {
         ansi: [
             "303238", "d75a35", "4fb86b", "dea642", "e8590c", "b879e8", "68c5d2", "e5e1da",
             "72767d", "f07855", "72d58b", "f0bf61", "f47a35", "cf9af1", "8bd9e3", "ffffff",
-        ]
+        ],
+        lightChrome: true
+    )
+
+    public static let pocketshellLight = TerminalTheme(
+        name: "Pocketshell Light",
+        background: "fbfaf6",
+        foreground: "23262a",
+        cursor: "e8590c",
+        ansi: [
+            "24262b", "c0392b", "1b7f3b", "8a6100", "1f6feb", "8b3fbf", "0f7b8a", "5c6167",
+            "8a8e93", "d6453a", "22a04d", "b7791f", "2e7ff0", "a855c7", "1595a8", "23262a",
+        ],
+        lightChrome: true
     )
 
     public static let all: [TerminalTheme] = [
         pocketshell,
+        pocketshellLight,
         defaultTheme,
         TerminalTheme(
             name: "Dracula",

@@ -233,6 +233,8 @@
                 banner(message, color: .red)
             case .disconnected:
                 banner("disconnected", color: .orange)
+            case .reconnecting(let attempt):
+                banner("reconnecting… (attempt \(attempt))", color: .orange)
             default:
                 EmptyView()
             }
@@ -284,8 +286,19 @@
                         .frame(width: viewSize.width, height: viewSize.height)
                         .scaleEffect(zoom)
                         .offset(offset)
-                } else if session.phase == .connecting {
-                    ProgressView()
+                } else {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                            .opacity(session.phase.isBusy ? 1 : 0)
+                        Text(session.phase.overlayLabel)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+                    .accessibilityIdentifier("vnc-status-overlay")
                 }
             }
             .contentShape(Rectangle())

@@ -1,14 +1,36 @@
 import CoreGraphics
 import Foundation
+import ReconnectKit
 @preconcurrency import RoyalVNCKit
 
 public final class VNCSessionController: NSObject, ObservableObject, @unchecked Sendable {
     public enum Phase: Equatable {
         case idle
         case connecting
+        case authenticating
         case connected
         case failed(String)
         case disconnected
+        case reconnecting(attempt: Int)
+
+        public var isBusy: Bool {
+            switch self {
+            case .connecting, .authenticating, .reconnecting: true
+            case .idle, .connected, .failed, .disconnected: false
+            }
+        }
+
+        public var overlayLabel: String {
+            switch self {
+            case .idle: "starting…"
+            case .connecting: "connecting…"
+            case .authenticating: "authenticating…"
+            case .connected: "waiting for first frame…"
+            case .reconnecting(let attempt): "reconnecting… (attempt \(attempt))"
+            case .failed(let message): message
+            case .disconnected: "disconnected"
+            }
+        }
     }
 
     @Published public private(set) var phase: Phase = .idle
@@ -21,6 +43,8 @@ public final class VNCSessionController: NSObject, ObservableObject, @unchecked 
     private let password: String
 
     private var connection: VNCConnection?
+    private var machine = ReconnectMachine()
+    private var retryTask: Task<Void, Never>?
     private let renderLock = NSLock()
     private var renderScheduled = false
 
@@ -32,6 +56,59 @@ public final class VNCSessionController: NSObject, ObservableObject, @unchecked 
     }
 
     public func connect() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            perform(machine.handle(machine.state == .idle ? .userConnect : .retryTimerFired))
+        }
+    }
+
+    public func disconnect() {
+        send(.userDisconnect)
+    }
+
+    public func appBecameActive() {
+        send(.appForegrounded)
+    }
+
+    private func send(_ event: ReconnectMachine.Event) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            perform(machine.handle(event))
+        }
+    }
+
+    private func perform(_ action: ReconnectMachine.Action) {
+        switch action {
+        case .connect:
+            retryTask?.cancel()
+            retryTask = nil
+            openConnection()
+        case .scheduleRetry(let delay):
+            guard case .waitingToReconnect(let failures, _) = machine.state else { return }
+            phase = .reconnecting(attempt: failures)
+            retryTask?.cancel()
+            retryTask = Task { [weak self] in
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+                self?.send(.retryTimerFired)
+            }
+        case .disconnect:
+            retryTask?.cancel()
+            retryTask = nil
+            teardownConnection()
+            phase = .disconnected
+        case .cancelRetry:
+            retryTask?.cancel()
+            retryTask = nil
+            teardownConnection()
+        case .none:
+            break
+        }
+    }
+
+    private func openConnection() {
+        teardownConnection()
+        image = nil
         let settings = VNCConnection.Settings(
             isDebugLoggingEnabled: false,
             hostname: hostname,
@@ -47,12 +124,15 @@ public final class VNCSessionController: NSObject, ObservableObject, @unchecked 
         let connection = VNCConnection(settings: settings)
         connection.delegate = self
         self.connection = connection
-        publish { $0.phase = .connecting }
+        phase = .connecting
         connection.connect()
     }
 
-    public func disconnect() {
-        connection?.disconnect()
+    private func teardownConnection() {
+        guard let connection else { return }
+        connection.delegate = nil
+        connection.disconnect()
+        self.connection = nil
     }
 
     public func pointerMove(to point: CGPoint) {
@@ -131,19 +211,23 @@ extension VNCSessionController: VNCConnectionDelegate {
             (error as? LocalizedError)?.errorDescription ?? "\(error)"
         }
         publish { controller in
+            guard connection === controller.connection else { return }
             switch status {
             case .connecting:
                 controller.phase = .connecting
             case .connected:
                 controller.phase = .connected
+                controller.perform(controller.machine.handle(.established))
             case .disconnecting:
                 break
             case .disconnected:
+                let lost = controller.machine.state == .connected
                 if let message {
                     controller.phase = .failed(message)
                 } else if controller.phase != .idle {
                     controller.phase = .disconnected
                 }
+                controller.perform(controller.machine.handle(lost ? .connectionLost : .connectFailed))
             }
         }
     }
@@ -152,6 +236,7 @@ extension VNCSessionController: VNCConnectionDelegate {
         _ connection: VNCConnection, credentialFor authenticationType: VNCAuthenticationType,
         completion: @escaping (VNCCredential?) -> Void
     ) {
+        publish { $0.phase = .authenticating }
         if authenticationType.requiresUsername {
             completion(VNCUsernamePasswordCredential(username: username, password: password))
         } else {
@@ -162,13 +247,11 @@ extension VNCSessionController: VNCConnectionDelegate {
     public func connection(_ connection: VNCConnection, didCreateFramebuffer framebuffer: VNCFramebuffer) {
         let size = framebuffer.cgSize
         publish { $0.framebufferSize = size }
-        scheduleRender(framebuffer)
     }
 
     public func connection(_ connection: VNCConnection, didResizeFramebuffer framebuffer: VNCFramebuffer) {
         let size = framebuffer.cgSize
         publish { $0.framebufferSize = size }
-        scheduleRender(framebuffer)
     }
 
     public func connection(

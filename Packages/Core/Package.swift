@@ -65,6 +65,7 @@ let package = Package(
             name: "VNCKit",
             dependencies: [
                 "Models",
+                "ReconnectKit",
                 .product(name: "RoyalVNCKit", package: "royalvnc"),
             ], swiftSettings: strict),
         .testTarget(name: "ModelsTests", dependencies: ["Models"], swiftSettings: strict),

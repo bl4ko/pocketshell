@@ -98,9 +98,34 @@
                 ?? pasteboard.items.lazy.compactMap { item in
                     item.values.lazy.compactMap(self.image(from:)).first
                 }.first
-            guard let data = image?.jpegData(compressionQuality: 0.85) else { return false }
-            imagePaste(data)
+            if let data = image.flatMap(Self.uploadableJPEG) {
+                imagePaste(data)
+                return true
+            }
+            guard
+                let provider = pasteboard.itemProviders.first(where: { $0.canLoadObject(ofClass: UIImage.self) })
+            else { return false }
+            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+                guard let image = object as? UIImage, let data = Self.uploadableJPEG(image) else { return }
+                Task { @MainActor in self?.imagePaste?(data) }
+            }
             return true
+        }
+
+        nonisolated private static func uploadableJPEG(_ image: UIImage) -> Data? {
+            let longest = max(image.size.width, image.size.height)
+            guard longest > 1568, longest.isFinite else {
+                return image.jpegData(compressionQuality: 0.85)
+            }
+            let size = CGSize(
+                width: (image.size.width * 1568 / longest).rounded(),
+                height: (image.size.height * 1568 / longest).rounded()
+            )
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = 1
+            return UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.85) { _ in
+                image.draw(in: CGRect(origin: .zero, size: size))
+            }
         }
 
         private func image(from value: Any) -> UIImage? {

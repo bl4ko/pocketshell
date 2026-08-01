@@ -28,6 +28,14 @@ private func sample(_ key: String, _ title: String, _ status: AgentStatus) -> Ag
     #expect(events == [AgentActivityTracker.Transition(key: "a", title: "w", status: .waiting)])
 }
 
+@Test func idleToWaitingEmitsAfterTwoWaitingPolls() {
+    var tracker = AgentActivityTracker()
+    _ = tracker.update([sample("a", "w", .idle)])
+    _ = tracker.update([sample("a", "w", .waiting)])
+    let events = tracker.update([sample("a", "w", .waiting)])
+    #expect(events == [AgentActivityTracker.Transition(key: "a", title: "w", status: .waiting)])
+}
+
 @Test func singlePollIdleBlipSuppressed() {
     var tracker = AgentActivityTracker()
     _ = tracker.update([sample("a", "w", .busy)])

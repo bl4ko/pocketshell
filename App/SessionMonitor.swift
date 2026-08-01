@@ -62,6 +62,7 @@ final class SessionMonitor: ObservableObject {
     private var tracker = AgentActivityTracker()
     private var pollTask: Task<Void, Never>?
     private var connections: [UUID: SSHConnection] = [:]
+    private var notifiedAt: [String: Date] = [:]
 
     init(store: AppStore) {
         self.store = store
@@ -82,6 +83,13 @@ final class SessionMonitor: ObservableObject {
 
     func markSeen(hostID: UUID, session: String, windowIndex: Int) {
         unseenFinished.remove(Self.windowKey(hostID: hostID, session: session, windowIndex: windowIndex))
+    }
+
+    func shouldNotify(key: String) -> Bool {
+        let now = Date()
+        if let last = notifiedAt[key], now.timeIntervalSince(last) < 60 { return false }
+        notifiedAt[key] = now
+        return true
     }
 
     func startPolling() {
@@ -214,6 +222,7 @@ final class SessionMonitor: ObservableObject {
     }
 
     private func notify(_ transition: AgentActivityTracker.Transition, userInfo: [String: Any]?) {
+        if transition.status == .waiting, !shouldNotify(key: transition.key) { return }
         let content = UNMutableNotificationContent()
         content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"
         content.body = transition.title

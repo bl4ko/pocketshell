@@ -43,7 +43,7 @@ public struct AgentActivityTracker: Sendable {
                 continue
             }
             if sample.status != state.confirmed, sample.status == state.lastRaw {
-                if state.confirmed == .busy {
+                if state.confirmed == .busy || sample.status == .waiting {
                     transitions.append(Transition(key: sample.key, title: sample.title, status: sample.status))
                 }
                 state.confirmed = sample.status

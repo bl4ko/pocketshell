@@ -17,11 +17,23 @@ swift build --package-path Packages/Core           # compile check without tests
 ./Scripts/uitest.sh                                # e2e UI tests: throwaway sshd + tmux session + simulator
 xcodebuild build -scheme pocketshell -destination "generic/platform=iOS Simulator"  # full app build
 pre-commit run --all-files                         # format + lint + Core tests (hooks: pre-commit install)
+./Scripts/install-mac.sh                           # build + install the Catalyst app into /Applications on this Mac
+./Scripts/ship.sh                                  # archive iOS + Catalyst and upload both to TestFlight
 ```
 
 - Warnings are errors everywhere: `SWIFT_TREAT_WARNINGS_AS_ERRORS` in `project.yml`, `.treatAllWarnings(as: .error)` in `Package.swift`. Any warning fails the build.
 - Formatting is enforced by toolchain `swift format` via pre-commit (`.swift-format`: 4-space indent, line length 120). Run `swift format --in-place --recursive <paths>` before committing if hooks are not installed.
 - Coverage: `swift test --package-path Packages/Core --enable-code-coverage`, then `xcrun llvm-cov report "$(swift build --package-path Packages/Core --show-bin-path)/CorePackageTests.xctest/Contents/MacOS/CorePackageTests" -instr-profile "$(swift build --package-path Packages/Core --show-bin-path)/codecov/default.profdata" -ignore-filename-regex='(Tests|checkouts)'`.
+
+## Shipping
+
+One machine builds and everything else installs from TestFlight, so only machines used for tethered debugging need registering at developer.apple.com.
+
+- `Scripts/ship.sh` needs `ASC_KEY_ID` + `ASC_ISSUER_ID` exported and the App Store Connect key at `~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8`. The key must have the **Admin** role — App Manager can upload builds but not mint signing assets, and export fails with "Cloud signing permission error". It refuses a dirty tree and derives `CURRENT_PROJECT_VERSION` from `git rev-list --count HEAD`, so build numbers are monotonic and reproducible.
+- All three Info.plists take their versions from `$(MARKETING_VERSION)`/`$(CURRENT_PROJECT_VERSION)`; bump `MARKETING_VERSION` in `project.yml` for a user-visible version, never edit the plists directly (xcodegen rewrites them).
+- The watchOS app and widget ride along inside the iOS archive. The Catalyst build uploads as a separate macOS build of the same app record.
+- App Store keys live in `project.yml`, not the plists: `LSApplicationCategoryType` (required for the Mac build), `CFBundleDisplayName` on the widget (Apple rejects an extension without one, `90360`), and `App/PrivacyInfo.xcprivacy` declaring `NSPrivacyAccessedAPICategoryUserDefaults`/`CA92.1`. Missing the manifest fails upload with `ITMS-91053`.
+- **Do not set `ITSAppUsesNonExemptEncryption`**: with `true` and no compliance code filed, every upload dies on `90592` ("Invalid Export Compliance Code … key value []"); `false` would be a false claim, since SSH/VNC ships its own crypto rather than only calling Apple's. Omitting the key lets the build upload and moves the question to App Store Connect, one answer per build. Before any public release the encryption still needs a self-classification report (BIS ERN) plus the French declaration.
 
 ## Testing
 

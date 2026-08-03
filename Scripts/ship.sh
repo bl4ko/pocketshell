@@ -7,9 +7,10 @@ cd "$(dirname "$0")/.."
 key="$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
 [ -f "$key" ] || { echo "missing $key" >&2; exit 1; }
 
-# Build numbers come from commit count, so a shipped build is always reproducible.
+# Minutes since 2020, so build numbers only ever climb. Commit counts do not:
+# rewriting history lowers them and App Store Connect rejects the reused number.
 [ -z "$(git status --porcelain)" ] || { echo "working tree is dirty, commit first" >&2; exit 1; }
-build=$(git rev-list --count HEAD)
+build=$(( ($(date +%s) - 1577836800) / 60 ))
 
 xcodegen generate
 

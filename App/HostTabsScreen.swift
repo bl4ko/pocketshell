@@ -54,7 +54,6 @@ struct HostTabsScreen: View {
     @State private var showTmuxJump = false
     @State private var showFiles = false
     @State private var showForward = false
-    @State private var showHostSwitcher = false
     @State private var addingSnippet = false
     @State private var editingSnippet: Snippet?
     @State private var renamingTab: UUID?
@@ -194,18 +193,6 @@ struct HostTabsScreen: View {
         .sheet(isPresented: $showForward) {
             PortForwardSheet(controller: activeController)
         }
-        .confirmationDialog(
-            "Switch Host",
-            isPresented: $showHostSwitcher,
-            titleVisibility: .visible
-        ) {
-            ForEach(store.hosts.filter { $0.id != host.id }) { candidate in
-                Button(candidate.name) {
-                    onSwitchHost?(candidate)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
         .onAppear {
             if tabs.isEmpty {
                 if !(store.savedTabs[host.id.uuidString] ?? []).isEmpty {
@@ -238,6 +225,7 @@ struct HostTabsScreen: View {
         }
         .onChange(of: selectedTab, initial: true) { _, _ in
             if let tab = tabs.first(where: { $0.id == selectedTab }) { clearUnseen(tab) }
+            monitor.visibleWindowKey = tabs.first { $0.id == selectedTab }.flatMap(tmuxKey)
             for tab in tabs {
                 tab.controller.bridge.setLive(tab.id == selectedTab)
             }
@@ -248,13 +236,18 @@ struct HostTabsScreen: View {
             activeController?.nudgeTmuxSizing()
         }
         .onDisappear {
+            monitor.visibleWindowKey = nil
             for tab in tabs {
                 Task { await tab.controller.stop() }
             }
             Task { await monitor.syncWorkspaceNow(for: host) }
         }
         .task(id: scenePhase) {
-            guard scenePhase == .active else { return }
+            guard scenePhase == .active else {
+                monitor.visibleWindowKey = nil
+                return
+            }
+            monitor.visibleWindowKey = tabs.first { $0.id == selectedTab }.flatMap(tmuxKey)
             activeController?.nudgeTmuxSizing()
             try? await Task.sleep(for: .seconds(1))
             var tick = 0
@@ -287,20 +280,27 @@ struct HostTabsScreen: View {
     }
 
     private var hostSwitcher: some View {
-        HStack(spacing: 7) {
-            Text(host.name)
-                .lineLimit(1)
-                .font(PocketshellTheme.mono(14, weight: .bold))
-                .foregroundStyle(PocketshellTheme.ink)
-            Circle()
-                .fill(connectionColor)
-                .frame(width: 7, height: 7)
-            Image(systemName: "chevron.down")
-                .font(.caption2)
-                .foregroundStyle(PocketshellTheme.muted)
+        Menu {
+            ForEach(store.hosts.filter { $0.id != host.id }) { candidate in
+                Button(candidate.name) {
+                    onSwitchHost?(candidate)
+                }
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Text(host.name)
+                    .lineLimit(1)
+                    .font(PocketshellTheme.mono(14, weight: .bold))
+                    .foregroundStyle(PocketshellTheme.ink)
+                Circle()
+                    .fill(connectionColor)
+                    .frame(width: 7, height: 7)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(PocketshellTheme.muted)
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture { showHostSwitcher = true }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("host-switcher")
@@ -512,6 +512,7 @@ struct HostTabsScreen: View {
         persistTabs()
         guard UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey) else { return }
         for transition in transitions {
+            if let selectedTab, transition.key == "tab-\(selectedTab.uuidString)" { continue }
             let content = UNMutableNotificationContent()
             content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"
             content.body = transition.title
@@ -536,7 +537,9 @@ struct HostTabsScreen: View {
         let agentRunning: Bool?
         if tab.controller.isTmuxAttached {
             guard let snapshot = await tab.controller.currentTmuxPaneSnapshot() else { return nil }
-            if let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }) {
+            if let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }),
+                !Tmux.isPlaceholderWindowName(snapshot.windowName)
+            {
                 tabs[currentIndex].tmuxWindowName = snapshot.windowName
             }
             text = snapshot.text
@@ -551,6 +554,7 @@ struct HostTabsScreen: View {
         if let status { lastTabStatus[tab.id] = status }
         if tab.id == selectedTab {
             clearUnseen(tab)
+            monitor.visibleWindowKey = tmuxKey(tab)
         } else if status == .idle, previous == .busy || previous == .waiting {
             markUnseen(tab)
         }

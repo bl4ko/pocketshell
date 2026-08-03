@@ -57,6 +57,7 @@ final class SessionMonitor: ObservableObject {
 
     @Published private(set) var snapshot: SessionSnapshot?
     @Published private(set) var unseenFinished: Set<String> = []
+    var visibleWindowKey: String?
 
     private let store: AppStore
     private var tracker = AgentActivityTracker()
@@ -126,6 +127,7 @@ final class SessionMonitor: ObservableObject {
             )
             await syncWorkspace(for: host, using: connection)
             let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
+            let records = store.savedTabs[host.id.uuidString] ?? []
             for session in sessions {
                 let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
                 let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
@@ -134,6 +136,7 @@ final class SessionMonitor: ObservableObject {
                     let text = captures[window.index] ?? ""
                     let status = AgentStatus.classify(text)
                     let key = "\(host.id):\(session):\(window.index)"
+                    let displayName = Tmux.windowDisplayName(window: window, session: session, records: records)
                     if status == .busy {
                         unseenFinished.remove(key)
                     }
@@ -141,7 +144,7 @@ final class SessionMonitor: ObservableObject {
                     samples.append(
                         .init(
                             key: key,
-                            title: "\(host.name) \(session):\(window.index) \(window.name)",
+                            title: "\(host.name) \(session):\(window.index) \(displayName)",
                             status: status
                         ))
                     snapshots.append(
@@ -149,7 +152,7 @@ final class SessionMonitor: ObservableObject {
                             host: host.name,
                             session: session,
                             index: window.index,
-                            name: "\(window.index): \(window.name)",
+                            name: "\(window.index): \(displayName)",
                             status: status.label,
                             lastLine: Tmux.previewLines(text, count: 12)
                         ))
@@ -222,6 +225,7 @@ final class SessionMonitor: ObservableObject {
     }
 
     private func notify(_ transition: AgentActivityTracker.Transition, userInfo: [String: Any]?) {
+        if transition.key == visibleWindowKey { return }
         if transition.status == .waiting, !shouldNotify(key: transition.key) { return }
         let content = UNMutableNotificationContent()
         content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"

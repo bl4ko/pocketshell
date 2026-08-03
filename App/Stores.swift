@@ -284,7 +284,8 @@ final class AppStore: ObservableObject {
 
     func applyRemoteWorkspace(hostID: String, _ remote: HostWorkspace) {
         applyingConfig = true
-        savedTabs[hostID] = remote.tabs.isEmpty ? nil : remote.tabs
+        let tabs = TabRecord.preservingNames(local: savedTabs[hostID] ?? [], remote: remote.tabs)
+        savedTabs[hostID] = tabs.isEmpty ? nil : tabs
         sessionOrder[hostID] = remote.sessionOrder.isEmpty ? nil : remote.sessionOrder
         applyingConfig = false
         workspaceUpdatedAt[hostID] = remote.updatedAt

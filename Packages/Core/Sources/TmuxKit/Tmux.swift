@@ -1,4 +1,5 @@
 import Foundation
+import Models
 
 public struct TmuxWindow: Equatable, Hashable, Sendable, Identifiable {
     public var index: Int
@@ -302,6 +303,20 @@ public enum Tmux {
             let name = parts[1..<(parts.count - 1)].joined(separator: "|")
             return TmuxWindow(index: index, name: name, active: active)
         }
+    }
+
+    // automatic-rename sets window_name to "[tmux]" while a pane is in copy
+    // mode and "[dead]" when it died - transient placeholders, never real names.
+    public static func isPlaceholderWindowName(_ name: String) -> Bool {
+        name.isEmpty || name == "[tmux]" || name == "[dead]" || name == "[tmux][dead]"
+    }
+
+    public static func windowDisplayName(window: TmuxWindow, session: String, records: [TabRecord]) -> String {
+        let record = records.first { $0.tmuxSession == session && $0.windowIndex == window.index }
+        if let name = record?.name, !name.isEmpty { return name }
+        if let name = record?.windowName, !isPlaceholderWindowName(name) { return name }
+        if !isPlaceholderWindowName(window.name) { return window.name }
+        return "window \(window.index)"
     }
 
     public static func parseSessions(_ output: String) -> [TmuxSession] {

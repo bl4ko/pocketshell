@@ -1,6 +1,7 @@
 import Testing
 
 @testable import TmuxKit
+import Models
 
 @Test func newWindowTargetsSession() {
     #expect(
@@ -321,4 +322,25 @@ import Testing
     ]
     #expect(Tmux.orderSessions(sessions, by: ["c", "a"]).map(\.name) == ["c", "a", "b"])
     #expect(Tmux.orderSessions(sessions, by: [String]()).map(\.name) == ["a", "b", "c"])
+}
+
+@Test func placeholderWindowNamesDetected() {
+    #expect(Tmux.isPlaceholderWindowName("[tmux]"))
+    #expect(Tmux.isPlaceholderWindowName("[dead]"))
+    #expect(Tmux.isPlaceholderWindowName(""))
+    #expect(!Tmux.isPlaceholderWindowName("homeassistant"))
+    #expect(!Tmux.isPlaceholderWindowName("tmux"))
+}
+
+@Test func windowDisplayNamePrefersSavedTabNameOverCopyModePlaceholder() {
+    let window = TmuxWindow(index: 4, name: "[tmux]", active: false)
+    let records = [
+        TabRecord(name: "homeassistant", tmuxSession: "homeops", windowIndex: 4, windowName: "[tmux]")
+    ]
+    #expect(Tmux.windowDisplayName(window: window, session: "homeops", records: records) == "homeassistant")
+    #expect(Tmux.windowDisplayName(window: window, session: "homeops", records: []) == "window 4")
+    let named = TmuxWindow(index: 2, name: "vim", active: false)
+    #expect(Tmux.windowDisplayName(window: named, session: "homeops", records: []) == "vim")
+    let saved = [TabRecord(tmuxSession: "homeops", windowIndex: 2, windowName: "editor")]
+    #expect(Tmux.windowDisplayName(window: named, session: "homeops", records: saved) == "editor")
 }

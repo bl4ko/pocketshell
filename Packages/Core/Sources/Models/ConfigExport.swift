@@ -20,6 +20,22 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.number = number
         self.windowName = windowName
     }
+
+    // A workspace written by a device that has not polled a window yet carries
+    // nil names for it; applying that wholesale wipes names this device knows.
+    public static func preservingNames(local: [TabRecord], remote: [TabRecord]) -> [TabRecord] {
+        remote.map { record in
+            guard record.tmuxSession != nil,
+                let match = local.first(where: {
+                    $0.tmuxSession == record.tmuxSession && $0.windowIndex == record.windowIndex
+                })
+            else { return record }
+            var merged = record
+            if merged.name == nil { merged.name = match.name }
+            if merged.windowName == nil { merged.windowName = match.windowName }
+            return merged
+        }
+    }
 }
 
 public struct HostWorkspace: Codable, Equatable, Sendable {

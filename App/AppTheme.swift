@@ -108,6 +108,11 @@ private struct AppScreen: ViewModifier {
             .toolbarBackground(.visible, for: .navigationBar)
             .preferredColorScheme(theme.lightChrome ? .light : .dark)
             .onAppear { Self.overrideWindows(style) }
+            // On a first launch the scene is often not connected yet, so onAppear
+            // iterates over no windows at all and the chrome keeps the system style.
+            .onReceive(NotificationCenter.default.publisher(for: UIScene.didActivateNotification)) { _ in
+                Self.overrideWindows(style)
+            }
             .onChange(of: themeName) { _, name in
                 Self.overrideWindows(TerminalTheme.named(name).lightChrome ? .light : .dark)
             }

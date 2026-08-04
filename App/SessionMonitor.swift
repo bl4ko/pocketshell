@@ -179,6 +179,10 @@ final class SessionMonitor: ObservableObject {
     }
 
     private func syncWorkspace(for host: HostConfig, using connection: SSHConnection) async {
+        // The e2e sshd points at a real user home: a test app syncing its
+        // throwaway tabs into ~/.config/pocketshell/workspace.json pollutes
+        // every device attached to that host.
+        guard ProcessInfo.processInfo.environment["PS_UI_TEST"] != "1" else { return }
         let hostID = host.id.uuidString
         let output = (try? await connection.exec(WorkspaceSync.readCommand)) ?? ""
         switch WorkspaceSync.action(

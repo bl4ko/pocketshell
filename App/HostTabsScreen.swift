@@ -126,12 +126,19 @@ struct HostTabsScreen: View {
                 #endif
                 .accessibilityIdentifier("tmux-sessions")
             }
+            // Exactly three trailing items: a fourth lands in the system
+            // overflow menu, which iOS 26 renders but does not open reliably.
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
                         activeController?.findVisible = true
                     } label: {
                         Label("Find", systemImage: "magnifyingglass")
+                    }
+                    Button {
+                        showSnippets = true
+                    } label: {
+                        Label("Snippets", systemImage: "text.badge.plus")
                     }
                     Button {
                         showFiles = true
@@ -145,13 +152,6 @@ struct HostTabsScreen: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showSnippets = true
-                } label: {
-                    Image(systemName: "text.badge.plus")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {

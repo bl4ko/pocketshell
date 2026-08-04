@@ -12,20 +12,6 @@ struct TerminalTab: Identifiable {
     let number: Int
 }
 
-private struct TabReorderModifier: ViewModifier {
-    let identifier: String
-    let move: (String) -> Bool
-
-    func body(content: Content) -> some View {
-        content
-            .draggable(identifier)
-            .dropDestination(for: String.self) { identifiers, _ in
-                guard let identifier = identifiers.first else { return false }
-                return move(identifier)
-            }
-    }
-}
-
 struct TabJumpItem: Identifiable {
     let id: UUID
     let label: String
@@ -652,13 +638,17 @@ struct HostTabsScreen: View {
         persistTabs()
     }
 
-    #if targetEnvironment(macCatalyst)
-        private func reorderGesture(for id: UUID) -> some Gesture {
-            DragGesture(minimumDistance: 4, coordinateSpace: .named(tabStripSpace))
-                .onChanged { applyDrag(id: id, start: $0.startLocation, location: $0.location) }
-                .onEnded { _ in endDrag() }
-        }
-    #endif
+    private func reorderGesture(for id: UUID) -> some Gesture {
+        let drag = DragGesture(minimumDistance: 4, coordinateSpace: .named(tabStripSpace))
+            .onChanged { applyDrag(id: id, start: $0.startLocation, location: $0.location) }
+            .onEnded { _ in endDrag() }
+        #if targetEnvironment(macCatalyst)
+            return drag
+        #else
+            // Long press first so the strip still scrolls with a plain swipe.
+            return LongPressGesture(minimumDuration: 0.28).sequenced(before: drag)
+        #endif
+    }
 
     private var tabStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -713,29 +703,7 @@ struct HostTabsScreen: View {
                     .onTapGesture {
                         selectedTab = tab.id
                     }
-                    #if targetEnvironment(macCatalyst)
-                        .gesture(reorderGesture(for: tab.id))
-                    #else
-                        .modifier(
-                            TabReorderModifier(identifier: tab.id.uuidString) { identifier in
-                                guard
-                                    let sourceIndex = tabs.firstIndex(where: {
-                                        $0.id.uuidString == identifier
-                                    }),
-                                    let targetIndex = tabs.firstIndex(where: { $0.id == tab.id }),
-                                    sourceIndex != targetIndex
-                                else { return false }
-                                withAnimation(.snappy(duration: 0.18)) {
-                                    tabs.move(
-                                        fromOffsets: IndexSet(integer: sourceIndex),
-                                        toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
-                                    )
-                                }
-                                persistTabs()
-                                return true
-                            }
-                        )
-                    #endif
+                    .gesture(reorderGesture(for: tab.id))
                     .contextMenu {
                         Button("Rename Tab") {
                             renameText = tab.name ?? ""
@@ -751,6 +719,7 @@ struct HostTabsScreen: View {
             .padding(.vertical, 6)
             .coordinateSpace(.named(tabStripSpace))
         }
+        .scrollDisabled(draggingTab != nil)
         .background(PocketshellTheme.paper)
         .alert("Rename tab", isPresented: renameAlertShown) {
             TextField("name", text: $renameText)

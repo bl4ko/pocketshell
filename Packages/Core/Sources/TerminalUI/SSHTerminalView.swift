@@ -37,6 +37,12 @@
             previousSize = bounds.size
         }
 
+        // Pin a steady block: SwiftTerm's blink is an opacity fade restarted on every
+        // focus/resize, and remote DECSCUSR flips styles mid-session — both read as flicker.
+        override func cursorStyleChanged(source: Terminal, newStyle: CursorStyle) {
+            super.cursorStyleChanged(source: source, newStyle: .steadyBlock)
+        }
+
     }
 
     private final class TerminalViewController: UIViewController {
@@ -194,6 +200,7 @@
             view.accessibilityIdentifier = "terminal.view"
             view.terminalDelegate = context.coordinator
             view.allowMouseReporting = false
+            view.getTerminal().setCursorStyle(.steadyBlock)
             view.inputAccessoryView = nil
             view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }

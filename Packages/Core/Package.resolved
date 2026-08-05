@@ -1,5 +1,5 @@
 {
-  "originHash" : "0c40cb909fe936882947c66557b2dca7a162da4aeca8474cb7b88f678f2e82f8",
+  "originHash" : "e24151417c70d747c758a0252dfc49e58273f46ae1e8f6f567819d6adbc6b9a4",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -104,7 +104,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/bl4ko/SwiftTerm.git",
       "state" : {
-        "revision" : "ddbfb2ed095728467bde18d770db96067b48f0e1"
+        "revision" : "b01ac13a45dd35fcc31f8fe18ac46fdf3e702a6f"
       }
     }
   ],

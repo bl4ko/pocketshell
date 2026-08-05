@@ -381,17 +381,32 @@
                         switch gesture.state {
                         case .began:
                             selectionStart = point
-                            view.startPointerSelection(at: point)
+                            // Tight slop: a mouse is precise, and a generous grab area
+                            // would steal drags meant to start a fresh selection.
+                            if !view.grabSelectionHandle(at: point, slop: 14) {
+                                view.startPointerSelection(at: point)
+                            }
                         case .changed:
-                            view.extendPointerSelection(to: point)
+                            if view.selectionHandleDragActive {
+                                view.dragSelectionHandle(to: point)
+                            } else {
+                                view.extendPointerSelection(to: point)
+                            }
                         case .ended:
-                            view.extendPointerSelection(to: point)
-                            // A click that drifts past the pan slop never reaches the
-                            // tap handler, and tmux only moves its active pane on a
-                            // mouse report.
-                            if let start = selectionStart, hypot(point.x - start.x, point.y - start.y) < 6 {
-                                view.clearSelection()
-                                sendMouseClick(in: view, at: point)
+                            if view.selectionHandleDragActive {
+                                view.dragSelectionHandle(to: point)
+                                view.endSelectionHandleDrag()
+                            } else {
+                                view.extendPointerSelection(to: point)
+                                // A click that drifts past the pan slop never reaches the
+                                // tap handler, and tmux only moves its active pane on a
+                                // mouse report.
+                                if let start = selectionStart,
+                                    hypot(point.x - start.x, point.y - start.y) < 6
+                                {
+                                    view.clearSelection()
+                                    sendMouseClick(in: view, at: point)
+                                }
                             }
                             selectionStart = nil
                         default:

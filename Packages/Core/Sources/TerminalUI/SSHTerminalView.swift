@@ -429,19 +429,28 @@
                     if bridge.selectMode {
                         switch gesture.state {
                         case .began:
-                            // Also disables SwiftTerm's own selection pan for this drag.
-                            view.clearSelection()
-                            view.startPointerSelection(at: gesture.location(in: view))
+                            if !view.grabSelectionHandle(at: gesture.location(in: view)) {
+                                // Also disables SwiftTerm's own selection pan for this drag.
+                                view.clearSelection()
+                                view.startPointerSelection(at: gesture.location(in: view))
+                            }
                         case .changed, .ended:
-                            view.extendPointerSelection(to: gesture.location(in: view))
+                            if view.selectionHandleDragActive {
+                                view.dragSelectionHandle(to: gesture.location(in: view))
+                                if gesture.state == .ended {
+                                    view.endSelectionHandleDrag()
+                                }
+                            } else {
+                                view.extendPointerSelection(to: gesture.location(in: view))
+                            }
                         default:
                             break
                         }
                         return
                     }
-                    // SwiftTerm extends the selection on any pan once its own gesture is
-                    // armed; scrolling at the same time makes the handles undraggable.
-                    if view.selectionActive, view.selectionPanActive {
+                    // Yield only while a handle is actually being dragged, so a pan
+                    // away from the handles still scrolls with the selection intact.
+                    if view.selectionActive, view.selectionHandleDragActive {
                         return
                     }
                 #endif

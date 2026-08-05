@@ -168,8 +168,10 @@
                 .clipped()
                 Divider().frame(height: 22).overlay(Palette.border(theme))
                 HStack(spacing: 4) {
-                    arrowMenu(label: "↑", primary: .arrowUp)
-                    arrowMenu(label: "↓", primary: .arrowDown)
+                    arrowKey("↑", .arrowUp)
+                    arrowKey("↓", .arrowDown)
+                    arrowKey("←", .arrowLeft)
+                    arrowKey("→", .arrowRight)
                     Button {
                         onKey(.escape)
                     } label: {
@@ -258,17 +260,14 @@
             }
         }
 
-        private func arrowMenu(label: String, primary: ToolbarKey.Action) -> some View {
-            Menu {
-                Button("↑ up") { onKey(.arrowUp) }
-                Button("↓ down") { onKey(.arrowDown) }
-                Button("← left") { onKey(.arrowLeft) }
-                Button("→ right") { onKey(.arrowRight) }
+        private func arrowKey(_ label: String, _ action: ToolbarKey.Action) -> some View {
+            Button {
+                onKey(action)
             } label: {
                 keyLabel(label)
-            } primaryAction: {
-                onKey(primary)
             }
+            .buttonStyle(.plain)
+            .buttonRepeatBehavior(.enabled)
         }
 
         private func keyLabel(

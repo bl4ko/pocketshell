@@ -44,6 +44,7 @@ struct HostTabsScreen: View {
     @State private var editingSnippet: Snippet?
     @State private var renamingTab: UUID?
     @State private var renameText = ""
+    @State private var menuTab: UUID?
     @State private var tabWidths: [UUID: CGFloat] = [:]
     @State private var draggingTab: UUID?
     @State private var dragCenterX: CGFloat = 0
@@ -704,6 +705,16 @@ struct HostTabsScreen: View {
                         selectedTab = tab.id
                     }
                     .gesture(reorderGesture(for: tab.id))
+                    // The reorder long-press swallows the system context-menu
+                    // press on iOS, so a still hold opens the same actions as
+                    // a dialog at context-menu timing; movement cancels it.
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.55)
+                            .onEnded { _ in
+                                guard draggingTab == nil else { return }
+                                menuTab = tab.id
+                            }
+                    )
                     .contextMenu {
                         Button("Rename Tab") {
                             renameText = tab.name ?? ""
@@ -726,6 +737,29 @@ struct HostTabsScreen: View {
             Button("Save") { applyRename() }
             Button("Cancel", role: .cancel) { renamingTab = nil }
         }
+        .confirmationDialog("Tab", isPresented: tabMenuShown) {
+            Button("Rename Tab") {
+                if let id = menuTab, let tab = tabs.first(where: { $0.id == id }) {
+                    renameText = tab.name ?? ""
+                    renamingTab = id
+                }
+                menuTab = nil
+            }
+            Button("Close Tab", role: .destructive) {
+                if let id = menuTab {
+                    closeTab(id: id)
+                }
+                menuTab = nil
+            }
+            Button("Cancel", role: .cancel) { menuTab = nil }
+        }
+    }
+
+    private var tabMenuShown: Binding<Bool> {
+        Binding(
+            get: { menuTab != nil },
+            set: { if !$0 { menuTab = nil } }
+        )
     }
 
     private var renameAlertShown: Binding<Bool> {

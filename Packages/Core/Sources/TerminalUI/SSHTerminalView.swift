@@ -380,11 +380,17 @@
                         let point = gesture.location(in: view)
                         switch gesture.state {
                         case .began:
-                            selectionStart = point
+                            // .began only fires after the pan slop, so location is
+                            // already a cell past the press — back out the translation
+                            // or the first character is always dropped.
+                            let translation = gesture.translation(in: view)
+                            let press = CGPoint(x: point.x - translation.x, y: point.y - translation.y)
+                            selectionStart = press
                             // Tight slop: a mouse is precise, and a generous grab area
                             // would steal drags meant to start a fresh selection.
-                            if !view.grabSelectionHandle(at: point, slop: 14) {
-                                view.startPointerSelection(at: point)
+                            if !view.grabSelectionHandle(at: press, slop: 14) {
+                                view.startPointerSelection(at: press)
+                                view.extendPointerSelection(to: point)
                             }
                         case .changed:
                             if view.selectionHandleDragActive {
@@ -444,10 +450,16 @@
                     if bridge.selectMode {
                         switch gesture.state {
                         case .began:
-                            if !view.grabSelectionHandle(at: gesture.location(in: view)) {
+                            // Back out the pan slop so the anchor is the press point,
+                            // not a cell past it (first character was always dropped).
+                            let point = gesture.location(in: view)
+                            let translation = gesture.translation(in: view)
+                            let press = CGPoint(x: point.x - translation.x, y: point.y - translation.y)
+                            if !view.grabSelectionHandle(at: press) {
                                 // Also disables SwiftTerm's own selection pan for this drag.
                                 view.clearSelection()
-                                view.startPointerSelection(at: gesture.location(in: view))
+                                view.startPointerSelection(at: press)
+                                view.extendPointerSelection(to: point)
                             }
                         case .changed, .ended:
                             if view.selectionHandleDragActive {

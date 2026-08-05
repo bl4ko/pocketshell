@@ -116,6 +116,21 @@ import Testing
     #expect(AgentStatus.classify(pane) == .busy)
 }
 
+@Test func classifyBusyForRunningTaskWithNonLetterLabelEnd() {
+    let pane = """
+        ● Apple IdP TF resource (blocked on user Apple portal)… (4m 57s · ↓ 8.5k tokens)
+          ■ Apple IdP TF resource (blocked on user Apple portal)
+          ✓ tf-home Cloudflare DNS records
+          … +4 completed
+
+        > ▌
+        ctx: 26% used / 74% left  [Fable 5]  /Users/bl4ko/Projects/github
+        ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+        """
+    #expect(AgentStatus.classify(pane) == .busy)
+    #expect(AgentStatus.detectAgent(pane) == .busy)
+}
+
 @Test func classifyBusyForOpencodeEscInterrupt() {
     #expect(AgentStatus.classify("▄▀█▄  esc interrupt") == .busy)
     #expect(AgentStatus.classify("esc again to interrupt") == .busy)

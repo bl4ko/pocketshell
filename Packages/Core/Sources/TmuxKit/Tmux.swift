@@ -95,7 +95,7 @@ public enum AgentStatus: Equatable, Sendable {
         if lowered.contains(/waiting for \d+ background agents? to finish/) {
             return .busy
         }
-        if tail.contains(/\p{L}…\s*\(\d+[hms]/) {
+        if tail.contains(/\S…\s*\(\d+[hms]/) {
             return .busy
         }
         if waitingMarkers.contains(where: lowered.contains) || hasSelectedOption(tail) {

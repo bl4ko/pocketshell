@@ -13,33 +13,33 @@ import Models
 @Test func listWindowsCommandUsesPipeFormat() {
     #expect(
         Tmux.listWindowsCommand(session: "claude")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'claude' -F '#{window_index}|#{window_name}|#{window_active}'"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'claude' -F '#{window_index}|#{window_id}|#{window_active}|#{window_name}'"
     )
 }
 
-@Test func parseWindowsParsesIndexNameActive() {
+@Test func parseWindowsParsesIndexIDActiveName() {
     let output = """
-        0|homeops-1|1
-        1|homeops-2|0
-        5|slo-1|0
+        0|@7|1|homeops-1
+        1|@1|0|homeops-2
+        5|@31|0|slo-1
         """
     let windows = Tmux.parseWindows(output)
     #expect(
         windows == [
-            TmuxWindow(index: 0, name: "homeops-1", active: true),
-            TmuxWindow(index: 1, name: "homeops-2", active: false),
-            TmuxWindow(index: 5, name: "slo-1", active: false),
+            TmuxWindow(index: 0, name: "homeops-1", active: true, windowID: "@7"),
+            TmuxWindow(index: 1, name: "homeops-2", active: false, windowID: "@1"),
+            TmuxWindow(index: 5, name: "slo-1", active: false, windowID: "@31"),
         ])
 }
 
 @Test func parseWindowsKeepsPipesInWindowName() {
-    let windows = Tmux.parseWindows("2|weird|name|0")
-    #expect(windows == [TmuxWindow(index: 2, name: "weird|name", active: false)])
+    let windows = Tmux.parseWindows("2|@4|0|weird|name")
+    #expect(windows == [TmuxWindow(index: 2, name: "weird|name", active: false, windowID: "@4")])
 }
 
 @Test func parseWindowsSkipsMalformedLines() {
-    let windows = Tmux.parseWindows("garbage\n1|ok|1\n\n")
-    #expect(windows == [TmuxWindow(index: 1, name: "ok", active: true)])
+    let windows = Tmux.parseWindows("garbage\n1|ok|1\n1|@2|1|ok\n\n")
+    #expect(windows == [TmuxWindow(index: 1, name: "ok", active: true, windowID: "@2")])
 }
 
 @Test func listSessionsCommandUsesPipeFormat() {
@@ -116,6 +116,17 @@ import Models
     )
 }
 
+@Test func attachCommandPrefersWindowIDOverIndex() {
+    let command = Tmux.attachCommand(session: "claude", windowIndex: 3, windowID: "@17", clientTag: "ab12cd")
+    #expect(command.contains("select-window -t '@17'"))
+    #expect(!command.contains("select-window -t 'claude-psh-ab12cd':3"))
+}
+
+@Test func attachCommandIgnoresMalformedWindowID() {
+    let command = Tmux.attachCommand(session: "claude", windowIndex: 3, windowID: "17", clientTag: "ab12cd")
+    #expect(command.contains("select-window -t 'claude-psh-ab12cd':3"))
+}
+
 @Test func attachCommandWithoutWindow() {
     #expect(
         Tmux.attachCommand(session: "claude", windowIndex: nil, clientTag: "ab12cd")
@@ -147,7 +158,7 @@ import Models
 @Test func sessionNameWithSingleQuoteIsEscaped() {
     #expect(
         Tmux.listWindowsCommand(session: "a'b")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'a'\\''b' -F '#{window_index}|#{window_name}|#{window_active}'"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'a'\\''b' -F '#{window_index}|#{window_id}|#{window_active}|#{window_name}'"
     )
 }
 
@@ -274,21 +285,23 @@ import Models
 @Test func capturePaneSnapshotCommandQuotesTarget() {
     #expect(
         Tmux.capturePaneSnapshotCommand(target: "agents-psh-a'b")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux display-message -p -t 'agents-psh-a'\\''b' '@@snapshot:#{window_index}|#{window_name}|#{pane_current_command}@@' && PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux capture-pane -p -t 'agents-psh-a'\\''b'"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux display-message -p -t 'agents-psh-a'\\''b' '@@snapshot:#{window_index}|#{window_id}|#{pane_current_command}|#{window_name}@@' && PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux capture-pane -p -t 'agents-psh-a'\\''b'"
     )
 }
 
 @Test func parsePaneSnapshotSeparatesWindowCommandAndText() {
     #expect(
-        Tmux.parsePaneSnapshot("@@snapshot:2|api|server|codex@@\nhello\nctx: 14% used / 86% left\n")
+        Tmux.parsePaneSnapshot("@@snapshot:2|@9|codex|api|server@@\nhello\nctx: 14% used / 86% left\n")
             == TmuxPaneSnapshot(
                 windowIndex: 2,
                 windowName: "api|server",
                 command: "codex",
-                text: "hello\nctx: 14% used / 86% left\n"
+                text: "hello\nctx: 14% used / 86% left\n",
+                windowID: "@9"
             )
     )
     #expect(Tmux.parsePaneSnapshot("ordinary pane text") == nil)
+    #expect(Tmux.parsePaneSnapshot("@@snapshot:2|api|server|codex@@\nhello") == nil)
 }
 
 @Test func interactiveShellDetectionUsesCommandBasename() {

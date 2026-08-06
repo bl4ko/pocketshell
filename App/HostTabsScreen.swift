@@ -327,9 +327,9 @@ struct HostTabsScreen: View {
         persistTabs()
     }
 
-    private func openWindowInNewTab(session: String, windowIndex: Int?, name: String? = nil) {
+    private func openWindowInNewTab(session: String, windowIndex: Int?, windowID: String? = nil, name: String? = nil) {
         let controller = makeController()
-        controller.preset(session: session, windowIndex: windowIndex)
+        controller.preset(session: session, windowIndex: windowIndex, windowID: windowID)
         let tab = TerminalTab(controller: controller, tmuxWindowName: name, number: nextTabNumber)
         controller.onExit = { closeTab(id: tab.id) }
         tabs.append(tab)
@@ -423,7 +423,8 @@ struct HostTabsScreen: View {
                 tmuxSession: target?.session,
                 windowIndex: target?.windowIndex,
                 number: tab.number,
-                windowName: tab.tmuxWindowName
+                windowName: tab.tmuxWindowName,
+                windowID: target?.windowID
             )
         }
     }
@@ -438,7 +439,7 @@ struct HostTabsScreen: View {
     private func makeTab(from record: TabRecord) -> TerminalTab {
         let controller = makeController()
         if let session = record.tmuxSession {
-            controller.preset(session: session, windowIndex: record.windowIndex)
+            controller.preset(session: session, windowIndex: record.windowIndex, windowID: record.windowID)
         } else {
             controller.presetPlain()
         }
@@ -483,7 +484,9 @@ struct HostTabsScreen: View {
     private func tabMatches(_ tab: TerminalTab, _ record: TabRecord) -> Bool {
         let target = tab.controller.tmuxTarget
         if let session = record.tmuxSession {
-            return target?.session == session && target?.windowIndex == record.windowIndex
+            guard target?.session == session else { return false }
+            if let id = record.windowID, let targetID = target?.windowID { return id == targetID }
+            return target?.windowIndex == record.windowIndex
         }
         guard let number = record.number else { return false }
         return target == nil && tab.number == number
@@ -995,7 +998,7 @@ struct TmuxJumpSheet: View {
     var orderKey: String?
     var onSelectTab: ((UUID) -> Void)?
     var onAddTab: (() -> Void)?
-    var onOpenWindowInNewTab: ((String, Int?, String?) -> Void)?
+    var onOpenWindowInNewTab: ((String, Int?, String?, String?) -> Void)?
     var onRenameSession: ((String, String) -> Void)?
     var onRenameTab: ((UUID, String) -> Void)?
     var onCloseTab: ((UUID) -> Void)?
@@ -1029,14 +1032,18 @@ struct TmuxJumpSheet: View {
                             DisclosureGroup(isExpanded: expandedBinding(session.name)) {
                                 ForEach(filteredWindows(in: session)) { item in
                                     Button {
-                                        jump(toSession: session.name, windowIndex: item.window.index)
+                                        jump(
+                                            toSession: session.name, windowIndex: item.window.index,
+                                            windowID: item.window.windowID)
                                     } label: {
                                         windowRow(item, session: session.name)
                                     }
                                     .accessibilityIdentifier("tmux-window-\(session.name)-\(item.window.index)")
                                     .contextMenu {
                                         Button("Open in New Tab") {
-                                            onOpenWindowInNewTab?(session.name, item.window.index, item.window.name)
+                                            onOpenWindowInNewTab?(
+                                                session.name, item.window.index, item.window.windowID,
+                                                item.window.name)
                                             dismiss()
                                         }
                                         Button("Rename…") {
@@ -1090,7 +1097,7 @@ struct TmuxJumpSheet: View {
                                 }
                                 .contextMenu {
                                     Button("Attach") {
-                                        jump(toSession: session.name, windowIndex: nil)
+                                        jump(toSession: session.name, windowIndex: nil, windowID: nil)
                                     }
                                     Button("Rename…") {
                                         promptText = session.name
@@ -1393,7 +1400,7 @@ struct TmuxJumpSheet: View {
         case .newSession:
             Task {
                 guard await controller?.createTmuxSession(named: name) == true else { return }
-                onOpenWindowInNewTab?(name, nil, name)
+                onOpenWindowInNewTab?(name, nil, nil, name)
                 dismiss()
             }
         case .renameSession(let old):
@@ -1439,9 +1446,9 @@ struct TmuxJumpSheet: View {
         }
     }
 
-    private func jump(toSession session: String, windowIndex: Int?) {
+    private func jump(toSession session: String, windowIndex: Int?, windowID: String? = nil) {
         let controller = controller
-        Task { await controller?.jump(toSession: session, windowIndex: windowIndex) }
+        Task { await controller?.jump(toSession: session, windowIndex: windowIndex, windowID: windowID) }
         dismiss()
     }
 

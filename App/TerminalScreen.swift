@@ -259,7 +259,11 @@ struct WindowDashboardSheet: View {
                     Section(session.name) {
                         ForEach(windowsBySession[session.name] ?? []) { item in
                             Button {
-                                Task { await connection.jump(toSession: session.name, windowIndex: item.window.index) }
+                                Task {
+                                    await connection.jump(
+                                        toSession: session.name, windowIndex: item.window.index,
+                                        windowID: item.window.windowID)
+                                }
                             } label: {
                                 DashboardRow(item: item)
                             }

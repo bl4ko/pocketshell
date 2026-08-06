@@ -6,19 +6,29 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var windowIndex: Int?
     public var number: Int?
     public var windowName: String?
+    // tmux window_id (@N): survives renumber-windows, which shifts indexes.
+    public var windowID: String?
 
     public init(
         name: String? = nil,
         tmuxSession: String? = nil,
         windowIndex: Int? = nil,
         number: Int? = nil,
-        windowName: String? = nil
+        windowName: String? = nil,
+        windowID: String? = nil
     ) {
         self.name = name
         self.tmuxSession = tmuxSession
         self.windowIndex = windowIndex
         self.number = number
         self.windowName = windowName
+        self.windowID = windowID
+    }
+
+    public func matchesWindow(of other: TabRecord) -> Bool {
+        guard tmuxSession == other.tmuxSession else { return false }
+        if let id = windowID, let otherID = other.windowID { return id == otherID }
+        return windowIndex == other.windowIndex
     }
 
     // A workspace written by a device that has not polled a window yet carries
@@ -26,9 +36,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public static func preservingNames(local: [TabRecord], remote: [TabRecord]) -> [TabRecord] {
         remote.map { record in
             guard record.tmuxSession != nil,
-                let match = local.first(where: {
-                    $0.tmuxSession == record.tmuxSession && $0.windowIndex == record.windowIndex
-                })
+                let match = local.first(where: { $0.matchesWindow(of: record) })
             else { return record }
             var merged = record
             if merged.name == nil { merged.name = match.name }

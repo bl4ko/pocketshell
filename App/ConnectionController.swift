@@ -34,7 +34,7 @@ final class ConnectionController: ObservableObject {
     private var lastErrorMessage: String?
     private var monitor: NWPathMonitor?
     private enum PendingShell {
-        case tmux(session: String, windowIndex: Int?)
+        case tmux(session: String, windowIndex: Int?, windowID: String?)
         case plain(String?)
     }
 
@@ -73,7 +73,7 @@ final class ConnectionController: ObservableObject {
 
     func selectWindow(_ window: TmuxWindow?) async {
         guard let session = host.tmuxSession else { return }
-        pendingShell = .tmux(session: session, windowIndex: window?.index)
+        pendingShell = .tmux(session: session, windowIndex: window?.index, windowID: window?.windowID)
         phase = .connecting
         await openShellAndPump()
     }
@@ -100,23 +100,23 @@ final class ConnectionController: ObservableObject {
         return false
     }
 
-    var tmuxTarget: (session: String, windowIndex: Int?)? {
-        if case .tmux(let session, let windowIndex) = pendingShell {
-            return (session, windowIndex)
+    var tmuxTarget: (session: String, windowIndex: Int?, windowID: String?)? {
+        if case .tmux(let session, let windowIndex, let windowID) = pendingShell {
+            return (session, windowIndex, windowID)
         }
         return nil
     }
 
-    func preset(session: String, windowIndex: Int?) {
-        pendingShell = .tmux(session: session, windowIndex: windowIndex)
+    func preset(session: String, windowIndex: Int?, windowID: String? = nil) {
+        pendingShell = .tmux(session: session, windowIndex: windowIndex, windowID: windowID)
     }
 
     func presetPlain() {
         pendingShell = .plain(host.onConnectCommand)
     }
 
-    func jump(toSession session: String, windowIndex: Int? = nil) async {
-        pendingShell = .tmux(session: session, windowIndex: windowIndex)
+    func jump(toSession session: String, windowIndex: Int? = nil, windowID: String? = nil) async {
+        pendingShell = .tmux(session: session, windowIndex: windowIndex, windowID: windowID)
         phase = .connecting
         shellGeneration += 1
         let old = shell
@@ -150,8 +150,8 @@ final class ConnectionController: ObservableObject {
     }
 
     func sessionRenamed(from oldName: String, to newName: String) {
-        if case .tmux(let session, let windowIndex) = pendingShell, session == oldName {
-            pendingShell = .tmux(session: newName, windowIndex: windowIndex)
+        if case .tmux(let session, let windowIndex, let windowID) = pendingShell, session == oldName {
+            pendingShell = .tmux(session: newName, windowIndex: windowIndex, windowID: windowID)
         }
     }
 
@@ -197,7 +197,7 @@ final class ConnectionController: ObservableObject {
 
     func currentTmuxWindowIndex() async -> Int? {
         guard let connection, let cloneTag,
-            case .tmux(let session, _) = pendingShell
+            case .tmux(let session, _, _) = pendingShell
         else { return nil }
         let clone = Tmux.cloneName(session: session, clientTag: cloneTag)
         let output = (try? await connection.exec(Tmux.currentWindowCommand(clone: clone))) ?? ""
@@ -206,14 +206,15 @@ final class ConnectionController: ObservableObject {
 
     func currentTmuxPaneSnapshot() async -> TmuxPaneSnapshot? {
         guard let connection, let cloneTag,
-            case .tmux(let session, _) = pendingShell
+            case .tmux(let session, _, let windowID) = pendingShell
         else { return nil }
         guard
             let output = try? await connection.exec(
                 Tmux.capturePaneSnapshotCommand(target: Tmux.cloneName(session: session, clientTag: cloneTag)))
         else { return nil }
         guard let snapshot = Tmux.parsePaneSnapshot(output) else { return nil }
-        pendingShell = .tmux(session: session, windowIndex: snapshot.windowIndex)
+        pendingShell = .tmux(
+            session: session, windowIndex: snapshot.windowIndex, windowID: snapshot.windowID ?? windowID)
         return snapshot
     }
 
@@ -327,10 +328,11 @@ final class ConnectionController: ObservableObject {
         let size = bridge.currentSize
         let command: String?
         switch pendingShell {
-        case .tmux(let session, let windowIndex):
+        case .tmux(let session, let windowIndex, let windowID):
             let tag = String(UUID().uuidString.prefix(8)).lowercased()
             cloneTag = tag
-            command = Tmux.attachCommand(session: session, windowIndex: windowIndex, clientTag: tag)
+            command = Tmux.attachCommand(
+                session: session, windowIndex: windowIndex, windowID: windowID, clientTag: tag)
         case .plain(let plain):
             cloneTag = nil
             command = plain

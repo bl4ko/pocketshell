@@ -30,3 +30,23 @@ import Testing
     #expect(merged[2].name == nil)
     #expect(merged[3] == TabRecord(number: 3))
 }
+
+@Test func matchesWindowPrefersWindowIDOverStaleIndex() {
+    let record = TabRecord(tmuxSession: "homeops", windowIndex: 2, windowID: "@2")
+    #expect(record.matchesWindow(of: TabRecord(tmuxSession: "homeops", windowIndex: 1, windowID: "@2")))
+    #expect(!record.matchesWindow(of: TabRecord(tmuxSession: "homeops", windowIndex: 2, windowID: "@1")))
+    #expect(record.matchesWindow(of: TabRecord(tmuxSession: "homeops", windowIndex: 2)))
+    #expect(!record.matchesWindow(of: TabRecord(tmuxSession: "other", windowIndex: 2, windowID: "@2")))
+}
+
+@Test func preservingNamesFollowsWindowIDAcrossRenumber() {
+    let local = [
+        TabRecord(name: "homeops-3", tmuxSession: "homeops", windowIndex: 2, windowName: "claude-homeops-3", windowID: "@2")
+    ]
+    let remote = [
+        TabRecord(tmuxSession: "homeops", windowIndex: 1, windowID: "@2")
+    ]
+    let merged = TabRecord.preservingNames(local: local, remote: remote)
+    #expect(merged[0].name == "homeops-3")
+    #expect(merged[0].windowName == "claude-homeops-3")
+}

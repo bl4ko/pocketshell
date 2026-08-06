@@ -5,13 +5,16 @@ public struct TmuxWindow: Equatable, Hashable, Sendable, Identifiable {
     public var index: Int
     public var name: String
     public var active: Bool
+    // tmux window_id (@N): stable across renumber-windows, unlike the index.
+    public var windowID: String?
 
     public var id: Int { index }
 
-    public init(index: Int, name: String, active: Bool) {
+    public init(index: Int, name: String, active: Bool, windowID: String? = nil) {
         self.index = index
         self.name = name
         self.active = active
+        self.windowID = windowID
     }
 }
 
@@ -36,12 +39,14 @@ public struct TmuxPaneSnapshot: Equatable, Sendable {
     public var windowName: String
     public var command: String
     public var text: String
+    public var windowID: String?
 
-    public init(windowIndex: Int, windowName: String, command: String, text: String) {
+    public init(windowIndex: Int, windowName: String, command: String, text: String, windowID: String? = nil) {
         self.windowIndex = windowIndex
         self.windowName = windowName
         self.command = command
         self.text = text
+        self.windowID = windowID
     }
 }
 
@@ -114,8 +119,9 @@ public enum AgentStatus: Equatable, Sendable {
 public enum Tmux {
     static let tmux = "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux"
 
+    // window_name goes last: it is the only field that can contain '|'.
     public static func listWindowsCommand(session: String) -> String {
-        "\(tmux) list-windows -t \(shellQuote(session)) -F '#{window_index}|#{window_name}|#{window_active}'"
+        "\(tmux) list-windows -t \(shellQuote(session)) -F '#{window_index}|#{window_id}|#{window_active}|#{window_name}'"
     }
 
     public static func listSessionsCommand() -> String {
@@ -147,10 +153,16 @@ public enum Tmux {
     // chain resolves against a client that has not attached yet, so it lands
     // either nowhere (clones never expire) or on the whole server (which turns
     // destroy-unattached into "kill every detached session").
-    public static func attachCommand(session: String, windowIndex: Int?, clientTag: String) -> String {
+    // Select by window_id when known: with renumber-windows on, a saved index
+    // can point at a different window by the time the device reattaches.
+    public static func attachCommand(session: String, windowIndex: Int?, windowID: String? = nil, clientTag: String)
+        -> String
+    {
         let clone = shellQuote(cloneName(session: session, clientTag: clientTag))
         var parts = ["\(tmux) -u new-session -d -t \(shellQuote(session)) -s \(clone)"]
-        if let windowIndex {
+        if let windowID, windowID.hasPrefix("@") {
+            parts.append("select-window -t \(shellQuote(windowID))")
+        } else if let windowIndex {
             parts.append("select-window -t \(clone):\(windowIndex)")
         }
         // destroy-unattached has to be set after the client is on the clone:
@@ -192,10 +204,11 @@ public enum Tmux {
             "for w in $(\(tmux) list-windows -t \(target) -F '#{window_index}'); do echo \"@@pane:$w@@\"; \(tmux) capture-pane -p -t \(target):$w; done"
     }
 
+    // window_name goes last: it is the only field that can contain '|'.
     public static func capturePaneSnapshotCommand(target: String) -> String {
         let target = shellQuote(target)
         return
-            "\(tmux) display-message -p -t \(target) '@@snapshot:#{window_index}|#{window_name}|#{pane_current_command}@@'"
+            "\(tmux) display-message -p -t \(target) '@@snapshot:#{window_index}|#{window_id}|#{pane_current_command}|#{window_name}@@'"
             + " && \(tmux) capture-pane -p -t \(target)"
     }
 
@@ -204,13 +217,14 @@ public enum Tmux {
         let header = separator.map { output[..<$0] } ?? output[...]
         guard header.hasPrefix("@@snapshot:"), header.hasSuffix("@@") else { return nil }
         let fields = header.dropFirst(11).dropLast(2).split(separator: "|", omittingEmptySubsequences: false)
-        guard fields.count >= 3, let windowIndex = Int(fields[0]) else { return nil }
+        guard fields.count >= 4, let windowIndex = Int(fields[0]), fields[1].hasPrefix("@") else { return nil }
         let text = separator.map { String(output[output.index(after: $0)...]) } ?? ""
         return TmuxPaneSnapshot(
             windowIndex: windowIndex,
-            windowName: fields[1..<(fields.count - 1)].joined(separator: "|"),
-            command: String(fields.last!),
-            text: text
+            windowName: fields[3...].joined(separator: "|"),
+            command: String(fields[2]),
+            text: text,
+            windowID: String(fields[1])
         )
     }
 
@@ -296,12 +310,13 @@ public enum Tmux {
     public static func parseWindows(_ output: String) -> [TmuxWindow] {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: "|", omittingEmptySubsequences: false)
-            guard parts.count >= 3,
+            guard parts.count >= 4,
                 let index = Int(parts[0]),
-                let active = flag(parts.last!)
+                parts[1].hasPrefix("@"),
+                let active = flag(parts[2])
             else { return nil }
-            let name = parts[1..<(parts.count - 1)].joined(separator: "|")
-            return TmuxWindow(index: index, name: name, active: active)
+            let name = parts[3...].joined(separator: "|")
+            return TmuxWindow(index: index, name: name, active: active, windowID: String(parts[1]))
         }
     }
 

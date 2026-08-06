@@ -13,6 +13,9 @@ final class SmokeUITests: XCTestCase {
         if name.contains("testTabStatuses") {
             environmentKeys += ["PS_TEST_STATUS_STABLE", "PS_TEST_STATUS_CHURN", "PS_TEST_STATUS_GAP"]
         }
+        if name.contains("testTmuxRepaints") {
+            environmentKeys.append("PS_TEST_FLICKER")
+        }
         for key in environmentKeys {
             if let value = ProcessInfo.processInfo.environment[key] {
                 app.launchEnvironment[key] = value
@@ -296,6 +299,34 @@ final class SmokeUITests: XCTestCase {
             ).firstMatch.exists)
     }
 
+    func testTmuxRepaintsKeepCaretParked() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let port = env["PS_TEST_PORT"], let user = env["PS_TEST_USER"],
+            env["PS_TEST_FLICKER"] != nil
+        else {
+            throw XCTSkip("PS_TEST_FLICKER not set; tmux repaint e2e skipped")
+        }
+
+        addHost(named: "flickerbox", port: port, user: user)
+        app.staticTexts["flickerbox"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        let terminal = app.descendants(matching: .any)["terminal.view"].firstMatch
+        XCTAssertTrue(terminal.waitForExistence(timeout: 5))
+        sleep(2)
+
+        for frame in 0..<40 {
+            let capture = XCUIScreen.main.screenshot()
+            if !caretVisible(capture.image, terminal: terminal.frame) {
+                let attachment = XCTAttachment(screenshot: capture)
+                attachment.name = "missing-parked-caret-\(frame)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                XCTFail("tmux repaint hid the parked caret")
+                return
+            }
+        }
+    }
+
     func testKeysScreenShowsDevicePublicKey() {
         app.buttons["Keys"].tap()
         let installSection = app.staticTexts.matching(
@@ -382,6 +413,25 @@ final class SmokeUITests: XCTestCase {
         let accent = pixel(XCUIScreen.main.screenshot().image, x: 0.91, y: 0.11)
         XCTAssertGreaterThan(accent.red, 150)
         XCTAssertLessThan(accent.blue, 100)
+    }
+
+    private func caretVisible(_ image: UIImage, terminal: CGRect) -> Bool {
+        for origin in [
+            CGPoint(x: terminal.minX, y: terminal.minY),
+            CGPoint(x: terminal.midX, y: terminal.minY),
+            CGPoint(x: terminal.minX, y: terminal.midY),
+            CGPoint(x: terminal.midX, y: terminal.midY),
+        ] {
+            for x in stride(from: origin.x + 1, through: origin.x + 50, by: 2) {
+                for y in stride(from: origin.y + 1, through: origin.y + 18, by: 2) {
+                    let color = pixel(image, x: x / image.size.width, y: y / image.size.height)
+                    if color.red > 100, color.green > 100, color.blue > 100 {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
     }
 
     private func addHost(named name: String, port: String, user: String) {

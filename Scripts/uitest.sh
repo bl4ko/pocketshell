@@ -9,9 +9,10 @@ TMUX_SESSION="psh-uitest-$$"
 STATUS_STABLE="$TMUX_SESSION-stable"
 STATUS_CHURN="$TMUX_SESSION-churn"
 STATUS_GAP="$TMUX_SESSION-gap"
+FLICKER_SESSION="$TMUX_SESSION-flicker"
 cleanup() {
     kill "${SSHD_PID:-}" 2>/dev/null || true
-    for session in "$TMUX_SESSION" "$STATUS_STABLE" "$STATUS_CHURN" "$STATUS_GAP"; do
+    for session in "$TMUX_SESSION" "$STATUS_STABLE" "$STATUS_CHURN" "$STATUS_GAP" "$FLICKER_SESSION"; do
         tmux kill-session -t "$session" 2>/dev/null || true
     done
     rm -rf "$DIR"
@@ -76,6 +77,56 @@ tmux set-option -t "$STATUS_STABLE" automatic-rename off
 tmux set-option -t "$STATUS_CHURN" automatic-rename off
 tmux set-option -t "$STATUS_GAP" automatic-rename off
 
+cat > "$DIR/repaint.c" << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+    int frame = argc > 1 ? atoi(argv[1]) : 0;
+    for (;;) {
+        struct winsize size;
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
+        int rows_per_chunk = (size.ws_row + 1) / 2;
+        size_t capacity = (size.ws_col + 24) * rows_per_chunk;
+        char *output = malloc(capacity);
+        for (int first = 1; first <= size.ws_row; first += rows_per_chunk) {
+            size_t offset = 0;
+            int last = first + rows_per_chunk - 1;
+            if (last > size.ws_row) last = size.ws_row;
+            if (first == 1) {
+                offset += snprintf(output + offset, capacity - offset, "\033[1;1H");
+            }
+            for (int row = first; row <= last; row++) {
+                offset += snprintf(output + offset, capacity - offset, "\033[48;2;%d;%d;0m", frame % 2 ? 8 : 0, frame % 2 ? 0 : 8);
+                memset(output + offset, ' ', size.ws_col);
+                offset += size.ws_col;
+                if (row < size.ws_row) {
+                    memcpy(output + offset, "\r\n", 2);
+                    offset += 2;
+                }
+            }
+            write(STDOUT_FILENO, output, offset);
+            usleep(100000);
+        }
+        write(STDOUT_FILENO, "\033[1;3H", 6);
+        free(output);
+        frame++;
+        usleep(100000);
+    }
+}
+EOF
+cc -O2 -o "$DIR/repaint" "$DIR/repaint.c"
+tmux new-session -d -s "$FLICKER_SESSION" -n flicker "$DIR/repaint 0"
+tmux split-window -h -t "$FLICKER_SESSION":0 "$DIR/repaint 1"
+tmux split-window -v -t "$FLICKER_SESSION":0.0 "$DIR/repaint 0"
+tmux split-window -v -t "$FLICKER_SESSION":0.2 "$DIR/repaint 1"
+tmux select-layout -t "$FLICKER_SESSION":0 tiled
+tmux select-pane -t "$FLICKER_SESSION":0.0
+tmux set-option -t "$FLICKER_SESSION" automatic-rename off
+
 cd "$REPO"
 if ! xcrun simctl list devices available | grep -q "$SIM ("; then
     SIM=$(xcrun simctl list devices available | sed -n 's/^ *\(iPhone[^(]*[^ (]\) *(.*/\1/p' | head -1)
@@ -93,6 +144,7 @@ TEST_RUNNER_PS_TEST_TMUX="$TMUX_SESSION" \
 TEST_RUNNER_PS_TEST_STATUS_STABLE="$STATUS_STABLE" \
 TEST_RUNNER_PS_TEST_STATUS_CHURN="$STATUS_CHURN" \
 TEST_RUNNER_PS_TEST_STATUS_GAP="$STATUS_GAP" \
+TEST_RUNNER_PS_TEST_FLICKER="$FLICKER_SESSION" \
 xcodebuild test \
   -scheme pocketshell \
   -destination "platform=iOS Simulator,name=$SIM" \

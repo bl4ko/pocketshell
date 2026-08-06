@@ -351,6 +351,10 @@ struct HostTabsScreen: View {
 
     private func restoreTabs() {
         if ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1" {
+            if let session = ProcessInfo.processInfo.environment["PS_TEST_FLICKER"] {
+                openWindowInNewTab(session: session, windowIndex: 0)
+                return
+            }
             let fixtures = [
                 ("stable", ProcessInfo.processInfo.environment["PS_TEST_STATUS_STABLE"]),
                 ("churn", ProcessInfo.processInfo.environment["PS_TEST_STATUS_CHURN"]),

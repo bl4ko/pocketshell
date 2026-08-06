@@ -100,6 +100,9 @@ public enum AgentStatus: Equatable, Sendable {
         if lowered.contains(/waiting for \d+ background agents? to finish/) {
             return .busy
         }
+        if lowered.contains(/\d+ tasks? \(\d+ done, [1-9]\d* in progress, \d+ open\)/) {
+            return .busy
+        }
         if tail.contains(/\S…\s*\(\d+[hms]/) {
             return .busy
         }

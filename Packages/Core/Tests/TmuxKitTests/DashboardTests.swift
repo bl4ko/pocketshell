@@ -52,6 +52,22 @@ import Testing
     #expect(AgentStatus.detectAgent(pane) == .busy)
 }
 
+@Test func classifyBusyWhileTasksAreInProgress() {
+    let pane = """
+        ✻ Sautéed for 2m 50s · 1 shell still running
+
+        2 tasks (0 done, 2 in progress, 0 open)
+        ■ Add first-broker-login no-review flow
+        ■ iOS public login + native terms re-acceptance
+
+        ❯
+        ctx: 21% used / 79% left  [Fable 5]
+        ⏵⏵ auto mode on · 1 shell · ← for agents
+        """
+    #expect(AgentStatus.classify(pane) == .busy)
+    #expect(AgentStatus.detectAgent(pane) == .busy)
+}
+
 @Test func classifyWaitingOnPlanApproval() {
     let pane = """
         - gitops-home/internal/resources/metallb/ — retired in 5.3

@@ -1079,18 +1079,6 @@ struct TmuxJumpSheet: View {
                                 .onMove { from, to in
                                     moveWindows(session: session.name, from: from, to: to)
                                 }
-                                if query.isEmpty {
-                                    Button {
-                                        Task {
-                                            await controller?.createTmuxWindow(in: session.name)
-                                            await load()
-                                        }
-                                    } label: {
-                                        Label("new window in \(session.name)", systemImage: "plus")
-                                            .font(PocketshellTheme.mono(10, weight: .semibold))
-                                            .foregroundStyle(PocketshellTheme.muted)
-                                    }
-                                }
                             } label: {
                                 HStack(spacing: 7) {
                                     Text(session.name)
@@ -1126,6 +1114,20 @@ struct TmuxJumpSheet: View {
                             }
                             .accessibilityIdentifier("tmux-session-\(session.name)")
                             .listRowBackground(PocketshellTheme.secondarySurface)
+                            if query.isEmpty, expandedSessions.contains(session.name) {
+                                Button {
+                                    Task {
+                                        await controller?.createTmuxWindow(in: session.name)
+                                        await load()
+                                    }
+                                } label: {
+                                    Label("new window in \(session.name)", systemImage: "plus")
+                                        .font(PocketshellTheme.mono(10, weight: .semibold))
+                                        .foregroundStyle(PocketshellTheme.muted)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.leading, 20)
+                            }
                         }
                         .onMove { from, to in
                             guard query.isEmpty, from.allSatisfy({ $0 < sessions.count }) else { return }

@@ -299,6 +299,41 @@ final class SmokeUITests: XCTestCase {
             ).firstMatch.exists)
     }
 
+    func testTmuxNewWindowButtonCreatesWindow() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let port = env["PS_TEST_PORT"], let user = env["PS_TEST_USER"],
+            let session = env["PS_TEST_TMUX"]
+        else {
+            throw XCTSkip("PS_TEST_TMUX not set; tmux e2e skipped")
+        }
+
+        addHost(named: "windowbox", port: port, user: user)
+        app.staticTexts["windowbox"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["tmux-sessions"].firstMatch.tap()
+
+        let sessionRow = app.descendants(matching: .any)["tmux-session-\(session)"]
+        XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.waitForExistence(timeout: 5))
+        sleep(2)
+        for _ in 0..<20 where !sessionRow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 10))
+        sessionRow.tap()
+        let newWindow = app.buttons["new window in \(session)"]
+        for _ in 0..<4 where !newWindow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(newWindow.waitForExistence(timeout: 2))
+        newWindow.tap()
+        let updatedSession = app.buttons.matching(
+            NSPredicate(
+                format: "identifier == %@ AND label CONTAINS '2 windows'", "tmux-session-\(session)"
+            )
+        ).firstMatch
+        XCTAssertTrue(updatedSession.waitForExistence(timeout: 5))
+    }
+
     func testTmuxRepaintsKeepCaretParked() throws {
         let env = ProcessInfo.processInfo.environment
         guard let port = env["PS_TEST_PORT"], let user = env["PS_TEST_USER"],

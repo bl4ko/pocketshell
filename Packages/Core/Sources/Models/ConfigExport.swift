@@ -8,6 +8,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
     public var windowName: String?
     // tmux window_id (@N): survives renumber-windows, which shifts indexes.
     public var windowID: String?
+    public var tabGroup: String?
 
     public init(
         name: String? = nil,
@@ -15,7 +16,8 @@ public struct TabRecord: Codable, Equatable, Sendable {
         windowIndex: Int? = nil,
         number: Int? = nil,
         windowName: String? = nil,
-        windowID: String? = nil
+        windowID: String? = nil,
+        tabGroup: String? = nil
     ) {
         self.name = name
         self.tmuxSession = tmuxSession
@@ -23,7 +25,10 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.number = number
         self.windowName = windowName
         self.windowID = windowID
+        self.tabGroup = tabGroup
     }
+
+    public var groupName: String { tabGroup ?? tmuxSession ?? "Shells" }
 
     public func matchesWindow(of other: TabRecord) -> Bool {
         guard tmuxSession == other.tmuxSession else { return false }
@@ -35,14 +40,27 @@ public struct TabRecord: Codable, Equatable, Sendable {
     // nil names for it; applying that wholesale wipes names this device knows.
     public static func preservingNames(local: [TabRecord], remote: [TabRecord]) -> [TabRecord] {
         remote.map { record in
-            guard record.tmuxSession != nil,
-                let match = local.first(where: { $0.matchesWindow(of: record) })
-            else { return record }
+            let match = local.first {
+                if record.tmuxSession != nil { return $0.matchesWindow(of: record) }
+                return $0.tmuxSession == nil && $0.number == record.number
+            }
+            guard let match else { return record }
             var merged = record
             if merged.name == nil { merged.name = match.name }
             if merged.windowName == nil { merged.windowName = match.windowName }
+            if merged.tabGroup == nil { merged.tabGroup = match.tabGroup }
             return merged
         }
+    }
+
+    public static func grouped(_ records: [TabRecord]) -> [TabRecord] {
+        var order: [String] = []
+        var groups: [String: [TabRecord]] = [:]
+        for record in records {
+            if groups[record.groupName] == nil { order.append(record.groupName) }
+            groups[record.groupName, default: []].append(record)
+        }
+        return order.flatMap { groups[$0] ?? [] }
     }
 }
 

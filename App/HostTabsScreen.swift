@@ -9,6 +9,7 @@ struct TerminalTab: Identifiable {
     let controller: ConnectionController
     var name: String?
     var tmuxWindowName: String?
+    var group: String
     let number: Int
 }
 
@@ -20,6 +21,13 @@ struct TabJumpItem: Identifiable {
     let selected: Bool
     let session: String?
     let windowIndex: Int?
+    let group: String
+}
+
+struct TabJumpGroup: Identifiable {
+    var id: String { name }
+    let name: String
+    let items: [TabJumpItem]
 }
 
 struct HostTabsScreen: View {
@@ -167,11 +175,7 @@ struct HostTabsScreen: View {
                 onRenameSession: renameSessionReferences,
                 onRenameTab: { id, name in renameTab(id: id, name: name) },
                 onCloseTab: { id in closeTab(id: id) },
-                onMoveTab: { from, to in
-                    guard from.allSatisfy({ $0 < tabs.count }) else { return }
-                    tabs.move(fromOffsets: from, toOffset: min(to, tabs.count))
-                    persistTabs()
-                }
+                onMoveTab: moveTab
             )
         }
         .sheet(isPresented: $showFiles) {
@@ -303,7 +307,8 @@ struct HostTabsScreen: View {
                 preview: Tmux.previewLines(text, count: 3),
                 selected: tab.id == selectedTab,
                 session: tab.controller.tmuxTarget?.session,
-                windowIndex: tab.controller.tmuxTarget?.windowIndex
+                windowIndex: tab.controller.tmuxTarget?.windowIndex,
+                group: tab.group
             )
         }
     }
@@ -320,9 +325,9 @@ struct HostTabsScreen: View {
 
     private func addTab() {
         let controller = makeController()
-        let tab = TerminalTab(controller: controller, number: nextTabNumber)
+        let tab = TerminalTab(controller: controller, group: "Shells", number: nextTabNumber)
         controller.onExit = { closeTab(id: tab.id) }
-        tabs.append(tab)
+        insertTab(tab)
         selectedTab = tab.id
         persistTabs()
     }
@@ -330,9 +335,9 @@ struct HostTabsScreen: View {
     private func openWindowInNewTab(session: String, windowIndex: Int?, windowID: String? = nil, name: String? = nil) {
         let controller = makeController()
         controller.preset(session: session, windowIndex: windowIndex, windowID: windowID)
-        let tab = TerminalTab(controller: controller, tmuxWindowName: name, number: nextTabNumber)
+        let tab = TerminalTab(controller: controller, tmuxWindowName: name, group: session, number: nextTabNumber)
         controller.onExit = { closeTab(id: tab.id) }
-        tabs.append(tab)
+        insertTab(tab)
         selectedTab = tab.id
         persistTabs()
     }
@@ -340,6 +345,9 @@ struct HostTabsScreen: View {
     private func renameSessionReferences(from oldName: String, to newName: String) {
         for tab in tabs {
             tab.controller.sessionRenamed(from: oldName, to: newName)
+        }
+        for index in tabs.indices where tabs[index].group == oldName {
+            tabs[index].group = newName
         }
         if let index = store.hosts.firstIndex(where: { $0.id == host.id }),
             store.hosts[index].tmuxSession == oldName
@@ -364,9 +372,9 @@ struct HostTabsScreen: View {
                 for (name, session) in fixtures {
                     let controller = makeController()
                     controller.preset(session: session, windowIndex: 0)
-                    let tab = TerminalTab(controller: controller, name: name, number: nextTabNumber)
+                    let tab = TerminalTab(controller: controller, name: name, group: session, number: nextTabNumber)
                     controller.onExit = { closeTab(id: tab.id) }
-                    tabs.append(tab)
+                    insertTab(tab)
                 }
                 selectedTab = tabs.first?.id
                 return
@@ -377,7 +385,7 @@ struct HostTabsScreen: View {
             addTab()
             return
         }
-        for record in records {
+        for record in TabRecord.grouped(records) {
             tabs.append(makeTab(from: record))
         }
         selectedTab = tabs.first?.id
@@ -394,9 +402,9 @@ struct HostTabsScreen: View {
         } else {
             let controller = makeController()
             controller.preset(session: session, windowIndex: target.windowIndex)
-            let tab = TerminalTab(controller: controller, number: nextTabNumber)
+            let tab = TerminalTab(controller: controller, group: session, number: nextTabNumber)
             controller.onExit = { closeTab(id: tab.id) }
-            tabs.append(tab)
+            insertTab(tab)
             selectedTab = tab.id
             persistTabs()
         }
@@ -419,6 +427,23 @@ struct HostTabsScreen: View {
         }
     }
 
+    private func insertTab(_ tab: TerminalTab) {
+        let index = tabs.lastIndex { $0.group == tab.group }.map { $0 + 1 } ?? tabs.endIndex
+        tabs.insert(tab, at: index)
+    }
+
+    private func moveTab(_ id: UUID, _ group: String, _ after: UUID?) {
+        guard let source = tabs.firstIndex(where: { $0.id == id }) else { return }
+        var tab = tabs.remove(at: source)
+        tab.group = group
+        let destination =
+            after.flatMap { target in tabs.firstIndex(where: { $0.id == target }).map { $0 + 1 } }
+            ?? tabs.lastIndex(where: { $0.group == group }).map { $0 + 1 }
+            ?? tabs.endIndex
+        tabs.insert(tab, at: destination)
+        persistTabs()
+    }
+
     private var currentRecords: [TabRecord] {
         tabs.map { tab in
             let target = tab.controller.tmuxTarget
@@ -428,7 +453,8 @@ struct HostTabsScreen: View {
                 windowIndex: target?.windowIndex,
                 number: tab.number,
                 windowName: tab.tmuxWindowName,
-                windowID: target?.windowID
+                windowID: target?.windowID,
+                tabGroup: tab.group
             )
         }
     }
@@ -451,6 +477,7 @@ struct HostTabsScreen: View {
             controller: controller,
             name: record.name,
             tmuxWindowName: record.windowName,
+            group: record.groupName,
             number: record.number ?? nextTabNumber
         )
         controller.onExit = { closeTab(id: tab.id) }
@@ -458,7 +485,7 @@ struct HostTabsScreen: View {
     }
 
     private func reconcileTabs() {
-        let records = store.savedTabs[host.id.uuidString] ?? []
+        let records = TabRecord.grouped(store.savedTabs[host.id.uuidString] ?? [])
         guard !tabs.isEmpty, !records.isEmpty, records != currentRecords else { return }
         var remaining = tabs
         var reconciled: [TerminalTab] = []
@@ -467,6 +494,7 @@ struct HostTabsScreen: View {
                 var tab = remaining.remove(at: index)
                 tab.name = record.name
                 if tab.tmuxWindowName == nil { tab.tmuxWindowName = record.windowName }
+                tab.group = record.groupName
                 reconciled.append(tab)
             } else {
                 reconciled.append(makeTab(from: record))
@@ -635,6 +663,7 @@ struct HostTabsScreen: View {
         dragCenterX = location.x - dragGrabDelta
         let to = dropIndex(forX: dragCenterX)
         guard to != from, to != from + 1 else { return }
+        tabs[from].group = tabs[to > from ? min(to - 1, tabs.count - 1) : to].group
         withAnimation(.snappy(duration: 0.18)) {
             tabs.move(fromOffsets: IndexSet(integer: from), toOffset: to)
         }
@@ -663,6 +692,12 @@ struct HostTabsScreen: View {
             HStack(spacing: tabSpacing) {
                 ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
                     HStack(spacing: 5) {
+                        if index == 0 || tabs[index - 1].group != tab.group {
+                            Text(tab.group.uppercased())
+                                .font(PocketshellTheme.mono(8, weight: .bold))
+                                .foregroundStyle(PocketshellTheme.muted)
+                            Divider().frame(height: 14)
+                        }
                         statusDotView(for: tab)
                         Text(tabLabel(tab))
                             .font(.footnote.monospaced())
@@ -836,8 +871,10 @@ struct HostTabsScreen: View {
     }
 
     private func promoteTab(id: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }), index > 0 else { return }
-        tabs.move(fromOffsets: IndexSet(integer: index), toOffset: 0)
+        guard let index = tabs.firstIndex(where: { $0.id == id }),
+            let first = tabs.firstIndex(where: { $0.group == tabs[index].group }), index > first
+        else { return }
+        tabs.move(fromOffsets: IndexSet(integer: index), toOffset: first)
         persistTabs()
     }
 
@@ -1007,7 +1044,7 @@ struct TmuxJumpSheet: View {
     var onRenameSession: ((String, String) -> Void)?
     var onRenameTab: ((UUID, String) -> Void)?
     var onCloseTab: ((UUID) -> Void)?
-    var onMoveTab: ((IndexSet, Int) -> Void)?
+    var onMoveTab: ((UUID, String, UUID?) -> Void)?
 
     private var attached: Bool {
         controller?.isTmuxAttached ?? false
@@ -1189,33 +1226,46 @@ struct TmuxJumpSheet: View {
             }
             if tabsExpanded {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(filteredTabItems) { item in
-                            tabCard(item)
-                                .draggable(item.id.uuidString)
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(filteredTabGroups) { group in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(group.name.uppercased())
+                                    .font(PocketshellTheme.mono(8, weight: .bold))
+                                    .foregroundStyle(PocketshellTheme.muted)
+                                    .accessibilityIdentifier("switcher-tab-group-\(group.name)")
+                                HStack(spacing: 10) {
+                                    ForEach(group.items) { item in
+                                        tabCard(item)
+                                            .draggable(item.id.uuidString)
+                                            .dropDestination(for: String.self) { identifiers, _ in
+                                                guard let source = identifiers.first.flatMap(UUID.init(uuidString:)),
+                                                    source != item.id
+                                                else { return false }
+                                                onMoveTab?(source, group.name, item.id)
+                                                return true
+                                            }
+                                            .contextMenu {
+                                                Button("Rename…") {
+                                                    promptText = item.label
+                                                    prompt = .renameTab(item.id)
+                                                }
+                                                Button("Close", role: .destructive) {
+                                                    onCloseTab?(item.id)
+                                                }
+                                            }
+                                    }
+                                }
+                                .padding(6)
+                                .background(PocketshellTheme.secondarySurface)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                                 .dropDestination(for: String.self) { identifiers, _ in
-                                    guard let identifier = identifiers.first,
-                                        let sourceID = tabItems.firstIndex(where: {
-                                            $0.id.uuidString == identifier
-                                        }),
-                                        let targetID = tabItems.firstIndex(where: { $0.id == item.id }),
-                                        sourceID != targetID
-                                    else { return false }
-                                    onMoveTab?(
-                                        IndexSet(integer: sourceID),
-                                        targetID > sourceID ? targetID + 1 : targetID
-                                    )
+                                    guard let source = identifiers.first.flatMap(UUID.init(uuidString:)) else {
+                                        return false
+                                    }
+                                    onMoveTab?(source, group.name, nil)
                                     return true
                                 }
-                                .contextMenu {
-                                    Button("Rename…") {
-                                        promptText = item.label
-                                        prompt = .renameTab(item.id)
-                                    }
-                                    Button("Close", role: .destructive) {
-                                        onCloseTab?(item.id)
-                                    }
-                                }
+                            }
                         }
                     }
                     .padding(.vertical, 3)
@@ -1234,9 +1284,21 @@ struct TmuxJumpSheet: View {
     private var filteredTabItems: [TabJumpItem] {
         guard !query.isEmpty else { return tabItems }
         return tabItems.filter { item in
-            [item.label, item.preview, item.session ?? ""]
+            [item.label, item.preview, item.session ?? "", item.group]
                 .contains { $0.localizedCaseInsensitiveContains(query) }
         }
+    }
+
+    private var filteredTabGroups: [TabJumpGroup] {
+        var groups: [TabJumpGroup] = []
+        for item in filteredTabItems {
+            if let index = groups.firstIndex(where: { $0.name == item.group }) {
+                groups[index] = TabJumpGroup(name: item.group, items: groups[index].items + [item])
+            } else {
+                groups.append(TabJumpGroup(name: item.group, items: [item]))
+            }
+        }
+        return groups
     }
 
     private var filteredSessions: [TmuxSession] {

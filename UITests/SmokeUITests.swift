@@ -185,6 +185,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
 
         let tabs = (1...3).map { app.descendants(matching: .any)["terminal-tab-\($0)"] }
+        let sessions = [env["PS_TEST_STATUS_STABLE"]!, env["PS_TEST_STATUS_CHURN"]!, env["PS_TEST_STATUS_GAP"]!]
         for tab in tabs {
             XCTAssertTrue(tab.waitForExistence(timeout: 10))
             expectation(
@@ -193,6 +194,9 @@ final class SmokeUITests: XCTestCase {
             )
         }
         waitForExpectations(timeout: 25)
+        for (tab, session) in zip(tabs, sessions) {
+            XCTAssertTrue(tab.label.contains(session), "tab omits tmux session: \(tab.label)")
+        }
 
         XCUIDevice.shared.press(.home)
         app.activate()
@@ -202,6 +206,11 @@ final class SmokeUITests: XCTestCase {
                 XCTAssertTrue(tab.label.contains("idle"), "unexpected tab status: \(tab.label)")
             }
             sleep(1)
+        }
+
+        app.buttons["tmux-sessions"].tap()
+        for session in sessions {
+            XCTAssertTrue(app.descendants(matching: .any)["switcher-tab-group-\(session)"].waitForExistence(timeout: 3))
         }
     }
 

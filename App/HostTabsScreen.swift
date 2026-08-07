@@ -715,12 +715,17 @@ struct HostTabsScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: tabSpacing) {
                 ForEach(tabGroups, id: \.self) { group in
-                    tabGroupButton(group)
-                    if !collapsedTabGroups.contains(group) {
-                        ForEach(tabs.filter { $0.group == group }) { tab in
-                            tabButton(tab)
+                    HStack(spacing: tabSpacing) {
+                        tabGroupButton(group)
+                        if !collapsedTabGroups.contains(group) {
+                            ForEach(tabs.filter { $0.group == group }) { tab in
+                                tabButton(tab)
+                            }
                         }
                     }
+                    .background(tabGroupColor(group).opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(tabGroupColor(group), lineWidth: 1.5))
                 }
             }
             .padding(.horizontal, tabStripInset)
@@ -774,10 +779,9 @@ struct HostTabsScreen: View {
             .font(PocketshellTheme.mono(8, weight: .bold))
             .foregroundStyle(color)
             .padding(.horizontal, 9)
-            .padding(.vertical, 7)
+            .frame(height: 30)
             .background(color.opacity(0.12))
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(color, lineWidth: 1.5))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(group) tab group, \(collapsed ? "collapsed" : "expanded")")
@@ -793,7 +797,6 @@ struct HostTabsScreen: View {
 
     private func tabButton(_ tab: TerminalTab) -> some View {
         let index = tabs.firstIndex { $0.id == tab.id } ?? 0
-        let color = tabGroupColor(tab.group)
         return HStack(spacing: 5) {
             statusDotView(for: tab)
             Text(tabLabel(tab))
@@ -801,11 +804,15 @@ struct HostTabsScreen: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .frame(height: 30)
         .background(tab.id == selectedTab ? PocketshellTheme.accentTint : PocketshellTheme.surface)
         .foregroundStyle(tab.id == selectedTab ? PocketshellTheme.accentDark : PocketshellTheme.secondary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay { RoundedRectangle(cornerRadius: 8).stroke(color, lineWidth: tab.id == selectedTab ? 2 : 1) }
+        .overlay {
+            if tab.id == selectedTab {
+                RoundedRectangle(cornerRadius: 8).stroke(PocketshellTheme.accent, lineWidth: 2)
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(tabAccessibilityLabel(tab))
         .accessibilityIdentifier("terminal-tab-\(tab.number)")

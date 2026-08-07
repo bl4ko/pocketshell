@@ -210,7 +210,7 @@ final class SmokeUITests: XCTestCase {
 
         app.buttons["tmux-sessions"].tap()
         for session in sessions {
-            XCTAssertTrue(app.descendants(matching: .any)["switcher-tab-group-\(session)"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.descendants(matching: .any)["tab-group-\(session)"].waitForExistence(timeout: 3))
         }
     }
 

@@ -1232,7 +1232,7 @@ struct TmuxJumpSheet: View {
                                 Text(group.name.uppercased())
                                     .font(PocketshellTheme.mono(8, weight: .bold))
                                     .foregroundStyle(PocketshellTheme.muted)
-                                    .accessibilityIdentifier("switcher-tab-group-\(group.name)")
+                                    .accessibilityIdentifier("tab-group-\(group.name)")
                                 HStack(spacing: 10) {
                                     ForEach(group.items) { item in
                                         tabCard(item)

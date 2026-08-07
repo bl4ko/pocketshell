@@ -10,6 +10,7 @@ enum AppSettings {
     static let iCloudCredentialsSyncKey = "pocketshell.iCloudCredentialsSync"
     static let tmuxTabsExpandedKey = "pocketshell.tmuxTabsExpanded"
     static let tmuxExpandedSessionsKeyPrefix = "pocketshell.tmuxExpandedSessions"
+    static let collapsedTabGroupsKeyPrefix = "pocketshell.collapsedTabGroups"
     static let uiScaleKey = "pocketshell.uiScale"
 }
 

@@ -198,6 +198,14 @@ final class SmokeUITests: XCTestCase {
             XCTAssertTrue(tab.label.contains(session), "tab omits tmux session: \(tab.label)")
         }
 
+        let firstGroup = app.buttons["tab-strip-group-\(sessions[0])"]
+        XCTAssertTrue(firstGroup.waitForExistence(timeout: 3))
+        firstGroup.tap()
+        XCTAssertTrue(tabs[0].waitForNonExistence(timeout: 2))
+        XCTAssertTrue(firstGroup.label.contains("collapsed"))
+        firstGroup.tap()
+        XCTAssertTrue(tabs[0].waitForExistence(timeout: 2))
+
         XCUIDevice.shared.press(.home)
         app.activate()
 

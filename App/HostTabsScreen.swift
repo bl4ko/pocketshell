@@ -54,6 +54,9 @@ struct HostTabsScreen: View {
     @State private var renameText = ""
     @State private var menuTab: UUID?
     @State private var tabWidths: [UUID: CGFloat] = [:]
+    @State private var tabGroupWidths: [String: CGFloat] = [:]
+    @State private var collapsedTabGroups: Set<String> = []
+    @State private var loadedCollapsedTabGroups = false
     @State private var draggingTab: UUID?
     @State private var dragCenterX: CGFloat = 0
     @State private var dragGrabDelta: CGFloat = 0
@@ -185,6 +188,7 @@ struct HostTabsScreen: View {
             PortForwardSheet(controller: activeController)
         }
         .onAppear {
+            loadCollapsedTabGroups()
             if tabs.isEmpty {
                 if !(store.savedTabs[host.id.uuidString] ?? []).isEmpty {
                     restoreTabs()
@@ -215,7 +219,10 @@ struct HostTabsScreen: View {
             }
         }
         .onChange(of: selectedTab, initial: true) { _, _ in
-            if let tab = tabs.first(where: { $0.id == selectedTab }) { clearUnseen(tab) }
+            if let tab = tabs.first(where: { $0.id == selectedTab }) {
+                clearUnseen(tab)
+                if collapsedTabGroups.remove(tab.group) != nil { saveCollapsedTabGroups() }
+            }
             monitor.visibleWindowKey = tabs.first { $0.id == selectedTab }.flatMap(tmuxKey)
             for tab in tabs {
                 tab.controller.bridge.setLive(tab.id == selectedTab)
@@ -640,18 +647,33 @@ struct HostTabsScreen: View {
     private func slotMidX(_ index: Int) -> CGFloat {
         guard tabs.indices.contains(index) else { return 0 }
         var edge = tabStripInset
-        for tab in tabs.prefix(index) { edge += (tabWidths[tab.id] ?? 0) + tabSpacing }
-        return edge + (tabWidths[tabs[index].id] ?? 0) / 2
+        for group in tabGroups {
+            edge += (tabGroupWidths[group] ?? 0) + tabSpacing
+            guard !collapsedTabGroups.contains(group) else { continue }
+            for tab in tabs where tab.group == group {
+                let width = tabWidths[tab.id] ?? 0
+                if tab.id == tabs[index].id { return edge + width / 2 }
+                edge += width + tabSpacing
+            }
+        }
+        return edge
     }
 
-    private func dropIndex(forX x: CGFloat) -> Int {
+    private func dropTarget(forX x: CGFloat) -> (index: Int, group: String) {
         var edge = tabStripInset
-        for (index, tab) in tabs.enumerated() {
-            let width = tabWidths[tab.id] ?? 0
-            if x < edge + width / 2 { return index }
-            edge += width + tabSpacing
+        for group in tabGroups {
+            let groupWidth = tabGroupWidths[group] ?? 0
+            let first = tabs.firstIndex { $0.group == group } ?? tabs.endIndex
+            if x < edge + groupWidth { return (first, group) }
+            edge += groupWidth + tabSpacing
+            guard !collapsedTabGroups.contains(group) else { continue }
+            for (index, tab) in tabs.enumerated() where tab.group == group {
+                let width = tabWidths[tab.id] ?? 0
+                if x < edge + width / 2 { return (index, group) }
+                edge += width + tabSpacing
+            }
         }
-        return tabs.count
+        return (tabs.count, tabGroups.last ?? "Shells")
     }
 
     private func applyDrag(id: UUID, start: CGPoint, location: CGPoint) {
@@ -661,11 +683,14 @@ struct HostTabsScreen: View {
             dragGrabDelta = start.x - slotMidX(from)
         }
         dragCenterX = location.x - dragGrabDelta
-        let to = dropIndex(forX: dragCenterX)
-        guard to != from, to != from + 1 else { return }
-        tabs[from].group = tabs[to > from ? min(to - 1, tabs.count - 1) : to].group
-        withAnimation(.snappy(duration: 0.18)) {
-            tabs.move(fromOffsets: IndexSet(integer: from), toOffset: to)
+        let target = dropTarget(forX: dragCenterX)
+        guard target.index != from || target.group != tabs[from].group else { return }
+        tabs[from].group = target.group
+        collapsedTabGroups.remove(target.group)
+        if target.index != from, target.index != from + 1 {
+            withAnimation(.snappy(duration: 0.18)) {
+                tabs.move(fromOffsets: IndexSet(integer: from), toOffset: target.index)
+            }
         }
     }
 
@@ -690,80 +715,11 @@ struct HostTabsScreen: View {
     private var tabStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: tabSpacing) {
-                ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                    HStack(spacing: 5) {
-                        if index == 0 || tabs[index - 1].group != tab.group {
-                            Text(tab.group.uppercased())
-                                .font(PocketshellTheme.mono(8, weight: .bold))
-                                .foregroundStyle(PocketshellTheme.muted)
-                            Divider().frame(height: 14)
-                        }
-                        statusDotView(for: tab)
-                        Text(tabLabel(tab))
-                            .font(.footnote.monospaced())
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        tab.id == selectedTab
-                            ? PocketshellTheme.accentTint
-                            : PocketshellTheme.surface
-                    )
-                    .foregroundStyle(
-                        tab.id == selectedTab ? PocketshellTheme.accentDark : PocketshellTheme.secondary
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(
-                                tab.id == selectedTab ? PocketshellTheme.accentBorder : PocketshellTheme.border
-                            )
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(tabAccessibilityLabel(tab))
-                    .accessibilityIdentifier("terminal-tab-\(tab.number)")
-                    .background {
-                        GeometryReader { geometry in
-                            Color.clear
-                                .onAppear { tabWidths[tab.id] = geometry.size.width }
-                                .onChange(of: geometry.size.width) { _, width in
-                                    tabWidths[tab.id] = width
-                                }
-                        }
-                    }
-                    .scaleEffect(draggingTab == tab.id ? 1.06 : 1)
-                    .shadow(
-                        color: .black.opacity(draggingTab == tab.id ? 0.25 : 0),
-                        radius: 6,
-                        y: 2
-                    )
-                    .offset(x: draggingTab == tab.id ? dragCenterX - slotMidX(index) : 0)
-                    .zIndex(draggingTab == tab.id ? 1 : 0)
-                    .transaction { transaction in
-                        if draggingTab == tab.id { transaction.animation = nil }
-                    }
-                    .onTapGesture {
-                        selectedTab = tab.id
-                    }
-                    .gesture(reorderGesture(for: tab.id))
-                    // The reorder long-press swallows the system context-menu
-                    // press on iOS, so a still hold opens the same actions as
-                    // a dialog at context-menu timing; movement cancels it.
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.55)
-                            .onEnded { _ in
-                                guard draggingTab == nil else { return }
-                                menuTab = tab.id
-                            }
-                    )
-                    .contextMenu {
-                        Button("Rename Tab") {
-                            renameText = tab.name ?? ""
-                            renamingTab = tab.id
-                        }
-                        Button("Close Tab", role: .destructive) {
-                            closeTab(id: tab.id)
+                ForEach(tabGroups, id: \.self) { group in
+                    tabGroupButton(group)
+                    if !collapsedTabGroups.contains(group) {
+                        ForEach(tabs.filter { $0.group == group }) { tab in
+                            tabButton(tab)
                         }
                     }
                 }
@@ -795,6 +751,114 @@ struct HostTabsScreen: View {
             }
             Button("Cancel", role: .cancel) { menuTab = nil }
         }
+    }
+
+    private var tabGroups: [String] {
+        tabs.reduce(into: []) { groups, tab in
+            if !groups.contains(tab.group) { groups.append(tab.group) }
+        }
+    }
+
+    private func tabGroupButton(_ group: String) -> some View {
+        let collapsed = collapsedTabGroups.contains(group)
+        let color = tabGroupColor(group)
+        return Button {
+            withAnimation(.snappy(duration: 0.18)) {
+                if collapsed { collapsedTabGroups.remove(group) } else { collapsedTabGroups.insert(group) }
+            }
+            saveCollapsedTabGroups()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                Text(group.uppercased())
+            }
+            .font(PocketshellTheme.mono(8, weight: .bold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(color, lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(group) tab group, \(collapsed ? "collapsed" : "expanded")")
+        .accessibilityIdentifier("tab-strip-group-\(group)")
+        .background {
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear { tabGroupWidths[group] = geometry.size.width }
+                    .onChange(of: geometry.size.width) { _, width in tabGroupWidths[group] = width }
+            }
+        }
+    }
+
+    private func tabButton(_ tab: TerminalTab) -> some View {
+        let index = tabs.firstIndex { $0.id == tab.id } ?? 0
+        let color = tabGroupColor(tab.group)
+        return HStack(spacing: 5) {
+            statusDotView(for: tab)
+            Text(tabLabel(tab))
+                .font(.footnote.monospaced())
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(tab.id == selectedTab ? PocketshellTheme.accentTint : PocketshellTheme.surface)
+        .foregroundStyle(tab.id == selectedTab ? PocketshellTheme.accentDark : PocketshellTheme.secondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay { RoundedRectangle(cornerRadius: 8).stroke(color, lineWidth: tab.id == selectedTab ? 2 : 1) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(tabAccessibilityLabel(tab))
+        .accessibilityIdentifier("terminal-tab-\(tab.number)")
+        .background {
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear { tabWidths[tab.id] = geometry.size.width }
+                    .onChange(of: geometry.size.width) { _, width in tabWidths[tab.id] = width }
+            }
+        }
+        .scaleEffect(draggingTab == tab.id ? 1.06 : 1)
+        .shadow(color: .black.opacity(draggingTab == tab.id ? 0.25 : 0), radius: 6, y: 2)
+        .offset(x: draggingTab == tab.id ? dragCenterX - slotMidX(index) : 0)
+        .zIndex(draggingTab == tab.id ? 1 : 0)
+        .transaction { transaction in
+            if draggingTab == tab.id { transaction.animation = nil }
+        }
+        .onTapGesture { selectedTab = tab.id }
+        .gesture(reorderGesture(for: tab.id))
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.55)
+                .onEnded { _ in
+                    guard draggingTab == nil else { return }
+                    menuTab = tab.id
+                }
+        )
+        .contextMenu {
+            Button("Rename Tab") {
+                renameText = tab.name ?? ""
+                renamingTab = tab.id
+            }
+            Button("Close Tab", role: .destructive) { closeTab(id: tab.id) }
+        }
+    }
+
+    private func tabGroupColor(_ group: String) -> Color {
+        let colors = ["E8590C", "2563EB", "7C3AED", "15803D", "DB2777", "0891B2"]
+        return Color(hexRGB: colors[(tabGroups.firstIndex(of: group) ?? 0) % colors.count])
+    }
+
+    private var collapsedTabGroupsKey: String {
+        "\(AppSettings.collapsedTabGroupsKeyPrefix).\(host.id.uuidString)"
+    }
+
+    private func loadCollapsedTabGroups() {
+        guard !loadedCollapsedTabGroups else { return }
+        loadedCollapsedTabGroups = true
+        collapsedTabGroups = Set(UserDefaults.standard.stringArray(forKey: collapsedTabGroupsKey) ?? [])
+    }
+
+    private func saveCollapsedTabGroups() {
+        UserDefaults.standard.set(collapsedTabGroups.sorted(), forKey: collapsedTabGroupsKey)
     }
 
     private var tabMenuShown: Binding<Bool> {

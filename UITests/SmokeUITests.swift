@@ -216,6 +216,15 @@ final class SmokeUITests: XCTestCase {
             sleep(1)
         }
 
+        firstGroup.tap()
+        app.buttons["Back"].tap()
+        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
+        hostRow.tap()
+        XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(firstGroup.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstGroup.label.contains("collapsed"))
+        XCTAssertFalse(tabs[0].exists)
+
         app.buttons["tmux-sessions"].tap()
         for session in sessions {
             XCTAssertTrue(app.descendants(matching: .any)["tab-group-\(session)"].waitForExistence(timeout: 3))

@@ -221,7 +221,6 @@ struct HostTabsScreen: View {
         .onChange(of: selectedTab, initial: true) { _, _ in
             if let tab = tabs.first(where: { $0.id == selectedTab }) {
                 clearUnseen(tab)
-                if collapsedTabGroups.remove(tab.group) != nil { saveCollapsedTabGroups() }
             }
             monitor.visibleWindowKey = tabs.first { $0.id == selectedTab }.flatMap(tmuxKey)
             for tab in tabs {
@@ -686,7 +685,7 @@ struct HostTabsScreen: View {
         let target = dropTarget(forX: dragCenterX)
         guard target.index != from || target.group != tabs[from].group else { return }
         tabs[from].group = target.group
-        collapsedTabGroups.remove(target.group)
+        if collapsedTabGroups.remove(target.group) != nil { saveCollapsedTabGroups() }
         if target.index != from, target.index != from + 1 {
             withAnimation(.snappy(duration: 0.18)) {
                 tabs.move(fromOffsets: IndexSet(integer: from), toOffset: target.index)

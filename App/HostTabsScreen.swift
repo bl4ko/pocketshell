@@ -21,6 +21,7 @@ struct TabJumpItem: Identifiable {
     let selected: Bool
     let session: String?
     let windowIndex: Int?
+    let windowID: String?
     let group: String
 }
 
@@ -314,6 +315,7 @@ struct HostTabsScreen: View {
                 selected: tab.id == selectedTab,
                 session: tab.controller.tmuxTarget?.session,
                 windowIndex: tab.controller.tmuxTarget?.windowIndex,
+                windowID: tab.controller.tmuxTarget?.windowID,
                 group: tab.group
             )
         }
@@ -816,6 +818,7 @@ struct HostTabsScreen: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(tabAccessibilityLabel(tab))
         .accessibilityIdentifier("terminal-tab-\(tab.number)")
+        .accessibilityAddTraits(tab.id == selectedTab ? .isSelected : [])
         .background {
             GeometryReader { geometry in
                 Color.clear
@@ -1144,9 +1147,7 @@ struct TmuxJumpSheet: View {
                             DisclosureGroup(isExpanded: expandedBinding(session.name)) {
                                 ForEach(filteredWindows(in: session)) { item in
                                     Button {
-                                        jump(
-                                            toSession: session.name, windowIndex: item.window.index,
-                                            windowID: item.window.windowID)
+                                        selectOrOpenWindow(item, session: session.name)
                                     } label: {
                                         windowRow(item, session: session.name)
                                     }
@@ -1491,7 +1492,9 @@ struct TmuxJumpSheet: View {
                 .font(PocketshellTheme.mono(10))
                 .foregroundStyle(item.status.chromeTextColor)
             Spacer()
-            if let tab = attachedTab(session: session, windowIndex: item.window.index) {
+            if let tab = attachedTab(
+                session: session, windowIndex: item.window.index, windowID: item.window.windowID)
+            {
                 Text("IN \"\(tab.label.uppercased())\"")
                     .font(PocketshellTheme.mono(8.5, weight: .bold))
                     .foregroundStyle(item.status == .waiting ? PocketshellTheme.accentDark : PocketshellTheme.muted)
@@ -1511,8 +1514,23 @@ struct TmuxJumpSheet: View {
         .contentShape(Rectangle())
     }
 
-    private func attachedTab(session: String, windowIndex: Int) -> TabJumpItem? {
-        tabItems.first { $0.session == session && $0.windowIndex == windowIndex }
+    private func attachedTab(session: String, windowIndex: Int, windowID: String?) -> TabJumpItem? {
+        tabItems.first {
+            guard $0.session == session else { return false }
+            if let windowID, let tabWindowID = $0.windowID { return tabWindowID == windowID }
+            return $0.windowIndex == windowIndex
+        }
+    }
+
+    private func selectOrOpenWindow(_ item: WindowDashboardItem, session: String) {
+        if let tab = attachedTab(
+            session: session, windowIndex: item.window.index, windowID: item.window.windowID)
+        {
+            onSelectTab?(tab.id)
+        } else {
+            onOpenWindowInNewTab?(session, item.window.index, item.window.windowID, item.window.name)
+        }
+        dismiss()
     }
 
     private var promptShown: Binding<Bool> {

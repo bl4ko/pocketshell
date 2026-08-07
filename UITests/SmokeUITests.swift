@@ -300,8 +300,11 @@ final class SmokeUITests: XCTestCase {
             XCTFail("tmux session \(session) not listed")
         }
 
-        let windowRow = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS 'pshwin'")
+        let windowRow = app.buttons.matching(
+            NSPredicate(
+                format: "identifier == %@ AND label CONTAINS 'pshwin'",
+                "tmux-session-\(session)"
+            )
         ).firstMatch
         if !windowRow.waitForExistence(timeout: 2) {
             sessionRow.tap()
@@ -315,10 +318,32 @@ final class SmokeUITests: XCTestCase {
         if !windowRow.isHittable {
             app.swipeUp()
         }
+        let tabButtons = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH 'terminal-tab-'")
+        )
+        let tabCount = tabButtons.count
         windowRow.tap()
 
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.waitForNonExistence(timeout: 2))
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(tabButtons.count, tabCount + 1)
+        let windowTab = tabButtons.element(boundBy: tabCount)
+        XCTAssertTrue(windowTab.isSelected)
+        firstTab.tap()
+        XCTAssertTrue(firstTab.isSelected)
+
+        app.buttons["tmux-sessions"].firstMatch.tap()
+        let search = app.searchFields["Search tabs, sessions, windows"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText(session)
+        if !windowRow.waitForExistence(timeout: 2) {
+            sessionRow.tap()
+        }
+        XCTAssertTrue(windowRow.waitForExistence(timeout: 5))
+        windowRow.tap()
+        XCTAssertTrue(windowTab.isSelected)
+        XCTAssertEqual(tabButtons.count, tabCount + 1)
         XCTAssertFalse(
             app.staticTexts.matching(
                 NSPredicate(format: "label CONTAINS 'HOST KEY'")

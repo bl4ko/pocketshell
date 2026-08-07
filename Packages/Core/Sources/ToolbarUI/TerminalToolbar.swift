@@ -67,7 +67,6 @@
         let onToggleSelect: (() -> Void)?
         let selectActive: Bool
         @State private var prefixPaletteActive = false
-        @State private var prefixExpiry = Date.distantPast
 
         public init(
             keys: [ToolbarKey],
@@ -100,12 +99,6 @@
                 } else {
                     normalToolbar
                 }
-            }
-            .task(id: prefixExpiry) {
-                guard prefixPaletteActive else { return }
-                try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled else { return }
-                prefixPaletteActive = false
             }
         }
 
@@ -222,20 +215,13 @@
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                 }
-                TimelineView(.animation(minimumInterval: 0.05)) { _ in
-                    ProgressView(value: max(0, prefixExpiry.timeIntervalSinceNow), total: 3)
-                        .progressViewStyle(.circular)
-                        .tint(Palette.accent(theme))
-                        .frame(width: 26, height: 26)
-                }
-                .padding(.trailing, 8)
             }
             .background(Palette.dark)
         }
 
         private func prefixKey(_ key: String, _ title: String) -> some View {
             Button {
-                onKey(.sequence(key))
+                onKey(.sequence(key == "x" ? "xy" : key))
                 prefixPaletteActive = false
             } label: {
                 HStack(spacing: 4) {
@@ -257,7 +243,6 @@
         private func handle(_ key: ToolbarKey) {
             onKey(key.action)
             if key.action == .sequence("\u{02}") {
-                prefixExpiry = Date().addingTimeInterval(3)
                 prefixPaletteActive = true
             }
         }

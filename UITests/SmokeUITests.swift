@@ -329,6 +329,8 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(tabButtons.count, tabCount + 1)
         let windowTab = tabButtons.element(boundBy: tabCount)
         XCTAssertTrue(windowTab.isSelected)
+        XCTAssertTrue(windowTab.label.contains("pshwin"))
+        XCTAssertFalse(windowTab.label.contains("\(session):"))
         firstTab.tap()
         XCTAssertTrue(firstTab.isSelected)
 

@@ -173,7 +173,7 @@ struct HostTabsScreen: View {
                 tabItems: tabJumpItems,
                 hostName: host.name,
                 orderKey: host.id.uuidString,
-                onSelectTab: { id in selectedTab = id },
+                onSelectTab: selectTab,
                 onAddTab: addTab,
                 onOpenWindowInNewTab: openWindowInNewTab,
                 onRenameSession: renameSessionReferences,
@@ -348,6 +348,14 @@ struct HostTabsScreen: View {
         insertTab(tab)
         selectedTab = tab.id
         persistTabs()
+    }
+
+    private func selectTab(_ id: UUID, windowName: String? = nil) {
+        if let windowName, let index = tabs.firstIndex(where: { $0.id == id }) {
+            tabs[index].tmuxWindowName = windowName
+            persistTabs()
+        }
+        selectedTab = id
     }
 
     private func renameSessionReferences(from oldName: String, to newName: String) {
@@ -896,8 +904,7 @@ struct HostTabsScreen: View {
     }
 
     private func tabLabel(_ tab: TerminalTab) -> String {
-        let name = tab.name ?? tab.tmuxWindowName ?? "\(tab.number)"
-        return tab.controller.tmuxTarget.map { "\($0.session): \(name)" } ?? name
+        tab.name ?? tab.tmuxWindowName ?? "\(tab.number)"
     }
 
     private func tabAccessibilityLabel(_ tab: TerminalTab) -> String {
@@ -1111,7 +1118,7 @@ struct TmuxJumpSheet: View {
     var tabItems: [TabJumpItem] = []
     var hostName = "host"
     var orderKey: String?
-    var onSelectTab: ((UUID) -> Void)?
+    var onSelectTab: ((UUID, String?) -> Void)?
     var onAddTab: (() -> Void)?
     var onOpenWindowInNewTab: ((String, Int?, String?, String?) -> Void)?
     var onRenameSession: ((String, String) -> Void)?
@@ -1430,7 +1437,7 @@ struct TmuxJumpSheet: View {
 
     private func tabCard(_ item: TabJumpItem) -> some View {
         Button {
-            onSelectTab?(item.id)
+            onSelectTab?(item.id, nil)
             dismiss()
         } label: {
             VStack(spacing: 0) {
@@ -1526,7 +1533,7 @@ struct TmuxJumpSheet: View {
         if let tab = attachedTab(
             session: session, windowIndex: item.window.index, windowID: item.window.windowID)
         {
-            onSelectTab?(tab.id)
+            onSelectTab?(tab.id, item.window.name)
         } else {
             onOpenWindowInNewTab?(session, item.window.index, item.window.windowID, item.window.name)
         }

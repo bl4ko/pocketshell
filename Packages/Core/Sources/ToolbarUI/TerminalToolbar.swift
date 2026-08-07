@@ -221,8 +221,17 @@
 
         private func prefixKey(_ key: String, _ title: String) -> some View {
             Button {
-                onKey(.sequence(key == "x" ? "xy" : key))
-                prefixPaletteActive = false
+                onKey(.sequence(key))
+                if key == "x" {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                        onKey(.sequence("y"))
+                        prefixPaletteActive = false
+                    }
+                } else {
+                    prefixPaletteActive = false
+                }
             } label: {
                 HStack(spacing: 4) {
                     Text(key).fontWeight(.bold)

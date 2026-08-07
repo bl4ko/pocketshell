@@ -63,6 +63,7 @@ public enum AgentStatus: Equatable, Sendable {
         "allow always",
         "press enter to confirm",
         "enter to select",
+        "please explicitly approve:",
     ]
 
     static let agentMarkers = [
@@ -73,6 +74,8 @@ public enum AgentStatus: Equatable, Sendable {
         "shift+tab to cycle",
         "esc to interrupt",
         "compacting conversation",
+        "esc again to edit previous message",
+        "goal paused (/goal resume)",
     ]
 
     public static func detectAgent(_ paneText: String) -> AgentStatus? {

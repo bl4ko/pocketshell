@@ -123,6 +123,27 @@ private let compactingTail = """
     #expect(resolver.resolve(key: "t1", text: waitingScreen) == .waiting)
 }
 
+@Test func interruptedCodexTurnIsIdle() {
+    var resolver = TabStatusResolver()
+    _ = resolver.resolve(key: "t1", text: busyScreen)
+    let stopped = """
+        › Summarize recent commits
+          esc again to edit previous message
+        """
+    _ = resolver.resolve(key: "t1", text: stopped, agentRunning: true)
+    #expect(resolver.resolve(key: "t1", text: stopped, agentRunning: true) == .idle)
+}
+
+@Test func pausedCodexApprovalNeedsInput() {
+    var resolver = TabStatusResolver()
+    let paused = """
+        Please explicitly approve:
+        1. Use the jump host.
+        Goal paused (/goal resume)
+        """
+    #expect(resolver.resolve(key: "t1", text: paused, agentRunning: true) == .waiting)
+}
+
 @Test func forgetDropsState() {
     var resolver = TabStatusResolver()
     _ = resolver.resolve(key: "t1", text: busyScreen)

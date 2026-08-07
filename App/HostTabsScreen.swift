@@ -788,7 +788,8 @@ struct HostTabsScreen: View {
     }
 
     private func tabLabel(_ tab: TerminalTab) -> String {
-        tab.name ?? tab.tmuxWindowName ?? "\(tab.number)"
+        let name = tab.name ?? tab.tmuxWindowName ?? "\(tab.number)"
+        return tab.controller.tmuxTarget.map { "\($0.session): \(name)" } ?? name
     }
 
     private func tabAccessibilityLabel(_ tab: TerminalTab) -> String {

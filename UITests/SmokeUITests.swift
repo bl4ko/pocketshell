@@ -364,9 +364,13 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         let terminal = app.descendants(matching: .any)["terminal.view"].firstMatch
         XCTAssertTrue(terminal.waitForExistence(timeout: 5))
+        terminal.tap()
         sleep(2)
 
         for frame in 0..<40 {
+            // Local input used to bypass display coalescing, exposing one
+            // partial tmux repaint per split before the finished frame.
+            app.buttons["esc"].firstMatch.tap()
             let capture = XCUIScreen.main.screenshot()
             if !caretVisible(capture.image, terminal: terminal.frame) {
                 let attachment = XCTAttachment(screenshot: capture)
@@ -468,18 +472,11 @@ final class SmokeUITests: XCTestCase {
     }
 
     private func caretVisible(_ image: UIImage, terminal: CGRect) -> Bool {
-        for origin in [
-            CGPoint(x: terminal.minX, y: terminal.minY),
-            CGPoint(x: terminal.midX, y: terminal.minY),
-            CGPoint(x: terminal.minX, y: terminal.midY),
-            CGPoint(x: terminal.midX, y: terminal.midY),
-        ] {
-            for x in stride(from: origin.x + 1, through: origin.x + 50, by: 2) {
-                for y in stride(from: origin.y + 1, through: origin.y + 18, by: 2) {
-                    let color = pixel(image, x: x / image.size.width, y: y / image.size.height)
-                    if color.red > 100, color.green > 100, color.blue > 100 {
-                        return true
-                    }
+        for x in stride(from: terminal.minX + 1, through: terminal.minX + 50, by: 2) {
+            for y in stride(from: terminal.minY + 1, through: terminal.minY + 18, by: 2) {
+                let color = pixel(image, x: x / image.size.width, y: y / image.size.height)
+                if color.red > 100, color.green > 100, color.blue > 100 {
+                    return true
                 }
             }
         }

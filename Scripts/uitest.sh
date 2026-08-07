@@ -82,10 +82,15 @@ cat > "$DIR/repaint.c" << 'EOF'
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 #include <unistd.h>
 
 int main(int argc, char **argv) {
     int frame = argc > 1 ? atoi(argv[1]) : 0;
+    struct termios tty;
+    tcgetattr(STDIN_FILENO, &tty);
+    tty.c_lflag &= ~(ECHO | ECHONL);
+    tcsetattr(STDIN_FILENO, TCSANOW, &tty);
     for (;;) {
         struct winsize size;
         ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);

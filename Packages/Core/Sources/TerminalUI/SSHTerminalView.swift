@@ -153,11 +153,18 @@
         private let bridge: TerminalBridge
         private let theme: TerminalTheme
         private let scale: Double
+        private let multiplexerMode: Bool
 
-        public init(bridge: TerminalBridge, theme: TerminalTheme = .defaultTheme, scale: Double = 1) {
+        public init(
+            bridge: TerminalBridge,
+            theme: TerminalTheme = .defaultTheme,
+            scale: Double = 1,
+            multiplexerMode: Bool = false
+        ) {
             self.bridge = bridge
             self.theme = theme
             self.scale = scale
+            self.multiplexerMode = multiplexerMode
         }
 
         static func apply(_ theme: TerminalTheme, to view: TerminalView) {
@@ -200,6 +207,7 @@
             view.accessibilityIdentifier = "terminal.view"
             view.terminalDelegate = context.coordinator
             view.allowMouseReporting = false
+            view.multiplexerMode = multiplexerMode
             view.getTerminal().setCursorStyle(.steadyBlock)
             view.inputAccessoryView = nil
             view.focusEffect = nil
@@ -267,6 +275,7 @@
 
         public func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
             guard let uiView = (uiViewController as? TerminalViewController)?.terminalView else { return }
+            uiView.multiplexerMode = multiplexerMode
             bridge.setTheme(theme)
             guard context.coordinator.scale != scale else { return }
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)

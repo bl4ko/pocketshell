@@ -59,8 +59,13 @@ struct TerminalScreen: View {
                 if connection.findVisible {
                     findBar
                 }
-                SSHTerminalView(bridge: connection.bridge, theme: TerminalTheme.named(themeName), scale: uiScale)
-                    .focusEffectDisabled()
+                SSHTerminalView(
+                    bridge: connection.bridge,
+                    theme: TerminalTheme.named(themeName),
+                    scale: uiScale,
+                    multiplexerMode: connection.isTmuxAttached
+                )
+                .focusEffectDisabled()
                 #if !targetEnvironment(macCatalyst)
                     TerminalToolbar(
                         keys: store.toolbarKeys,

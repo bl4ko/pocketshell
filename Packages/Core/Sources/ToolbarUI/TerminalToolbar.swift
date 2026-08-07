@@ -217,6 +217,7 @@
                         prefixKey("%", "split")
                         prefixKey("\"", "stack")
                         prefixKey("o", "pane")
+                        prefixKey("x", "close")
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -250,6 +251,7 @@
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Palette.darkBorder))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("tmux-prefix-\(key)")
         }
 
         private func handle(_ key: ToolbarKey) {

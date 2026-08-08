@@ -101,6 +101,26 @@
             await connection.disconnect()
         }
 
+        @Test func fallsBackToAlternateHostname() async throws {
+            let sshd = try TestSSHD()
+            defer { sshd.stop() }
+            var host = sshd.hostConfig()
+            host.hostname = "127.0.0.2"
+            host.alternateHostnames = ["127.0.0.1"]
+            let connection = SSHConnection(
+                host: host,
+                key: sshd.clientKeyMaterial,
+                knownHosts: KnownHostsStore(
+                    fileURL: FileManager.default.temporaryDirectory
+                        .appendingPathComponent("kh-\(UUID().uuidString).json"))
+            )
+
+            try await connection.connect()
+            let output = try await connection.exec("echo fallback")
+            #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == "fallback")
+            await connection.disconnect()
+        }
+
         @Test func connectsThroughJumpHost() async throws {
             let bastion = try TestSSHD()
             defer { bastion.stop() }

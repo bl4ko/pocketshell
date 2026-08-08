@@ -29,6 +29,14 @@ import Testing
             .utf8)
     let old = try JSONDecoder().decode(HostConfig.self, from: legacy)
     #expect(old.group == nil)
+    #expect(old.alternateHostnames == nil)
+}
+
+@Test func hostConfigProvidesUniqueOrderedHostnames() {
+    let host = HostConfig(
+        name: "server", hostname: "192.0.2.1", username: "alice", keyTag: "key",
+        alternateHostnames: ["server.tailnet", "192.0.2.1", " server.lan "])
+    #expect(host.hostnames == ["192.0.2.1", "server.tailnet", "server.lan"])
 }
 
 @Test func snippetCodableRoundTrip() throws {

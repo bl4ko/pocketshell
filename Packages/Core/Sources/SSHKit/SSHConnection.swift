@@ -79,6 +79,23 @@ public actor SSHConnection {
     }
 
     private func dial(host: HostConfig, key: DeviceKeyMaterial) async throws -> Channel {
+        var lastError: Error = SSHError.notConnected
+        for hostname in host.hostnames {
+            var candidate = host
+            candidate.hostname = hostname
+            do {
+                return try await dialOnce(host: candidate, key: key)
+            } catch let error as SSHError {
+                if error == .authenticationFailed || isHostKeyMismatch(error) { throw error }
+                lastError = error
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError
+    }
+
+    private func dialOnce(host: HostConfig, key: DeviceKeyMaterial) async throws -> Channel {
         let userAuth = KeyAuthDelegate(username: host.username, key: key)
         let serverAuth = TOFUServerAuthDelegate(host: host.hostname, port: host.port, store: knownHosts)
         let handshake = HandshakeWaiter()
@@ -111,6 +128,24 @@ public actor SSHConnection {
     /// Opens a direct-tcpip channel on `parent` and runs a nested SSH client over it,
     /// so the target is reached without exposing a local listening socket.
     private func jump(through parent: Channel, to host: HostConfig, key: DeviceKeyMaterial) async throws -> Channel {
+        var lastError: Error = SSHError.notConnected
+        for hostname in host.hostnames {
+            var candidate = host
+            candidate.hostname = hostname
+            do {
+                return try await jumpOnce(through: parent, to: candidate, key: key)
+            } catch let error as SSHError {
+                if error == .authenticationFailed || isHostKeyMismatch(error) { throw error }
+                lastError = error
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError
+    }
+
+    private func jumpOnce(through parent: Channel, to host: HostConfig, key: DeviceKeyMaterial) async throws -> Channel
+    {
         let userAuth = KeyAuthDelegate(username: host.username, key: key)
         let serverAuth = TOFUServerAuthDelegate(host: host.hostname, port: host.port, store: knownHosts)
         let handshake = HandshakeWaiter()
@@ -156,6 +191,11 @@ public actor SSHConnection {
             throw error
         }
         return child
+    }
+
+    private func isHostKeyMismatch(_ error: SSHError) -> Bool {
+        if case .hostKeyMismatch = error { return true }
+        return false
     }
 
     private func closeHops() async {

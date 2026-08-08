@@ -8,6 +8,7 @@ struct HostFormView: View {
     let host: HostConfig?
     @State private var name = ""
     @State private var hostname = ""
+    @State private var alternateHostnames = ""
     @State private var port = 22
     @State private var username = ""
     @State private var group = ""
@@ -24,6 +25,9 @@ struct HostFormView: View {
                     TextField("Name", text: $name)
                     TextField("Hostname or IP", text: $hostname)
                         .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Alternate hostnames or IPs", text: $alternateHostnames, axis: .vertical)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Port", value: $port, format: .number.grouping(.never))
@@ -73,6 +77,7 @@ struct HostFormView: View {
                 guard let host else { return }
                 name = host.name
                 hostname = host.hostname
+                alternateHostnames = (host.alternateHostnames ?? []).joined(separator: ", ")
                 port = host.port
                 username = host.username
                 group = host.group ?? ""
@@ -89,6 +94,15 @@ struct HostFormView: View {
         var updated = host ?? HostConfig(name: "", hostname: "", username: "", keyTag: AppStore.deviceKeyTag)
         updated.name = name
         updated.hostname = hostname
+        let alternates =
+            alternateHostnames
+            .split(whereSeparator: { $0 == "," || $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0 != hostname }
+        let uniqueAlternates = alternates.reduce(into: [String]()) { result, value in
+            if !result.contains(value) { result.append(value) }
+        }
+        updated.alternateHostnames = uniqueAlternates.isEmpty ? nil : uniqueAlternates
         updated.port = port
         updated.username = username
         updated.group =

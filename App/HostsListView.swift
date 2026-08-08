@@ -215,6 +215,11 @@ struct HostsListView: View {
                         Text("\(host.username)@\(host.hostname):\(String(host.port))")
                             .font(PocketshellTheme.mono(11))
                             .foregroundStyle(PocketshellTheme.muted)
+                        if let count = host.alternateHostnames?.count, count > 0 {
+                            Text("+\(count) alternate \(count == 1 ? "address" : "addresses")")
+                                .font(PocketshellTheme.mono(9))
+                                .foregroundStyle(PocketshellTheme.faint)
+                        }
                     }
                     Spacer()
                     if !records.isEmpty {

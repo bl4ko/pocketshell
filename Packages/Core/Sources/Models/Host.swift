@@ -11,6 +11,7 @@ public struct HostConfig: Identifiable, Codable, Hashable, Sendable {
     public var onConnectCommand: String?
     public var group: String?
     public var proxyJump: UUID?
+    public var alternateHostnames: [String]?
 
     public init(
         id: UUID = UUID(),
@@ -22,7 +23,8 @@ public struct HostConfig: Identifiable, Codable, Hashable, Sendable {
         tmuxSession: String? = nil,
         onConnectCommand: String? = nil,
         group: String? = nil,
-        proxyJump: UUID? = nil
+        proxyJump: UUID? = nil,
+        alternateHostnames: [String]? = nil
     ) {
         self.id = id
         self.name = name
@@ -34,6 +36,16 @@ public struct HostConfig: Identifiable, Codable, Hashable, Sendable {
         self.onConnectCommand = onConnectCommand
         self.group = group
         self.proxyJump = proxyJump
+        self.alternateHostnames = alternateHostnames
+    }
+
+    public var hostnames: [String] {
+        var result: [String] = []
+        for value in [hostname] + (alternateHostnames ?? []) {
+            let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty, !result.contains(value) { result.append(value) }
+        }
+        return result
     }
 }
 

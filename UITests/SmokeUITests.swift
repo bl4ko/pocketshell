@@ -389,6 +389,16 @@ final class SmokeUITests: XCTestCase {
             )
         ).firstMatch
         XCTAssertTrue(updatedSession.waitForExistence(timeout: 5))
+        let createdWindow = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS '1:'", "tmux-session-\(session)")
+        ).firstMatch
+        XCTAssertTrue(createdWindow.waitForExistence(timeout: 5))
+        createdWindow.press(forDuration: 1)
+        app.buttons["Delete"].tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 2))
+        XCTAssertLessThan(abs(alert.frame.midX - app.frame.midX), 2)
+        app.buttons["Cancel"].tap()
     }
 
     func testTmuxRepaintsKeepCaretParked() throws {

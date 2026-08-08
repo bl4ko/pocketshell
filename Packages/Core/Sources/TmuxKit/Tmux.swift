@@ -332,6 +332,12 @@ public enum Tmux {
         name.isEmpty || name == "[tmux]" || name == "[dead]" || name == "[tmux][dead]"
     }
 
+    public static func liveWindowName(terminalTitle: String?, windowName: String, agentRunning: Bool) -> String {
+        guard agentRunning, let terminalTitle else { return windowName }
+        let title = terminalTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty || isPlaceholderWindowName(title) ? windowName : title
+    }
+
     public static func windowDisplayName(window: TmuxWindow, session: String, records: [TabRecord]) -> String {
         let record = records.first { $0.tmuxSession == session && $0.windowIndex == window.index }
         if let name = record?.name, !name.isEmpty { return name }

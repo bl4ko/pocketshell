@@ -556,7 +556,10 @@
                 }
             }
 
-            public func setTerminalTitle(source: TerminalView, title: String) {}
+            public func setTerminalTitle(source: TerminalView, title: String) {
+                let bridge = bridge
+                onMain { bridge.setTerminalTitle(title) }
+            }
             public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
             public func scrolled(source: TerminalView, position: Double) {}
             public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {

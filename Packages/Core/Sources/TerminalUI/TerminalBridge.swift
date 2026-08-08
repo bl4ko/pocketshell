@@ -10,6 +10,7 @@
         public static var bytesFed = 0
         @Published public var ctrlActive = false
         @Published public var selectMode = false
+        @Published public private(set) var terminalTitle: String?
         public var sendToHost: ((Data) -> Void)?
         public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
         public var imagePaste: ((Data) -> Void)?
@@ -22,6 +23,11 @@
         private var feedingView = false
 
         public init() {}
+
+        func setTerminalTitle(_ title: String) {
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            terminalTitle = trimmed.isEmpty ? nil : trimmed
+        }
 
         public func feed(_ data: Data) {
             if let out = gate.ingest(data) {

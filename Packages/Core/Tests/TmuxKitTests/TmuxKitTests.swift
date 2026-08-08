@@ -345,6 +345,12 @@ import Models
     #expect(!Tmux.isPlaceholderWindowName("tmux"))
 }
 
+@Test func liveWindowNameUsesTerminalTitleOnlyForRunningApps() {
+    #expect(Tmux.liveWindowName(terminalTitle: " new agent ", windowName: "old", agentRunning: true) == "new agent")
+    #expect(Tmux.liveWindowName(terminalTitle: "stale", windowName: "shell", agentRunning: false) == "shell")
+    #expect(Tmux.liveWindowName(terminalTitle: "[tmux]", windowName: "agent", agentRunning: true) == "agent")
+}
+
 @Test func windowDisplayNamePrefersSavedTabNameOverCopyModePlaceholder() {
     let window = TmuxWindow(index: 4, name: "[tmux]", active: false)
     let records = [

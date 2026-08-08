@@ -576,13 +576,17 @@ struct HostTabsScreen: View {
         let agentRunning: Bool?
         if tab.controller.isTmuxAttached {
             guard let snapshot = await tab.controller.currentTmuxPaneSnapshot() else { return nil }
+            agentRunning = !Tmux.isInteractiveShell(snapshot.command)
             if let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }),
                 !Tmux.isPlaceholderWindowName(snapshot.windowName)
             {
-                tabs[currentIndex].tmuxWindowName = snapshot.windowName
+                tabs[currentIndex].tmuxWindowName = Tmux.liveWindowName(
+                    terminalTitle: tab.controller.bridge.terminalTitle,
+                    windowName: snapshot.windowName,
+                    agentRunning: agentRunning == true
+                )
             }
             text = snapshot.text
-            agentRunning = !Tmux.isInteractiveShell(snapshot.command)
         } else {
             text = tab.controller.bridge.visibleText()
             agentRunning = nil

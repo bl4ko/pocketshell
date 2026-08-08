@@ -1433,6 +1433,7 @@ struct TmuxJumpSheet: View {
                 .foregroundStyle(PocketshellTheme.accent)
         }
         .textCase(nil)
+        .background(PocketshellTheme.paper)
     }
 
     private func tabCard(_ item: TabJumpItem) -> some View {

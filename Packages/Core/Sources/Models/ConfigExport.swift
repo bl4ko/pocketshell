@@ -54,9 +54,18 @@ public struct TabRecord: Codable, Equatable, Sendable {
     }
 
     public static func grouped(_ records: [TabRecord]) -> [TabRecord] {
+        var unique: [TabRecord] = []
+        for record in records {
+            if record.tmuxSession != nil, record.windowID != nil || record.windowIndex != nil,
+                unique.contains(where: { $0.matchesWindow(of: record) })
+            {
+                continue
+            }
+            unique.append(record)
+        }
         var order: [String] = []
         var groups: [String: [TabRecord]] = [:]
-        for record in records {
+        for record in unique {
             if groups[record.groupName] == nil { order.append(record.groupName) }
             groups[record.groupName, default: []].append(record)
         }

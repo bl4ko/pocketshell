@@ -341,6 +341,10 @@ struct HostTabsScreen: View {
     }
 
     private func openWindowInNewTab(session: String, windowIndex: Int?, windowID: String? = nil, name: String? = nil) {
+        if let tab = attachedTab(session: session, windowIndex: windowIndex, windowID: windowID) {
+            selectTab(tab.id, windowName: name)
+            return
+        }
         let controller = makeController()
         controller.preset(session: session, windowIndex: windowIndex, windowID: windowID)
         let tab = TerminalTab(controller: controller, tmuxWindowName: name, group: session, number: nextTabNumber)
@@ -348,6 +352,14 @@ struct HostTabsScreen: View {
         insertTab(tab)
         selectedTab = tab.id
         persistTabs()
+    }
+
+    private func attachedTab(session: String, windowIndex: Int?, windowID: String?) -> TerminalTab? {
+        tabs.first { tab in
+            guard let target = tab.controller.tmuxTarget, target.session == session else { return false }
+            if let windowID, let targetID = target.windowID { return targetID == windowID }
+            return windowIndex != nil && target.windowIndex == windowIndex
+        }
     }
 
     private func selectTab(_ id: UUID, windowName: String? = nil) {
@@ -412,18 +424,7 @@ struct HostTabsScreen: View {
         guard let target = router.pending, target.hostID == host.id else { return }
         router.pending = nil
         guard let session = target.session else { return }
-        if let tab = tabs.first(where: { $0.controller.tmuxTarget?.session == session }) {
-            selectedTab = tab.id
-            Task { await tab.controller.jump(toSession: session, windowIndex: target.windowIndex) }
-        } else {
-            let controller = makeController()
-            controller.preset(session: session, windowIndex: target.windowIndex)
-            let tab = TerminalTab(controller: controller, group: session, number: nextTabNumber)
-            controller.onExit = { closeTab(id: tab.id) }
-            insertTab(tab)
-            selectedTab = tab.id
-            persistTabs()
-        }
+        openWindowInNewTab(session: session, windowIndex: target.windowIndex)
     }
 
     private func closeTab(id: UUID) {
@@ -1160,11 +1161,8 @@ struct TmuxJumpSheet: View {
                                     }
                                     .accessibilityIdentifier("tmux-window-\(session.name)-\(item.window.index)")
                                     .contextMenu {
-                                        Button("Open in New Tab") {
-                                            onOpenWindowInNewTab?(
-                                                session.name, item.window.index, item.window.windowID,
-                                                item.window.name)
-                                            dismiss()
+                                        Button("Open") {
+                                            selectOrOpenWindow(item, session: session.name)
                                         }
                                         Button("Rename…") {
                                             promptText = item.window.name

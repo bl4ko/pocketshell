@@ -23,6 +23,19 @@ import Testing
     #expect(TabRecord.grouped(records).map(\.name) == ["a1", "a2", "i1", "shell"])
 }
 
+@Test func groupedTabsKeepOnlyOneTabPerTmuxWindow() {
+    let records = [
+        TabRecord(name: "first", tmuxSession: "agents", windowIndex: 2, windowID: "@7"),
+        TabRecord(name: "duplicate", tmuxSession: "agents", windowIndex: 9, windowID: "@7"),
+        TabRecord(name: "fallback duplicate", tmuxSession: "agents", windowIndex: 2),
+        TabRecord(name: "other", tmuxSession: "agents", windowIndex: 3, windowID: "@8"),
+        TabRecord(name: "shell 1"),
+        TabRecord(name: "shell 2"),
+    ]
+
+    #expect(TabRecord.grouped(records).map(\.name) == ["first", "other", "shell 1", "shell 2"])
+}
+
 @Test func preservingNamesKeepsLocalNamesWhenRemoteIsNil() {
     let local = [
         TabRecord(

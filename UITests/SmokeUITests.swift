@@ -239,7 +239,8 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_TMUX not set; tmux e2e skipped")
         }
 
-        addHost(named: "backupbox", port: port, user: user)
+        let alternateHost = "backupbox-with-a-very-long-name"
+        addHost(named: alternateHost, port: port, user: user)
         let hostRow = app.staticTexts["localbox"].firstMatch
         XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
         hostRow.tap()
@@ -248,11 +249,14 @@ final class SmokeUITests: XCTestCase {
         let hostSwitcher = app.descendants(matching: .any)["host-switcher"]
         XCTAssertTrue(hostSwitcher.isHittable)
         hostSwitcher.tap()
-        XCTAssertTrue(app.buttons["backupbox"].waitForExistence(timeout: 2))
-        app.buttons["backupbox"].tap()
+        XCTAssertTrue(app.buttons[alternateHost].waitForExistence(timeout: 2))
+        app.buttons[alternateHost].tap()
         let switchedHost = app.descendants(matching: .any)["host-switcher"]
         XCTAssertTrue(switchedHost.waitForExistence(timeout: 10))
-        XCTAssertTrue(switchedHost.label.contains("backupbox"))
+        XCTAssertTrue(switchedHost.label.contains(alternateHost))
+        let back = app.buttons["Back"]
+        XCTAssertTrue(back.isHittable)
+        XCTAssertLessThan(back.frame.maxX, switchedHost.frame.minX)
         for _ in 0..<7 {
             app.buttons["new-tab"].tap()
         }

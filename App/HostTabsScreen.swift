@@ -102,16 +102,16 @@ struct HostTabsScreen: View {
                 }
             #else
                 ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 10) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                        }
-                        .accessibilityLabel("Back")
-                        hostSwitcher
-                            .frame(width: 90, alignment: .leading)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
                     }
+                    .accessibilityLabel("Back")
+                }
+                ToolbarItem(placement: .principal) {
+                    hostSwitcher
+                        .frame(width: 150)
                 }
             #endif
             ToolbarItem(placement: .topBarTrailing) {
@@ -288,15 +288,20 @@ struct HostTabsScreen: View {
             HStack(spacing: 7) {
                 Text(host.name)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .font(PocketshellTheme.mono(14, weight: .bold))
                     .foregroundStyle(PocketshellTheme.ink)
+                    .layoutPriority(1)
                 Circle()
                     .fill(connectionColor)
                     .frame(width: 7, height: 7)
+                    .fixedSize()
                 Image(systemName: "chevron.down")
                     .font(.caption2)
                     .foregroundStyle(PocketshellTheme.muted)
+                    .fixedSize()
             }
+            .frame(width: 118)
             .contentShape(Rectangle())
         }
         .accessibilityElement(children: .combine)

@@ -1284,11 +1284,7 @@ struct TmuxJumpSheet: View {
                 Button("OK") { applyPrompt() }
                 Button("Cancel", role: .cancel) { prompt = nil }
             }
-            .confirmationDialog(
-                killTarget?.confirmTitle ?? "",
-                isPresented: killShown,
-                titleVisibility: .visible
-            ) {
+            .alert(killTarget?.confirmTitle ?? "", isPresented: killShown) {
                 Button("Delete", role: .destructive) { applyKill() }
                 Button("Cancel", role: .cancel) { killTarget = nil }
             }

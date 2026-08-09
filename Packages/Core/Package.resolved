@@ -104,7 +104,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/bl4ko/SwiftTerm.git",
       "state" : {
-        "revision" : "ac903b6dfb6e90a3cee553d0fcef90f5006e1c75"
+        "revision" : "a175e84ac69b36630f634a4dc50d214a75e29f4c"
       }
     }
   ],

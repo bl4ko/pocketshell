@@ -322,6 +322,7 @@ final class SmokeUITests: XCTestCase {
         if !windowRow.isHittable {
             app.swipeUp()
         }
+        XCTAssertTrue(windowRow.label.contains("OPEN IN NEW TAB"))
         let tabButtons = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH 'terminal-tab-'")
         )

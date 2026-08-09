@@ -1170,8 +1170,14 @@ struct TmuxJumpSheet: View {
                                     }
                                     .accessibilityIdentifier("tmux-window-\(session.name)-\(item.window.index)")
                                     .contextMenu {
-                                        Button("Open") {
+                                        Button("Open in New Tab") {
                                             selectOrOpenWindow(item, session: session.name)
+                                        }
+                                        Button("Attach to Current Tab") {
+                                            jump(
+                                                toSession: session.name,
+                                                windowIndex: item.window.index,
+                                                windowID: item.window.windowID)
                                         }
                                         Button("Rename…") {
                                             promptText = item.window.name
@@ -1517,7 +1523,7 @@ struct TmuxJumpSheet: View {
                         Capsule().stroke(
                             item.status == .waiting ? PocketshellTheme.accentBorder : PocketshellTheme.border))
             } else {
-                Text("ATTACH ›")
+                Text("OPEN IN NEW TAB ›")
                     .font(PocketshellTheme.mono(9, weight: .bold))
                     .foregroundStyle(PocketshellTheme.accent)
             }

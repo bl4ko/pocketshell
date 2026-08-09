@@ -97,6 +97,7 @@ int main(int argc, char **argv) {
         int rows_per_chunk = (size.ws_row + 1) / 2;
         size_t capacity = (size.ws_col + 24) * rows_per_chunk;
         char *output = malloc(capacity);
+        write(STDOUT_FILENO, "\033[?25l", 6);
         for (int first = 1; first <= size.ws_row; first += rows_per_chunk) {
             size_t offset = 0;
             int last = first + rows_per_chunk - 1;
@@ -116,7 +117,7 @@ int main(int argc, char **argv) {
             write(STDOUT_FILENO, output, offset);
             usleep(100000);
         }
-        write(STDOUT_FILENO, "\033[1;3H", 6);
+        write(STDOUT_FILENO, "\033[?25h\033[1;1H", 12);
         free(output);
         frame++;
         usleep(100000);

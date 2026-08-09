@@ -418,8 +418,8 @@ final class SmokeUITests: XCTestCase {
         sleep(2)
 
         for frame in 0..<40 {
-            // Local input used to bypass display coalescing, exposing one
-            // partial tmux repaint per split before the finished frame.
+            // Local input used to bypass display coalescing, exposing tmux's
+            // cursor hide and one partial repaint per split before the final park.
             app.buttons["esc"].firstMatch.tap()
             let capture = XCUIScreen.main.screenshot()
             if !caretVisible(capture.image, terminal: terminal.frame) {

@@ -41,12 +41,21 @@ import Testing
     )
     let command = try #require(WorkspaceSync.writeCommand(workspace))
     #expect(command.contains("mkdir -p \"$HOME/.config/pocketshell\""))
-    #expect(command.contains("base64 -d > \"$HOME/.config/pocketshell/workspace.json\""))
+    #expect(command.contains("base64 -d > \"$HOME/.config/pocketshell/workspace.json."))
+    #expect(command.contains(".tmp\" && mv "))
     let payload = try #require(command.components(separatedBy: "'").dropFirst(3).first)
     let data = try #require(Data(base64Encoded: payload))
     let decoded = try JSONDecoder().decode(HostWorkspace.self, from: data)
     #expect(decoded == workspace)
     #expect(WorkspaceSync.decode(String(decoding: data, as: UTF8.self)) == workspace)
+}
+
+@Test func workspaceSyncBacksUpReplacedState() throws {
+    let old = HostWorkspace(updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
+    let new = HostWorkspace(updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+    let command = try #require(WorkspaceSync.writeCommand(new, replacing: old))
+    #expect(command.contains("workspace.json.bak-1800000000000"))
+    #expect(command.hasSuffix("\"$HOME/.config/pocketshell/workspace.json\""))
 }
 
 @Test func workspaceSyncActionUsesLastWriterWins() {

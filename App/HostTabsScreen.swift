@@ -422,7 +422,6 @@ struct HostTabsScreen: View {
             tabs.append(makeTab(from: record))
         }
         selectedTab = tabs.first?.id
-        persistTabs()
     }
 
     private func consumePendingTarget() {
@@ -547,13 +546,14 @@ struct HostTabsScreen: View {
     }
 
     private func pollTabs() async {
+        let recordsBeforePoll = currentRecords
         var samples: [AgentActivityTracker.Sample] = []
         for tab in tabs {
             guard let sample = await pollTab(tab) else { continue }
             samples.append(sample)
         }
         let transitions = tabTracker.update(samples)
-        persistTabs()
+        if currentRecords != recordsBeforePoll { persistTabs() }
         guard UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey) else { return }
         for transition in transitions {
             if let selectedTab, transition.key == "tab-\(selectedTab.uuidString)" { continue }

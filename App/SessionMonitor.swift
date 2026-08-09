@@ -185,12 +185,13 @@ final class SessionMonitor: ObservableObject {
         guard ProcessInfo.processInfo.environment["PS_UI_TEST"] != "1" else { return }
         let hostID = host.id.uuidString
         let output = (try? await connection.exec(WorkspaceSync.readCommand)) ?? ""
+        let remote = WorkspaceSync.decode(output)
         switch WorkspaceSync.action(
             localUpdatedAt: store.workspaceUpdatedAt(hostID: hostID),
-            remote: WorkspaceSync.decode(output)
+            remote: remote
         ) {
         case .push:
-            if let command = WorkspaceSync.writeCommand(store.localWorkspace(hostID: hostID)) {
+            if let command = WorkspaceSync.writeCommand(store.localWorkspace(hostID: hostID), replacing: remote) {
                 _ = try? await connection.exec(command)
             }
         case .apply(let remote):

@@ -9,11 +9,19 @@ public enum WorkspaceSync {
 
     public static let readCommand = "cat \"$HOME/.config/pocketshell/workspace.json\" 2>/dev/null"
 
-    public static func writeCommand(_ workspace: HostWorkspace) -> String? {
+    public static func writeCommand(_ workspace: HostWorkspace, replacing remote: HostWorkspace? = nil) -> String? {
         guard let data = try? JSONEncoder().encode(workspace) else { return nil }
         let payload = data.base64EncodedString()
-        return "mkdir -p \"$HOME/.config/pocketshell\" && printf '%s' '\(payload)'"
-            + " | base64 -d > \"$HOME/.config/pocketshell/workspace.json\""
+        let path = "$HOME/.config/pocketshell/workspace.json"
+        let temporaryPath = "\(path).\(UUID().uuidString).tmp"
+        var command =
+            "mkdir -p \"$HOME/.config/pocketshell\" && printf '%s' '\(payload)'"
+            + " | base64 -d > \"\(temporaryPath)\""
+        if let remote {
+            let stamp = Int(remote.updatedAt.timeIntervalSince1970 * 1_000)
+            command += " && { [ ! -f \"\(path)\" ] || cp \"\(path)\" \"\(path).bak-\(stamp)\"; }"
+        }
+        return command + " && mv \"\(temporaryPath)\" \"\(path)\""
     }
 
     public static func decode(_ output: String) -> HostWorkspace? {

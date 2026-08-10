@@ -393,6 +393,10 @@ final class ConnectionController: ObservableObject {
     private func handleStreamEnded(generation: Int) async {
         guard !stopped, generation == shellGeneration else { return }
         if let connection, await connection.isConnected {
+            if isTmuxAttached {
+                applyAction(machine.handle(.connectionLost), message: "tmux session ended")
+                return
+            }
             phase = .exited
             onExit?()
             return

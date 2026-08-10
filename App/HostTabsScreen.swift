@@ -2,6 +2,7 @@ import Models
 import MonitorKit
 import SwiftUI
 import TmuxKit
+import UIKit
 import UserNotifications
 
 struct TerminalTab: Identifiable {
@@ -53,6 +54,7 @@ struct HostTabsScreen: View {
     @State private var editingSnippet: Snippet?
     @State private var renamingTab: UUID?
     @State private var renameText = ""
+    @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @State private var menuTab: UUID?
     @State private var tabWidths: [UUID: CGFloat] = [:]
     @State private var tabGroupWidths: [String: CGFloat] = [:]
@@ -148,6 +150,13 @@ struct HostTabsScreen: View {
                         showForward = true
                     } label: {
                         Label("Port forward", systemImage: "network")
+                    }
+                    if developerMode {
+                        Button {
+                            Task { UIPasteboard.general.string = await debugReport() }
+                        } label: {
+                            Label("Copy Debug Report", systemImage: "doc.on.doc")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -267,6 +276,35 @@ struct HostTabsScreen: View {
 
     private var activeController: ConnectionController? {
         tabs.first { $0.id == selectedTab }?.controller
+    }
+
+    private func debugReport() async -> String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let localTabs = tabs.map { tab in
+            let target = tab.controller.tmuxTarget
+            return [
+                tab.id == selectedTab ? "selected" : "hidden",
+                "label=\(tabLabel(tab))",
+                "group=\(tab.group)",
+                "target=\(target?.session ?? "plain"): \(target?.windowIndex.map(String.init) ?? "-") \(target?.windowID ?? "-")",
+                tab.controller.diagnosticSummary,
+            ].joined(separator: " | ")
+        }.joined(separator: "\n")
+        let remote = await activeController?.tmuxDiagnostics() ?? "unavailable: no active tab"
+        return """
+            PocketShell debug report
+            app=\(version) build=\(build)
+            os=\(UIDevice.current.systemName) \(UIDevice.current.systemVersion) model=\(UIDevice.current.model)
+            scene=\(String(describing: scenePhase)) tabs=\(tabs.count)
+
+            [local tabs]
+            \(localTabs)
+
+            [remote tmux]
+            \(remote)
+            """
     }
 
     private var hidesSystemBackButton: Bool {

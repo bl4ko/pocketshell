@@ -107,6 +107,30 @@ final class ConnectionController: ObservableObject {
         return nil
     }
 
+    var diagnosticSummary: String {
+        let phaseName: String
+        switch phase {
+        case .idle: phaseName = "idle"
+        case .connecting: phaseName = "connecting"
+        case .pickingWindow(let windows): phaseName = "picking-window(\(windows.count))"
+        case .attached: phaseName = "attached"
+        case .reconnecting: phaseName = "reconnecting"
+        case .failed: phaseName = "failed"
+        case .exited: phaseName = "exited"
+        }
+        return
+            "phase=\(phaseName) ssh=\(connection != nil) shell=\(shell != nil) outbound=\(bridge.sendToHost != nil) focus=\(bridge.isTerminalFocused) clone=\(cloneTag ?? "-") generation=\(shellGeneration) stopped=\(stopped)"
+    }
+
+    func tmuxDiagnostics() async -> String {
+        guard let connection else { return "unavailable: no SSH connection" }
+        do {
+            return try await connection.exec(Tmux.diagnosticsCommand())
+        } catch {
+            return "unavailable: tmux diagnostics failed"
+        }
+    }
+
     func preset(session: String, windowIndex: Int?, windowID: String? = nil) {
         pendingShell = .tmux(session: session, windowIndex: windowIndex, windowID: windowID)
     }

@@ -12,6 +12,7 @@ enum AppSettings {
     static let tmuxExpandedSessionsKeyPrefix = "pocketshell.tmuxExpandedSessions"
     static let collapsedTabGroupsKeyPrefix = "pocketshell.collapsedTabGroups"
     static let uiScaleKey = "pocketshell.uiScale"
+    static let developerModeKey = "pocketshell.developerMode"
 }
 
 struct ConfigDocument: FileDocument {
@@ -40,6 +41,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.agentNotifyKey) private var agentNotify = false
     @AppStorage(AppSettings.iCloudSyncKey) private var iCloudSync = false
     @AppStorage(AppSettings.iCloudCredentialsSyncKey) private var iCloudCredentialsSync = false
+    @AppStorage(AppSettings.developerModeKey) private var developerMode = false
     @State private var exportDocument: ConfigDocument?
     @State private var exporting = false
     @State private var importing = false
@@ -121,6 +123,15 @@ struct SettingsView: View {
                         }
                     }
                 }
+            }
+            Section {
+                Toggle("Developer Mode", isOn: $developerMode)
+            } header: {
+                Text("Diagnostics")
+            } footer: {
+                Text(
+                    "Adds Copy Debug Report to the terminal menu. Reports include session and window names, but never credentials or terminal contents."
+                )
             }
         }
         .navigationTitle("Settings")

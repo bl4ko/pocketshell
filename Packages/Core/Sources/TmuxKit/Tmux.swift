@@ -134,6 +134,16 @@ public enum Tmux {
         "\(tmux) list-sessions -F '#{session_name}|#{session_windows}|#{session_attached}|#{session_group}'"
     }
 
+    public static func diagnosticsCommand() -> String {
+        let sessions =
+            "\(tmux) list-sessions -F 'session|#{session_name}|#{session_windows}|#{session_attached}|#{session_group}'"
+        let clients =
+            "\(tmux) list-clients -F 'client|#{client_name}|#{session_name}|#{client_pid}|#{client_activity}|#{client_flags}|#{client_written}|#{client_discarded}'"
+        let panes =
+            "\(tmux) list-panes -a -F 'pane|#{session_name}|#{window_index}|#{window_id}|#{pane_id}|#{pane_pid}|#{pane_current_command}|#{pane_dead}|#{pane_in_mode}|#{pane_input_off}|#{pane_title}'"
+        return [sessions, clients, panes].joined(separator: "; ")
+    }
+
     // tmux-resurrect saves whatever sessions exist, clones included, so a restored
     // session can already carry a clone suffix. Cloning that again nests forever.
     public static func cloneName(session: String, clientTag: String) -> String {

@@ -49,6 +49,14 @@ import Models
     )
 }
 
+@Test func diagnosticsCommandExcludesPaneContents() {
+    let command = Tmux.diagnosticsCommand()
+    #expect(command.contains("list-sessions"))
+    #expect(command.contains("list-clients"))
+    #expect(command.contains("list-panes -a"))
+    #expect(!command.contains("capture-pane"))
+}
+
 @Test func parseSessionsParsesNameWindowsAttachedGroup() {
     let sessions = Tmux.parseSessions("claude|5|1|\nother|1|0|other")
     #expect(

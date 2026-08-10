@@ -207,10 +207,18 @@ final class SessionMonitor: ObservableObject {
         for index in tabs.indices {
             if let session = tabs[index].tmuxSession, let canonical = sessions[session] {
                 tabs[index].tmuxSession = canonical
+                if tabs[index].tabGroup.map(Tmux.baseSessionName) == canonical {
+                    tabs[index].tabGroup = canonical
+                }
             }
         }
         if tabs != store.savedTabs[key] {
             store.savedTabs[key] = tabs
+        }
+        if let session = host.tmuxSession, let canonical = sessions[session], canonical != session,
+            let index = store.hosts.firstIndex(where: { $0.id == host.id })
+        {
+            store.hosts[index].tmuxSession = canonical
         }
     }
 

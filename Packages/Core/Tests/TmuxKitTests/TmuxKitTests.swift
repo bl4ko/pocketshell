@@ -81,6 +81,21 @@ import Models
         ])
 }
 
+@Test func staleStandaloneCloneResolvesToExistingBase() {
+    let output = """
+        homeops|5|0|homeops
+        homeops-psh-226977d3|1|1|homeops-psh-226977d3
+        """
+    #expect(
+        Tmux.consolidateGroups(Tmux.parseSessions(output)) == [
+            TmuxSession(name: "homeops", windows: 5, attached: true, group: "homeops")
+        ])
+    #expect(
+        Tmux.canonicalSessionMap(output, requested: ["homeops-psh-226977d3"])
+            == ["homeops-psh-226977d3": "homeops"]
+    )
+}
+
 @Test func consolidateGroupsPrefersRenamedSessionOverClone() {
     let sessions = [
         TmuxSession(name: "agents-psh-492f0b8f", windows: 6, attached: true, group: "agents"),

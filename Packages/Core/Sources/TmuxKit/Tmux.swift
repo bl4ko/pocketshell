@@ -363,7 +363,9 @@ public enum Tmux {
         var order: [String] = []
         var merged: [String: TmuxSession] = [:]
         for session in sessions {
-            let key = session.group ?? session.name
+            let base = baseSessionName(session.name)
+            let baseSession = sessions.first { $0.name == base }
+            let key = baseSession.map { $0.group ?? $0.name } ?? session.group ?? session.name
             if var existing = merged[key] {
                 existing.attached = existing.attached || session.attached
                 if session.name == key
@@ -395,9 +397,11 @@ public enum Tmux {
         let parsed = parseSessions(output)
         let canonical = consolidateGroups(parsed)
         return requested.reduce(into: [:]) { result, requestedName in
-            let requestedGroup = parsed.first { $0.name == requestedName }.map { $0.group ?? $0.name }
+            let base = baseSessionName(requestedName)
+            let alias = parsed.contains { $0.name == base } ? base : requestedName
+            let requestedGroup = parsed.first { $0.name == alias }.map { $0.group ?? $0.name }
             if let session = canonical.first(where: { session in
-                session.name == requestedName || session.group == requestedName
+                session.name == alias || session.group == alias
                     || requestedGroup.map { (session.group ?? session.name) == $0 } == true
             }) {
                 result[requestedName] = session.name

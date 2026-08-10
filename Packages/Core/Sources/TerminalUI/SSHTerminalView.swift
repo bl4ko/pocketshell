@@ -341,11 +341,19 @@
 
             @MainActor private func sendMouseClick(in view: TerminalView, at location: CGPoint) {
                 let terminal = view.getTerminal()
-                guard terminal.mouseMode != .off else { return }
-                let col = clamp(
-                    Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
                 let row = clamp(
                     Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                if terminal.mouseMode == .off {
+                    let lines = (0..<terminal.rows).map {
+                        terminal.getLine(row: $0)?.translateToString(trimRight: true) ?? ""
+                    }
+                    if let shortcut = CodexOptionTap.shortcut(lines: lines, tappedRow: row) {
+                        bridge.processOutgoing(Data([shortcut]))
+                    }
+                    return
+                }
+                let col = clamp(
+                    Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
                 terminal.sendEvent(
                     buttonFlags: terminal.encodeButton(
                         button: 0, release: false, shift: false, meta: false, control: false),

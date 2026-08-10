@@ -43,6 +43,10 @@ final class ConnectionController: ObservableObject {
     private var cloneTag: String?
     private var shellGeneration = 0
     private var stopped = false
+    private var writeAttempts = 0
+    private var writeSuccesses = 0
+    private var writeFailures = 0
+    private var lastWriteAt: Date?
 
     init(host: HostConfig, key: DeviceKeyMaterial, knownHosts: KnownHostsStore, hops: [SSHHop] = []) {
         self.host = host
@@ -118,8 +122,10 @@ final class ConnectionController: ObservableObject {
         case .failed: phaseName = "failed"
         case .exited: phaseName = "exited"
         }
+        let lastInput = bridge.lastInputAt?.timeIntervalSince1970.description ?? "-"
+        let lastWrite = lastWriteAt?.timeIntervalSince1970.description ?? "-"
         return
-            "phase=\(phaseName) ssh=\(connection != nil) shell=\(shell != nil) outbound=\(bridge.sendToHost != nil) focus=\(bridge.isTerminalFocused) clone=\(cloneTag ?? "-") generation=\(shellGeneration) stopped=\(stopped)"
+            "phase=\(phaseName) ssh=\(connection != nil) shell=\(shell != nil) outbound=\(bridge.sendToHost != nil) focus=\(bridge.isTerminalFocused) clone=\(cloneTag ?? "-") generation=\(shellGeneration) stopped=\(stopped) input=\(bridge.inputEvents)/\(bridge.inputBytes) lastInput=\(lastInput) writes=\(writeAttempts)/\(writeSuccesses)/\(writeFailures) lastWrite=\(lastWrite)"
     }
 
     func tmuxDiagnostics() async -> String {
@@ -371,8 +377,10 @@ final class ConnectionController: ObservableObject {
                 rows: size.rows
             )
             self.shell = shell
-            bridge.sendToHost = { data in
-                Task { try? await shell.write(data) }
+            shellGeneration += 1
+            let generation = shellGeneration
+            bridge.sendToHost = { [weak self] data in
+                self?.write(data, to: shell, generation: generation)
             }
             bridge.resizeHost = { cols, rows in
                 Task { try? await shell.resize(cols, rows) }
@@ -386,8 +394,6 @@ final class ConnectionController: ObservableObject {
             _ = machine.handle(.established)
             lastErrorMessage = nil
             phase = .attached
-            shellGeneration += 1
-            let generation = shellGeneration
             Task { [weak self] in
                 for await chunk in shell.output {
                     self?.bridge.feed(chunk)
@@ -396,6 +402,23 @@ final class ConnectionController: ObservableObject {
             }
         } catch {
             handleConnectFailure("\(error)")
+        }
+    }
+
+    private func write(_ data: Data, to shell: ShellStream, generation: Int) {
+        writeAttempts += 1
+        lastWriteAt = Date()
+        Task { [weak self] in
+            do {
+                try await shell.write(data)
+                guard let self, generation == self.shellGeneration else { return }
+                self.writeSuccesses += 1
+            } catch {
+                guard let self, generation == self.shellGeneration, !self.stopped else { return }
+                self.writeFailures += 1
+                self.bridge.sendToHost = nil
+                self.applyAction(self.machine.handle(.connectionLost), message: "terminal write failed")
+            }
         }
     }
 

@@ -11,6 +11,9 @@
         @Published public var ctrlActive = false
         @Published public var selectMode = false
         @Published public private(set) var terminalTitle: String?
+        public private(set) var inputEvents = 0
+        public private(set) var inputBytes = 0
+        public private(set) var lastInputAt: Date?
         public var sendToHost: ((Data) -> Void)?
         public var resizeHost: ((_ cols: Int, _ rows: Int) -> Void)?
         public var imagePaste: ((Data) -> Void)?
@@ -203,8 +206,7 @@
                 return
             }
             if let data = ToolbarKeyEncoder.data(for: action) {
-                userSentInput?()
-                sendToHost?(data)
+                processOutgoing(data)
             }
         }
 
@@ -212,6 +214,9 @@
             if feedingView, AutomaticReplyFilter.shouldSuppress(data) {
                 return
             }
+            inputEvents += 1
+            inputBytes += data.count
+            lastInputAt = Date()
             userSentInput?()
             if ctrlActive,
                 let text = String(data: data, encoding: .utf8),

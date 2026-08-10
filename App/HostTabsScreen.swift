@@ -282,6 +282,11 @@ struct HostTabsScreen: View {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
+        #if targetEnvironment(macCatalyst)
+            let platform = "Mac Catalyst"
+        #else
+            let platform = UIDevice.current.systemName
+        #endif
         let localTabs = tabs.map { tab in
             let target = tab.controller.tmuxTarget
             return [
@@ -296,7 +301,7 @@ struct HostTabsScreen: View {
         return """
             PocketShell debug report
             app=\(version) build=\(build)
-            os=\(UIDevice.current.systemName) \(UIDevice.current.systemVersion) model=\(UIDevice.current.model)
+            platform=\(platform) os=\(ProcessInfo.processInfo.operatingSystemVersionString) model=\(UIDevice.current.model)
             scene=\(String(describing: scenePhase)) tabs=\(tabs.count)
 
             [local tabs]

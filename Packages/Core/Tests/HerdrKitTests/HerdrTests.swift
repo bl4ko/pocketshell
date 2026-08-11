@@ -1,3 +1,4 @@
+import Foundation
 import HerdrKit
 import Testing
 
@@ -53,4 +54,20 @@ import Testing
     #expect(
         Herdr.focusWorkspaceCommand(session: "work", workspaceID: "w'1")
             .hasSuffix("herdr --session 'work' workspace focus 'w'\\''1'"))
+}
+
+@Test func buildsPushPluginInstallAndSessionLinkCommands() throws {
+    let endpoint = try #require(URL(string: "https://push.example.test/"))
+    let hostID = try #require(UUID(uuidString: "12345678-1234-1234-1234-123456789abc"))
+    let commands = HerdrPushPlugin.installCommands(endpoint: endpoint, hostID: hostID, secret: "host-secret")
+
+    #expect(commands.count == 4)
+    #expect(commands.allSatisfy { $0.contains(HerdrPushPlugin.directory) })
+    #expect(commands[3].contains("chmod 600"))
+    #expect(
+        HerdrPushPlugin.linkCommand(session: "default").hasSuffix(
+            "herdr plugin link \"$HOME/.local/share/pocketshell/herdr-push\" --enabled"))
+    #expect(
+        HerdrPushPlugin.linkCommand(session: "client's")
+            .contains("herdr --session 'client'\\''s' plugin link"))
 }

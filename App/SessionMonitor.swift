@@ -331,6 +331,7 @@ final class SessionMonitor: ObservableObject {
         title: String,
         status: HerdrAgentStatus
     ) {
+        guard !PushRelayClient.shared.hasInstalledPlugin(hostID: host.id) else { return }
         let workspaceKey = Self.herdrWorkspaceKey(hostID: host.id, session: session, workspaceID: workspaceID)
         let agentKey = Self.herdrAgentKey(hostID: host.id, session: session, paneID: paneID)
         guard visibleWindowKey != workspaceKey, shouldNotify(key: agentKey) else { return }

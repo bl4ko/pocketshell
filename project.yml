@@ -65,6 +65,7 @@ targets:
     entitlements:
       path: App/pocketshell.entitlements
       properties:
+        aps-environment: development
         com.apple.security.application-groups:
           - group.com.bl4ko.pocketshell
     settings:

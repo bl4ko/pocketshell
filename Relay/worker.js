@@ -16,11 +16,13 @@ async function route(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") return json({ ok: true });
 
-    if (request.method === "POST" && url.pathname === "/v1/devices") {
+    if ((request.method === "POST" || request.method === "DELETE") && url.pathname === "/v1/devices") {
         if (!hasPairingAccess(request, env)) return json({ error: "unauthorized" }, 401);
         const body = await readJSON(request);
         if (!isDevice(body)) return json({ error: "invalid_device" }, 400);
-        await env.PUSH_STATE.put(`device:${body.environment}:${body.token}`, JSON.stringify({ addedAt: Date.now() }));
+        const key = `device:${body.environment}:${body.token}`;
+        if (request.method === "DELETE") await env.PUSH_STATE.delete(key);
+        else await env.PUSH_STATE.put(key, JSON.stringify({ addedAt: Date.now() }));
         return json({ ok: true });
     }
 

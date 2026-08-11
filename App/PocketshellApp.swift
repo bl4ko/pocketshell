@@ -22,6 +22,7 @@ final class BackgroundKeepAlive {
 
 @main
 struct PocketshellApp: App {
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushAppDelegate
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppSettings.uiScaleKey) private var uiScale = 1.0
     @StateObject private var store: AppStore

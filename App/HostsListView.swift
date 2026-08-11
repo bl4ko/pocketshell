@@ -75,10 +75,15 @@ struct HostsListView: View {
             .paperScreen()
         }
         .onChange(of: router.pending) { _, target in
-            guard let target, let host = store.hosts.first(where: { $0.id == target.hostID }) else { return }
-            path = NavigationPath()
-            path.append(host)
+            openPendingTarget(target)
         }
+        .onAppear { openPendingTarget(router.pending) }
+    }
+
+    private func openPendingTarget(_ target: SessionTarget?) {
+        guard let target, let host = store.hosts.first(where: { $0.id == target.hostID }) else { return }
+        path = NavigationPath()
+        path.append(host)
     }
 
     private var header: some View {

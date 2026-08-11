@@ -13,6 +13,7 @@ enum AppSettings {
     static let collapsedTabGroupsKeyPrefix = "pocketshell.collapsedTabGroups"
     static let uiScaleKey = "pocketshell.uiScale"
     static let developerModeKey = "pocketshell.developerMode"
+    static let pushRelayURLKey = "pocketshell.pushRelayURL"
 }
 
 struct ConfigDocument: FileDocument {
@@ -42,6 +43,9 @@ struct SettingsView: View {
     @AppStorage(AppSettings.iCloudSyncKey) private var iCloudSync = false
     @AppStorage(AppSettings.iCloudCredentialsSyncKey) private var iCloudCredentialsSync = false
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
+    @StateObject private var pushRelay = PushRelayClient.shared
+    @State private var pushRelayURL = UserDefaults.standard.string(forKey: AppSettings.pushRelayURLKey) ?? ""
+    @State private var pushPairingSecret = ""
     @State private var exportDocument: ConfigDocument?
     @State private var exporting = false
     @State private var importing = false
@@ -65,12 +69,51 @@ struct SettingsView: View {
                         } else {
                             monitor.stopPolling()
                         }
+                        Task { await pushRelay.notificationSettingChanged(on) }
                     }
             } header: {
                 Text("Agents")
             } footer: {
                 Text(
-                    "Polls tmux windows on hosts with a tmux session and notifies when a busy agent goes idle or needs input."
+                    "Uses Herdr's semantic agent state when available. Foreground polling also supports tmux. Configure push below for reliable lock-screen alerts."
+                )
+            }
+            Section {
+                TextField("https://your-worker.workers.dev", text: $pushRelayURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                SecureField(
+                    pushRelay.isConfigured ? "Pairing secret saved" : "Pairing secret", text: $pushPairingSecret
+                )
+                .textInputAutocapitalization(.never)
+                Button("Save and register this iPhone") {
+                    Task {
+                        do {
+                            try await pushRelay.configure(urlString: pushRelayURL, pairingSecret: pushPairingSecret)
+                            pushPairingSecret = ""
+                        } catch {
+                            pushRelay.report(error)
+                        }
+                    }
+                }
+                .disabled(pushRelayURL.isEmpty || pushRelay.isWorking)
+                if pushRelay.isConfigured {
+                    ForEach(store.hosts) { host in
+                        Button("Install Herdr push on \(host.name)") {
+                            Task { await pushRelay.installPlugin(on: host, store: store) }
+                        }
+                        .disabled(pushRelay.isWorking)
+                    }
+                }
+                if let status = pushRelay.status {
+                    Text(status)
+                }
+            } header: {
+                Text("Reliable Herdr push")
+            } footer: {
+                Text(
+                    "The pairing secret stays in this device's Keychain. Each host receives a separate credential over SSH."
                 )
             }
             Section {

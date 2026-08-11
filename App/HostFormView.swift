@@ -59,7 +59,7 @@ struct HostFormView: View {
                         .autocorrectionDisabled()
                 } footer: {
                     Text(
-                        "With a tmux session set, connecting lists its windows for one-tap attach. Otherwise the on-connect command (or a plain shell) runs."
+                        "Running Herdr sessions are discovered automatically. With a tmux session set, connecting also lists its windows."
                     )
                 }
             }

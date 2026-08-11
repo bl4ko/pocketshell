@@ -33,6 +33,19 @@ import Testing
     #expect(decoded == workspace)
 }
 
+@Test func herdrTabRecordRoundTripsThroughJSON() throws {
+    let record = TabRecord(
+        name: "agent",
+        number: 1,
+        tabGroup: "Herdr · work",
+        herdrSession: "work",
+        herdrWorkspaceID: "w1"
+    )
+    let data = try JSONEncoder().encode(record)
+    #expect(try JSONDecoder().decode(TabRecord.self, from: data) == record)
+    #expect(record.groupName == "Herdr · work")
+}
+
 @Test func workspaceSyncWriteCommandEmbedsDecodablePayload() throws {
     let workspace = HostWorkspace(
         tabs: [TabRecord(tmuxSession: "agents", windowIndex: 0)],

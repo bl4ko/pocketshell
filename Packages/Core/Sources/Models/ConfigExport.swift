@@ -9,6 +9,8 @@ public struct TabRecord: Codable, Equatable, Sendable {
     // tmux window_id (@N): survives renumber-windows, which shifts indexes.
     public var windowID: String?
     public var tabGroup: String?
+    public var herdrSession: String?
+    public var herdrWorkspaceID: String?
 
     public init(
         name: String? = nil,
@@ -17,7 +19,9 @@ public struct TabRecord: Codable, Equatable, Sendable {
         number: Int? = nil,
         windowName: String? = nil,
         windowID: String? = nil,
-        tabGroup: String? = nil
+        tabGroup: String? = nil,
+        herdrSession: String? = nil,
+        herdrWorkspaceID: String? = nil
     ) {
         self.name = name
         self.tmuxSession = tmuxSession
@@ -26,9 +30,11 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.windowName = windowName
         self.windowID = windowID
         self.tabGroup = tabGroup
+        self.herdrSession = herdrSession
+        self.herdrWorkspaceID = herdrWorkspaceID
     }
 
-    public var groupName: String { tabGroup ?? tmuxSession ?? "Shells" }
+    public var groupName: String { tabGroup ?? tmuxSession ?? herdrSession.map { "Herdr · \($0)" } ?? "Shells" }
 
     public func matchesWindow(of other: TabRecord) -> Bool {
         guard tmuxSession == other.tmuxSession else { return false }
@@ -42,6 +48,7 @@ public struct TabRecord: Codable, Equatable, Sendable {
         remote.map { record in
             let match = local.first {
                 if record.tmuxSession != nil { return $0.matchesWindow(of: record) }
+                if record.herdrSession != nil { return $0.herdrSession == record.herdrSession }
                 return $0.tmuxSession == nil && $0.number == record.number
             }
             guard let match else { return record }
@@ -58,6 +65,11 @@ public struct TabRecord: Codable, Equatable, Sendable {
         for record in records {
             if record.tmuxSession != nil, record.windowID != nil || record.windowIndex != nil,
                 unique.contains(where: { $0.matchesWindow(of: record) })
+            {
+                continue
+            }
+            if let session = record.herdrSession,
+                unique.contains(where: { $0.herdrSession == session })
             {
                 continue
             }

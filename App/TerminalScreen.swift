@@ -1,3 +1,4 @@
+import HerdrKit
 import Models
 import SwiftUI
 import TerminalUI
@@ -63,7 +64,7 @@ struct TerminalScreen: View {
                     bridge: connection.bridge,
                     theme: TerminalTheme.named(themeName),
                     scale: uiScale,
-                    multiplexerMode: connection.isTmuxAttached
+                    multiplexerMode: connection.isMultiplexerAttached
                 )
                 .focusEffectDisabled()
                 #if !targetEnvironment(macCatalyst)
@@ -219,11 +220,11 @@ struct TerminalScreen: View {
     private var windowPickerShown: Binding<Bool> {
         Binding(
             get: {
-                if case .pickingWindow = connection.phase { return true }
+                if case .pickingSession = connection.phase { return true }
                 return false
             },
             set: { shown in
-                if !shown, case .pickingWindow = connection.phase {
+                if !shown, case .pickingSession = connection.phase {
                     Task { await connection.openPlainShell() }
                 }
             }
@@ -239,6 +240,7 @@ struct WindowDashboardSheet: View {
     @EnvironmentObject var store: AppStore
     @ObservedObject var connection: ConnectionController
     @State private var sessions: [TmuxSession] = []
+    @State private var herdrSessions: [HerdrSession] = []
     @State private var windowsBySession: [String: [WindowDashboardItem]] = [:]
 
     let host: HostConfig
@@ -249,7 +251,18 @@ struct WindowDashboardSheet: View {
                 Button("Plain shell") {
                     Task { await connection.openPlainShell() }
                 }
-                if sessions.isEmpty, case .pickingWindow(let windows) = connection.phase {
+                if !herdrSessions.isEmpty {
+                    Section("Herdr") {
+                        ForEach(herdrSessions) { session in
+                            Button(session.isDefault ? "Default session" : session.name) {
+                                Task { await connection.selectHerdrSession(session) }
+                            }
+                        }
+                    }
+                }
+                if sessions.isEmpty,
+                    case .pickingSession(let windows, _) = connection.phase
+                {
                     Section(host.tmuxSession ?? "tmux") {
                         ForEach(windows) { window in
                             Button {
@@ -290,6 +303,11 @@ struct WindowDashboardSheet: View {
     }
 
     private func refresh() async {
+        if case .pickingSession(_, let initialHerdrSessions) = connection.phase {
+            herdrSessions = initialHerdrSessions
+        } else {
+            herdrSessions = await connection.herdrSessions()
+        }
         var list = await connection.tmuxSessions()
         if let saved = store.sessionOrder[host.id.uuidString] {
             list = Tmux.orderSessions(list, by: saved)

@@ -1,3 +1,4 @@
+import HerdrKit
 import Models
 import MonitorKit
 import SwiftUI
@@ -288,12 +289,13 @@ struct HostTabsScreen: View {
             let platform = UIDevice.current.systemName
         #endif
         let localTabs = tabs.map { tab in
-            let target = tab.controller.tmuxTarget
+            let tmux = tab.controller.tmuxTarget
+            let herdr = tab.controller.herdrTarget
             return [
                 tab.id == selectedTab ? "selected" : "hidden",
                 "label=\(tabLabel(tab))",
                 "group=\(tab.group)",
-                "target=\(target?.session ?? "plain"): \(target?.windowIndex.map(String.init) ?? "-") \(target?.windowID ?? "-")",
+                "target=\(herdr.map { "herdr:\($0.session):\($0.workspaceID ?? "-")" } ?? tmux.map { "tmux:\($0.session):\($0.windowIndex.map(String.init) ?? "-"):\($0.windowID ?? "-")" } ?? "plain")",
                 tab.controller.diagnosticSummary,
             ].joined(separator: " | ")
         }.joined(separator: "\n")
@@ -511,6 +513,7 @@ struct HostTabsScreen: View {
     private var currentRecords: [TabRecord] {
         tabs.map { tab in
             let target = tab.controller.tmuxTarget
+            let herdr = tab.controller.herdrTarget
             return TabRecord(
                 name: tab.name,
                 tmuxSession: target?.session,
@@ -518,7 +521,9 @@ struct HostTabsScreen: View {
                 number: tab.number,
                 windowName: tab.tmuxWindowName,
                 windowID: target?.windowID,
-                tabGroup: tab.group
+                tabGroup: tab.group,
+                herdrSession: herdr?.session,
+                herdrWorkspaceID: herdr?.workspaceID
             )
         }
     }
@@ -534,6 +539,8 @@ struct HostTabsScreen: View {
         let controller = makeController()
         if let session = record.tmuxSession {
             controller.preset(session: session, windowIndex: record.windowIndex, windowID: record.windowID)
+        } else if let session = record.herdrSession {
+            controller.presetHerdr(session: session, workspaceID: record.herdrWorkspaceID)
         } else {
             controller.presetPlain()
         }
@@ -584,8 +591,11 @@ struct HostTabsScreen: View {
             if let id = record.windowID, let targetID = target?.windowID { return id == targetID }
             return target?.windowIndex == record.windowIndex
         }
+        if let session = record.herdrSession {
+            return tab.controller.herdrTarget?.session == session
+        }
         guard let number = record.number else { return false }
-        return target == nil && tab.number == number
+        return target == nil && tab.controller.herdrTarget == nil && tab.number == number
     }
 
     private func pollTabs() async {
@@ -957,7 +967,9 @@ struct HostTabsScreen: View {
     }
 
     private func tabLabel(_ tab: TerminalTab) -> String {
-        tab.name ?? tab.tmuxWindowName ?? "\(tab.number)"
+        tab.name ?? tab.tmuxWindowName
+            ?? tab.controller.herdrTarget.map { $0.session == "default" ? "herdr" : $0.session }
+            ?? "\(tab.number)"
     }
 
     private func tabAccessibilityLabel(_ tab: TerminalTab) -> String {

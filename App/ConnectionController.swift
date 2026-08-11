@@ -1,4 +1,5 @@
 import Foundation
+import HerdrKit
 import KeyKit
 import Models
 import Network
@@ -12,7 +13,7 @@ final class ConnectionController: ObservableObject {
     enum Phase: Equatable {
         case idle
         case connecting
-        case pickingWindow([TmuxWindow])
+        case pickingSession(tmuxWindows: [TmuxWindow], herdrSessions: [HerdrSession])
         case attached
         case reconnecting(String)
         case failed(String)
@@ -35,6 +36,7 @@ final class ConnectionController: ObservableObject {
     private var monitor: NWPathMonitor?
     private enum PendingShell {
         case tmux(session: String, windowIndex: Int?, windowID: String?)
+        case herdr(session: String, workspaceID: String?)
         case plain(String?)
     }
 
@@ -82,6 +84,12 @@ final class ConnectionController: ObservableObject {
         await openShellAndPump()
     }
 
+    func selectHerdrSession(_ session: HerdrSession) async {
+        pendingShell = .herdr(session: session.name, workspaceID: nil)
+        phase = .connecting
+        await openShellAndPump()
+    }
+
     func openPlainShell() async {
         pendingShell = .plain(host.onConnectCommand)
         phase = .connecting
@@ -104,9 +112,23 @@ final class ConnectionController: ObservableObject {
         return false
     }
 
+    var isHerdrAttached: Bool {
+        if case .herdr = pendingShell { return true }
+        return false
+    }
+
+    var isMultiplexerAttached: Bool { isTmuxAttached || isHerdrAttached }
+
     var tmuxTarget: (session: String, windowIndex: Int?, windowID: String?)? {
         if case .tmux(let session, let windowIndex, let windowID) = pendingShell {
             return (session, windowIndex, windowID)
+        }
+        return nil
+    }
+
+    var herdrTarget: (session: String, workspaceID: String?)? {
+        if case .herdr(let session, let workspaceID) = pendingShell {
+            return (session, workspaceID)
         }
         return nil
     }
@@ -116,7 +138,8 @@ final class ConnectionController: ObservableObject {
         switch phase {
         case .idle: phaseName = "idle"
         case .connecting: phaseName = "connecting"
-        case .pickingWindow(let windows): phaseName = "picking-window(\(windows.count))"
+        case .pickingSession(let windows, let sessions):
+            phaseName = "picking-session(tmux=\(windows.count),herdr=\(sessions.count))"
         case .attached: phaseName = "attached"
         case .reconnecting: phaseName = "reconnecting"
         case .failed: phaseName = "failed"
@@ -143,6 +166,10 @@ final class ConnectionController: ObservableObject {
 
     func presetPlain() {
         pendingShell = .plain(host.onConnectCommand)
+    }
+
+    func presetHerdr(session: String, workspaceID: String? = nil) {
+        pendingShell = .herdr(session: session, workspaceID: workspaceID)
     }
 
     func jump(toSession session: String, windowIndex: Int? = nil, windowID: String? = nil) async {
@@ -207,6 +234,12 @@ final class ConnectionController: ObservableObject {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
         return Tmux.consolidateGroups(Tmux.parseSessions(output))
+    }
+
+    func herdrSessions() async -> [HerdrSession] {
+        guard let connection else { return [] }
+        let output = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
+        return Herdr.parseSessions(output).filter(\.running)
     }
 
     func tmuxWindows(session: String) async -> [TmuxWindow] {
@@ -304,8 +337,8 @@ final class ConnectionController: ObservableObject {
             Task { _ = try? await connection.exec(Tmux.cleanupClonesCommand()) }
         }
 
-        if let session = host.tmuxSession, pendingShell == nil {
-            await listTmuxWindows(connection: connection, session: session)
+        if pendingShell == nil {
+            await listInitialSessions(connection: connection)
         } else {
             await openShellAndPump()
         }
@@ -339,17 +372,19 @@ final class ConnectionController: ObservableObject {
         return text
     }
 
-    private func listTmuxWindows(connection: SSHConnection, session: String) async {
-        do {
-            let output = try await connection.exec(Tmux.listWindowsCommand(session: session))
-            let windows = Tmux.parseWindows(output)
-            if windows.isEmpty {
-                await openPlainShell()
-            } else {
-                phase = .pickingWindow(windows)
-            }
-        } catch {
+    private func listInitialSessions(connection: SSHConnection) async {
+        let herdrOutput = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
+        let herdrSessions = Herdr.parseSessions(herdrOutput).filter(\.running)
+        var tmuxWindows: [TmuxWindow] = []
+        if let session = host.tmuxSession,
+            let output = try? await connection.exec(Tmux.listWindowsCommand(session: session))
+        {
+            tmuxWindows = Tmux.parseWindows(output)
+        }
+        if tmuxWindows.isEmpty, herdrSessions.isEmpty {
             await openPlainShell()
+        } else {
+            phase = .pickingSession(tmuxWindows: tmuxWindows, herdrSessions: herdrSessions)
         }
     }
 
@@ -363,6 +398,12 @@ final class ConnectionController: ObservableObject {
             cloneTag = tag
             command = Tmux.attachCommand(
                 session: session, windowIndex: windowIndex, windowID: windowID, clientTag: tag)
+        case .herdr(let session, let workspaceID):
+            cloneTag = nil
+            if let workspaceID {
+                _ = try? await connection.exec(Herdr.focusWorkspaceCommand(session: session, workspaceID: workspaceID))
+            }
+            command = Herdr.attachCommand(session: session)
         case .plain(let plain):
             cloneTag = nil
             command = plain
@@ -440,8 +481,8 @@ final class ConnectionController: ObservableObject {
     private func handleStreamEnded(generation: Int) async {
         guard !stopped, generation == shellGeneration else { return }
         if let connection, await connection.isConnected {
-            if isTmuxAttached {
-                applyAction(machine.handle(.connectionLost), message: "tmux session ended")
+            if isMultiplexerAttached {
+                applyAction(machine.handle(.connectionLost), message: "persistent session ended")
                 return
             }
             phase = .exited

@@ -1,5 +1,5 @@
 const encoder = new TextEncoder();
-let cachedProviderToken;
+const cachedProviderTokens = new Map();
 
 export default {
     async fetch(request, env) {
@@ -95,11 +95,11 @@ async function fanOut(env, payload) {
 }
 
 async function sendAPNs(env, environment, deviceToken, payload) {
-    const host = environment === "sandbox" ? "api.development.push.apple.com" : "api.push.apple.com";
+    const host = environment === "sandbox" ? "api.sandbox.push.apple.com" : "api.push.apple.com";
     return fetch(`https://${host}/3/device/${deviceToken}`, {
         method: "POST",
         headers: {
-            authorization: `bearer ${await providerToken(env)}`,
+            authorization: `bearer ${await providerToken(env, environment)}`,
             "apns-topic": env.APNS_TOPIC,
             "apns-push-type": "alert",
             "apns-priority": "10",
@@ -110,23 +110,30 @@ async function sendAPNs(env, environment, deviceToken, payload) {
     });
 }
 
-async function providerToken(env) {
+async function providerToken(env, environment) {
     const now = Math.floor(Date.now() / 1000);
-    if (cachedProviderToken && now - cachedProviderToken.createdAt < 50 * 60) return cachedProviderToken.value;
-    const header = base64url(encoder.encode(JSON.stringify({ alg: "ES256", kid: env.APNS_KEY_ID })));
+    const cached = cachedProviderTokens.get(environment);
+    if (cached && now - cached.createdAt < 50 * 60) return cached.value;
+    const credentials = apnsCredentials(env, environment);
+    const header = base64url(encoder.encode(JSON.stringify({ alg: "ES256", kid: credentials.keyID })));
     const claims = base64url(encoder.encode(JSON.stringify({ iss: env.APNS_TEAM_ID, iat: now })));
     const unsigned = `${header}.${claims}`;
     const key = await crypto.subtle.importKey(
         "pkcs8",
-        pemBytes(env.APNS_KEY_P8),
+        pemBytes(credentials.privateKey),
         { name: "ECDSA", namedCurve: "P-256" },
         false,
         ["sign"]
     );
     const signature = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, encoder.encode(unsigned));
     const value = `${unsigned}.${base64url(new Uint8Array(signature))}`;
-    cachedProviderToken = { createdAt: now, value };
+    cachedProviderTokens.set(environment, { createdAt: now, value });
     return value;
+}
+
+export function apnsCredentials(env, environment) {
+    const prefix = environment === "sandbox" ? "APNS_SANDBOX" : "APNS_PRODUCTION";
+    return { keyID: env[`${prefix}_KEY_ID`], privateKey: env[`${prefix}_KEY_P8`] };
 }
 
 export function pushPayload(hostID, hostName, session, event) {

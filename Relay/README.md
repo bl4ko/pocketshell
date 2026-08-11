@@ -6,7 +6,7 @@ Private Cloudflare Worker that receives authenticated Herdr status events and se
 
 1. Create a KV namespace and replace its ID in `wrangler.jsonc`.
 2. Enable Push Notifications for `com.bl4ko.pocketshell` and create an APNs `.p8` key.
-3. Add secrets with `npx wrangler secret put`: `PAIRING_SECRET`, `APNS_KEY_P8`, `APNS_KEY_ID`, and `APNS_TEAM_ID`.
+3. Add secrets with `npx wrangler secret put`: `PAIRING_SECRET`, `APNS_TEAM_ID`, `APNS_SANDBOX_KEY_P8`, `APNS_SANDBOX_KEY_ID`, `APNS_PRODUCTION_KEY_P8`, and `APNS_PRODUCTION_KEY_ID`.
 4. Run `npm test`, then `npm run deploy`.
 5. Enter the Worker URL and the same pairing secret in PocketShell settings. PocketShell registers the iPhone and installs an authenticated Herdr plugin on each selected SSH host.
 

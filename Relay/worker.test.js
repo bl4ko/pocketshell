@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPushEvent, pushPayload, route } from "./worker.js";
+import { apnsCredentials, isPushEvent, pushPayload, route } from "./worker.js";
 
 test("accepts only actionable Herdr status events", () => {
     const event = {
@@ -50,4 +50,18 @@ test("device registration requires the configured pairing secret", async () => {
     assert.equal((await route(request("Bearer correct-pairing-secret"), env)).status, 200);
     assert.equal(values.has(`device:sandbox:${"a".repeat(64)}`), true);
     assert.equal((await route(request(""), { ...env, PAIRING_SECRET: undefined })).status, 401);
+});
+
+test("selects an APNs key for each environment", () => {
+    const env = {
+        APNS_SANDBOX_KEY_ID: "sandbox-id",
+        APNS_SANDBOX_KEY_P8: "sandbox-key",
+        APNS_PRODUCTION_KEY_ID: "production-id",
+        APNS_PRODUCTION_KEY_P8: "production-key",
+    };
+    assert.deepEqual(apnsCredentials(env, "sandbox"), { keyID: "sandbox-id", privateKey: "sandbox-key" });
+    assert.deepEqual(apnsCredentials(env, "production"), {
+        keyID: "production-id",
+        privateKey: "production-key",
+    });
 });

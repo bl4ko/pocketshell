@@ -12,7 +12,7 @@ export default {
     },
 };
 
-async function route(request, env) {
+export async function route(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") return json({ ok: true });
 

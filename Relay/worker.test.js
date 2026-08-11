@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPushEvent, pushPayload } from "./worker.js";
+import { isPushEvent, pushPayload, route } from "./worker.js";
 
 test("accepts only actionable Herdr status events", () => {
     const event = {
@@ -27,4 +27,27 @@ test("builds an APNs alert with PocketShell routing data", () => {
         { hostID: payload.hostID, backend: payload.backend, session: payload.session, workspaceID: payload.workspaceID },
         { hostID: "host-id", backend: "herdr", session: "agents", workspaceID: "w1" }
     );
+});
+
+test("device registration requires the configured pairing secret", async () => {
+    const values = new Map();
+    const env = {
+        PAIRING_SECRET: "correct-pairing-secret",
+        PUSH_STATE: {
+            put: async (key, value) => values.set(key, value),
+            delete: async (key) => values.delete(key),
+        },
+    };
+    const body = JSON.stringify({ token: "a".repeat(64), environment: "sandbox" });
+    const request = (authorization) =>
+        new Request("https://push.example.test/v1/devices", {
+            method: "POST",
+            headers: { authorization, "content-type": "application/json" },
+            body,
+        });
+
+    assert.equal((await route(request("Bearer wrong"), env)).status, 401);
+    assert.equal((await route(request("Bearer correct-pairing-secret"), env)).status, 200);
+    assert.equal(values.has(`device:sandbox:${"a".repeat(64)}`), true);
+    assert.equal((await route(request(""), { ...env, PAIRING_SECRET: undefined })).status, 401);
 });

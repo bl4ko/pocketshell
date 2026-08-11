@@ -32,19 +32,25 @@ async function route(request, env) {
         if (!body || typeof body.name !== "string" || body.name.length > 100) {
             return json({ error: "invalid_host" }, 400);
         }
-        const secret = randomSecret();
+        if (typeof body.secret !== "string" || !/^[A-Za-z0-9_-]{32,128}$/.test(body.secret)) {
+            return json({ error: "invalid_host_secret" }, 400);
+        }
+        const key = `host:${hostMatch[1].toLowerCase()}`;
+        const previous = await env.PUSH_STATE.get(key, "json");
+        const secretHashes = [await sha256(body.secret), ...(previous?.secretHashes || [])];
         await env.PUSH_STATE.put(
-            `host:${hostMatch[1].toLowerCase()}`,
-            JSON.stringify({ name: body.name, secretHash: await sha256(secret) })
+            key,
+            JSON.stringify({ name: body.name, secretHashes: [...new Set(secretHashes)].slice(0, 2) })
         );
-        return json({ secret });
+        return json({ ok: true });
     }
 
     const eventMatch = url.pathname.match(new RegExp(`^/v1/hosts/${uuid}/events$`, "i"));
     if (request.method === "POST" && eventMatch) {
         const hostID = eventMatch[1].toLowerCase();
         const saved = await env.PUSH_STATE.get(`host:${hostID}`, "json");
-        if (!saved || !secureEqual(await sha256(bearer(request)), saved.secretHash)) {
+        const presentedHash = await sha256(bearer(request));
+        if (!saved || !saved.secretHashes?.some((hash) => secureEqual(presentedHash, hash))) {
             return json({ error: "unauthorized" }, 401);
         }
         const event = await readJSON(request);
@@ -198,10 +204,6 @@ function secureEqual(left = "", right = "") {
 async function sha256(value) {
     const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function randomSecret() {
-    return base64url(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 function pemBytes(pem) {

@@ -1,6 +1,6 @@
 # PocketShell push relay
 
-Private Cloudflare Worker that receives authenticated Herdr status events and sends `blocked` / `done` alerts through APNs. It stores device tokens and hashed per-host credentials in Workers KV; the APNs key and pairing credential remain Worker secrets.
+Private Cloudflare Worker that receives authenticated Herdr status events and sends `blocked` / `done` alerts through APNs. It stores device tokens and hashed per-host credentials in Workers KV; the APNs key and pairing credential remain Worker secrets. The two most recent credentials remain valid so re-pairing a host cannot interrupt its existing plugin before the replacement is installed.
 
 ## Deploy
 

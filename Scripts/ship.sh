@@ -19,6 +19,9 @@ ship() {
     xcodebuild archive -scheme pocketshell -destination "$1" \
         -archivePath "$out/pocketshell.xcarchive" \
         -allowProvisioningUpdates -quiet \
+        -authenticationKeyPath "$key" \
+        -authenticationKeyID "$ASC_KEY_ID" \
+        -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
         CURRENT_PROJECT_VERSION="$build"
     xcodebuild -exportArchive -archivePath "$out/pocketshell.xcarchive" \
         -exportOptionsPlist Scripts/ExportOptions.plist -exportPath "$out/export" \

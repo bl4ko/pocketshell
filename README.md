@@ -1,15 +1,16 @@
 # pocketshell
 
-iOS SSH terminal + VNC client for managing tmux-based AI agent sessions (Claude Code, Codex, opencode) from your iPhone. Includes a watchOS companion app and a home/lock-screen widget.
+iOS SSH terminal + VNC client for managing Herdr and tmux AI agent sessions (Claude Code, Codex, opencode) from your iPhone. Includes a watchOS companion app and a home/lock-screen widget.
 
-Built for one workflow: agents run in tmux on a machine at home, you check on them, answer their prompts, and kick off new work from wherever you are.
+Built for one workflow: agents run in a persistent multiplexer on a machine at home, you check on them, answer their prompts, and kick off new work from wherever you are.
 
 ## Features
 
 **Terminal**
-- Full SSH terminal (SwiftTerm) with tabs — one tab per tmux window, one tap to attach
-- Agent status per tab: busy / idle / needs-input, detected from screen activity
-- Notification when an agent finishes while you're in another tab
+- Full SSH terminal (SwiftTerm) with tabs and automatic discovery of running Herdr and tmux sessions
+- Herdr's semantic working / blocked / done state, with screen-based status detection for tmux and plain shells
+- Optional private Cloudflare/APNs relay for reliable Herdr alerts while PocketShell is suspended
+- Notification taps reconnect to the named Herdr session and focus the exact workspace
 - Special-keys toolbar (esc, ctrl, tab, arrows, custom sequences), editable via `toolbar.json`
 - Snippets: type into the terminal or exec-and-show-output
 - Paste images from the clipboard — uploaded to the remote host, path inserted at the cursor
@@ -30,7 +31,7 @@ Built for one workflow: agents run in tmux on a machine at home, you check on th
 
 - iOS 17+, Xcode 16+
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
-- A host running `tmux` that you can reach over SSH
+- A host running [Herdr](https://herdr.dev) or `tmux` that you can reach over SSH
 
 ## Install
 
@@ -42,6 +43,8 @@ open pocketshell.xcodeproj
 ```
 
 In Xcode: select your device, set your signing team (with a free Apple ID the app must be re-installed every 7 days), and Run. Then open the Keys screen in the app and add the device public key to `~/.ssh/authorized_keys` on your hosts.
+
+For reliable background Herdr alerts, deploy the private [push relay](Relay/README.md), then enter its URL and pairing secret under Settings → Reliable Herdr push. PocketShell installs the event plugin on each selected host over SSH.
 
 ## Development
 

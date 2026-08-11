@@ -1,0 +1,15 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "pocketshell-push",
+    "main": "worker.js",
+    "compatibility_date": "2026-08-11",
+    "kv_namespaces": [
+        {
+            "binding": "PUSH_STATE",
+            "id": "replace-with-your-kv-namespace-id"
+        }
+    ],
+    "vars": {
+        "APNS_TOPIC": "com.bl4ko.pocketshell"
+    }
+}

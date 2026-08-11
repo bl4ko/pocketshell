@@ -41,6 +41,15 @@ import Testing
     #expect(gate.drain() == Data("b".utf8))
 }
 
+@Test func gateReportsLiveStateForRenderSuspension() {
+    var gate = FeedGate()
+    #expect(gate.isLive)
+    _ = gate.setLive(false)
+    #expect(!gate.isLive)
+    _ = gate.setLive(true)
+    #expect(gate.isLive)
+}
+
 @Test func automaticWindowSizeRepliesAreSuppressed() {
     #expect(AutomaticReplyFilter.shouldSuppress(Data([0x1b, 0x5b] + Array("4;67;224t".utf8))))
     #expect(AutomaticReplyFilter.shouldSuppress(Data([0x1b, 0x5b] + Array("?65;1;2;6;21;22;17;28c".utf8))))

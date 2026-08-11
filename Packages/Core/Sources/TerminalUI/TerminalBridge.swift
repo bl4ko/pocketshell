@@ -19,7 +19,9 @@
         public var imagePaste: ((Data) -> Void)?
         public var userInteracted: (() -> Void)?
         public var userSentInput: (() -> Void)?
-        weak var view: TerminalView?
+        weak var view: TerminalView? {
+            didSet { suspendRendering(!gate.isLive) }
+        }
         private var theme: TerminalTheme?
         private var gate = FeedGate()
         private var flushTask: Task<Void, Never>?
@@ -49,6 +51,16 @@
             flushTask = nil
             if let out = gate.setLive(live) {
                 feedView(out)
+            }
+            suspendRendering(!live)
+        }
+
+        // Layer-level, not view-level: hiding the view would resign first responder.
+        private func suspendRendering(_ suspended: Bool) {
+            guard let view, view.layer.isHidden != suspended else { return }
+            view.layer.isHidden = suspended
+            if !suspended {
+                view.setNeedsDisplay()
             }
         }
 

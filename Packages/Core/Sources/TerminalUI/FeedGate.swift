@@ -1,19 +1,19 @@
 import Foundation
 
 public struct FeedGate {
-    private var live = true
+    public private(set) var isLive = true
     private var pending = Data()
 
     public init() {}
 
     public mutating func ingest(_ data: Data) -> Data? {
-        if live { return data }
+        if isLive { return data }
         pending.append(data)
         return nil
     }
 
     public mutating func setLive(_ live: Bool) -> Data? {
-        self.live = live
+        isLive = live
         return live ? drain() : nil
     }
 

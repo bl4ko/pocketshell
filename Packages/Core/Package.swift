@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "SSHKit", targets: ["SSHKit"]),
         .library(name: "ReconnectKit", targets: ["ReconnectKit"]),
         .library(name: "TmuxKit", targets: ["TmuxKit"]),
+        .library(name: "HerdrKit", targets: ["HerdrKit"]),
         .library(name: "TerminalUI", targets: ["TerminalUI"]),
         .library(name: "ToolbarUI", targets: ["ToolbarUI"]),
         .library(name: "VNCKit", targets: ["VNCKit"]),
@@ -53,6 +54,7 @@ let package = Package(
             ], swiftSettings: strict),
         .target(name: "ReconnectKit", dependencies: ["Models"], swiftSettings: strict),
         .target(name: "TmuxKit", dependencies: ["Models"], swiftSettings: strict),
+        .target(name: "HerdrKit", swiftSettings: strict),
         .target(
             name: "TerminalUI",
             dependencies: [
@@ -76,6 +78,7 @@ let package = Package(
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"], swiftSettings: strict),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"], swiftSettings: strict),
         .testTarget(name: "TmuxKitTests", dependencies: ["TmuxKit"], swiftSettings: strict),
+        .testTarget(name: "HerdrKitTests", dependencies: ["HerdrKit"], swiftSettings: strict),
         .testTarget(name: "ToolbarUITests", dependencies: ["ToolbarUI"], swiftSettings: strict),
         .testTarget(name: "TerminalUITests", dependencies: ["TerminalUI"], swiftSettings: strict),
         .testTarget(name: "VNCKitTests", dependencies: ["VNCKit"], swiftSettings: strict),

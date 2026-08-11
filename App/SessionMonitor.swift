@@ -1,5 +1,6 @@
 import BackgroundTasks
 import Foundation
+import HerdrKit
 import KeyKit
 import Models
 import MonitorKit
@@ -12,6 +13,9 @@ struct SessionTarget: Equatable {
     var hostID: UUID
     var session: String?
     var windowIndex: Int?
+    var backend: String?
+    var workspaceID: String?
+    var paneID: String?
 }
 
 @MainActor
@@ -41,7 +45,10 @@ final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDe
             let target = SessionTarget(
                 hostID: hostID,
                 session: info["session"] as? String,
-                windowIndex: info["windowIndex"] as? Int
+                windowIndex: info["windowIndex"] as? Int,
+                backend: info["backend"] as? String,
+                workspaceID: info["workspaceID"] as? String,
+                paneID: info["paneID"] as? String
             )
             Task { @MainActor in
                 NotificationRouter.shared.pending = target
@@ -64,6 +71,7 @@ final class SessionMonitor: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var connections: [UUID: SSHConnection] = [:]
     private var notifiedAt: [String: Date] = [:]
+    private var lastHerdrStatus: [String: HerdrAgentStatus] = [:]
 
     init(store: AppStore) {
         self.store = store
@@ -78,12 +86,26 @@ final class SessionMonitor: ObservableObject {
         "\(hostID):\(session):\(windowIndex)"
     }
 
+    static func herdrAgentKey(hostID: UUID, session: String, paneID: String) -> String {
+        "\(hostID):herdr:\(session):\(paneID)"
+    }
+
+    static func herdrWorkspaceKey(hostID: UUID, session: String, workspaceID: String) -> String {
+        "\(hostID):herdr:\(session):\(workspaceID)"
+    }
+
     func markFinished(hostID: UUID, session: String, windowIndex: Int) {
         unseenFinished.insert(Self.windowKey(hostID: hostID, session: session, windowIndex: windowIndex))
     }
 
     func markSeen(hostID: UUID, session: String, windowIndex: Int) {
         unseenFinished.remove(Self.windowKey(hostID: hostID, session: session, windowIndex: windowIndex))
+    }
+
+    func markHerdrSeen(hostID: UUID, session: String, paneIDs: [String]) {
+        for paneID in paneIDs {
+            unseenFinished.remove(Self.herdrAgentKey(hostID: hostID, session: session, paneID: paneID))
+        }
     }
 
     func shouldNotify(key: String) -> Bool {
@@ -116,49 +138,95 @@ final class SessionMonitor: ObservableObject {
         var samples: [AgentActivityTracker.Sample] = []
         var snapshots: [SessionSnapshot.Window] = []
         var targets: [String: [String: Any]] = [:]
+        var herdrKeys: Set<String> = []
         for host in store.hosts {
             let requestedSessions = store.tmuxSessions(for: host)
-            guard !requestedSessions.isEmpty else { continue }
             guard let connection = await connection(for: host) else { continue }
-            let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
-            canonicalizeSavedTabs(
-                for: host,
-                using: Tmux.canonicalSessionMap(sessionsOutput, requested: requestedSessions)
-            )
-            await syncWorkspace(for: host, using: connection)
-            let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
-            let records = store.savedTabs[host.id.uuidString] ?? []
-            for session in sessions {
-                let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
-                let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
-                let captures = Tmux.parsePaneCaptures(capturesOutput)
-                for window in Tmux.parseWindows(windowsOutput) {
-                    let text = captures[window.index] ?? ""
-                    let status = AgentStatus.classify(text)
-                    let key = "\(host.id):\(session):\(window.index)"
-                    let displayName = Tmux.windowDisplayName(window: window, session: session, records: records)
-                    if status == .busy {
-                        unseenFinished.remove(key)
+            if !requestedSessions.isEmpty {
+                let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
+                canonicalizeSavedTabs(
+                    for: host,
+                    using: Tmux.canonicalSessionMap(sessionsOutput, requested: requestedSessions)
+                )
+                let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
+                let records = store.savedTabs[host.id.uuidString] ?? []
+                for session in sessions {
+                    let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
+                    let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
+                    let captures = Tmux.parsePaneCaptures(capturesOutput)
+                    for window in Tmux.parseWindows(windowsOutput) {
+                        let text = captures[window.index] ?? ""
+                        let status = AgentStatus.classify(text)
+                        let key = "\(host.id):\(session):\(window.index)"
+                        let displayName = Tmux.windowDisplayName(window: window, session: session, records: records)
+                        if status == .busy { unseenFinished.remove(key) }
+                        targets[key] = [
+                            "hostID": host.id.uuidString, "session": session, "windowIndex": window.index,
+                        ]
+                        samples.append(
+                            .init(
+                                key: key,
+                                title: "\(host.name) \(session):\(window.index) \(displayName)",
+                                status: status
+                            ))
+                        snapshots.append(
+                            .init(
+                                host: host.name,
+                                session: session,
+                                index: window.index,
+                                name: "\(window.index): \(displayName)",
+                                status: status.label,
+                                lastLine: Tmux.previewLines(text, count: 12)
+                            ))
                     }
-                    targets[key] = ["hostID": host.id.uuidString, "session": session, "windowIndex": window.index]
-                    samples.append(
-                        .init(
-                            key: key,
-                            title: "\(host.name) \(session):\(window.index) \(displayName)",
-                            status: status
-                        ))
+                }
+            }
+            let herdrOutput = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
+            let herdrSessions = Herdr.parseSessions(herdrOutput).filter(\.running)
+            if !requestedSessions.isEmpty || !herdrSessions.isEmpty {
+                await syncWorkspace(for: host, using: connection)
+            }
+            for session in herdrSessions {
+                guard let output = try? await connection.exec(Herdr.snapshotCommand(session: session.name)),
+                    let snapshot = Herdr.parseSnapshot(output)
+                else { continue }
+                let workspaces = Dictionary(uniqueKeysWithValues: snapshot.workspaces.map { ($0.id, $0) })
+                for agent in snapshot.agents {
+                    let key = Self.herdrAgentKey(hostID: host.id, session: session.name, paneID: agent.paneID)
+                    herdrKeys.insert(key)
+                    let workspace = workspaces[agent.workspaceID]
+                    let title = agent.displayAgent ?? agent.agent ?? "agent"
+                    let workspaceLabel = workspace?.label ?? agent.workspaceID
+                    let previous = lastHerdrStatus[key]
+                    if agent.status == .working || agent.status == .idle { unseenFinished.remove(key) }
+                    if previous != nil, previous != .done, agent.status == .done { unseenFinished.insert(key) }
+                    if let previous, previous != agent.status, agent.status == .blocked || agent.status == .done {
+                        notifyHerdr(
+                            host: host,
+                            session: session.name,
+                            workspaceID: agent.workspaceID,
+                            paneID: agent.paneID,
+                            title: "\(host.name) · \(workspaceLabel) · \(title)",
+                            status: agent.status
+                        )
+                    }
+                    lastHerdrStatus[key] = agent.status
                     snapshots.append(
                         .init(
                             host: host.name,
-                            session: session,
-                            index: window.index,
-                            name: "\(window.index): \(displayName)",
-                            status: status.label,
-                            lastLine: Tmux.previewLines(text, count: 12)
+                            session: session.name,
+                            index: workspace?.number ?? 0,
+                            name: "\(workspaceLabel) · \(title)",
+                            status: agent.status.pocketShellLabel,
+                            lastLine: agent.title ?? agent.status.pocketShellLabel,
+                            backend: "herdr",
+                            workspaceID: agent.workspaceID,
+                            paneID: agent.paneID
                         ))
                 }
             }
         }
+        lastHerdrStatus = lastHerdrStatus.filter { herdrKeys.contains($0.key) }
         let transitions = tracker.update(samples)
         for transition in transitions where transition.status == .idle {
             unseenFinished.insert(transition.key)
@@ -255,6 +323,36 @@ final class SessionMonitor: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
+    private func notifyHerdr(
+        host: HostConfig,
+        session: String,
+        workspaceID: String,
+        paneID: String,
+        title: String,
+        status: HerdrAgentStatus
+    ) {
+        let workspaceKey = Self.herdrWorkspaceKey(hostID: host.id, session: session, workspaceID: workspaceID)
+        let agentKey = Self.herdrAgentKey(hostID: host.id, session: session, paneID: paneID)
+        guard visibleWindowKey != workspaceKey, shouldNotify(key: agentKey) else { return }
+        let content = UNMutableNotificationContent()
+        content.title = status == .blocked ? "Agent needs input" : "Agent finished"
+        content.body = title
+        content.sound = .default
+        content.userInfo = [
+            "hostID": host.id.uuidString,
+            "backend": "herdr",
+            "session": session,
+            "workspaceID": workspaceID,
+            "paneID": paneID,
+        ]
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(
+                identifier: "herdr-\(agentKey)-\(Date().timeIntervalSince1970)",
+                content: content,
+                trigger: nil
+            ))
+    }
+
     static func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
@@ -285,6 +383,27 @@ extension AgentStatus {
         case .busy: "busy"
         case .waiting: "needs input"
         case .idle: "idle"
+        }
+    }
+}
+
+extension HerdrAgentStatus {
+    var pocketShellLabel: String {
+        switch self {
+        case .working: "busy"
+        case .blocked: "needs input"
+        case .done: "done"
+        case .idle: "idle"
+        case .unknown: "unknown"
+        }
+    }
+
+    var tabStatus: AgentStatus? {
+        switch self {
+        case .working: .busy
+        case .blocked: .waiting
+        case .done, .idle: .idle
+        case .unknown: nil
         }
     }
 }

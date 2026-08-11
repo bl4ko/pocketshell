@@ -8,14 +8,30 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         public var name: String
         public var status: String
         public var lastLine: String
+        public var backend: String?
+        public var workspaceID: String?
+        public var paneID: String?
 
-        public init(host: String, session: String, index: Int, name: String, status: String, lastLine: String) {
+        public init(
+            host: String,
+            session: String,
+            index: Int,
+            name: String,
+            status: String,
+            lastLine: String,
+            backend: String? = nil,
+            workspaceID: String? = nil,
+            paneID: String? = nil
+        ) {
             self.host = host
             self.session = session
             self.index = index
             self.name = name
             self.status = status
             self.lastLine = lastLine
+            self.backend = backend
+            self.workspaceID = workspaceID
+            self.paneID = paneID
         }
     }
 

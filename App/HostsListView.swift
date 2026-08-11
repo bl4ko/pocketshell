@@ -159,7 +159,7 @@ struct HostsListView: View {
             Spacer()
             summaryItem(windows, status: "busy", color: PocketshellTheme.busy)
             summaryItem(windows, status: "needs input", color: PocketshellTheme.accent, glow: true)
-            summaryItem(windows, status: "idle", color: PocketshellTheme.idle)
+            summaryItem(windows, status: "done", color: PocketshellTheme.idle)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -171,7 +171,9 @@ struct HostsListView: View {
     private func summaryItem(_ windows: [SessionSnapshot.Window], status: String, color: Color, glow: Bool = false)
         -> some View
     {
-        let count = windows.count { $0.status == status }
+        let count = windows.count {
+            status == "done" ? $0.status == "done" || $0.status == "idle" : $0.status == status
+        }
         return HStack(spacing: 4) {
             statusDot(color, glow: glow)
             Text("\(count) \(status)")
@@ -200,11 +202,18 @@ struct HostsListView: View {
 
     private func hostRow(_ host: HostConfig) -> some View {
         let windows = monitor.snapshot?.windows.filter { $0.host == host.name } ?? []
+        let herdrWindows = windows.filter { $0.backend == "herdr" }
         let records = store.savedTabs[host.id.uuidString] ?? []
-        let matchedWindows = records.compactMap { record in
-            windows.first { $0.session == record.tmuxSession && $0.index == record.windowIndex }
+        let displayRecords = records.filter { record in
+            guard let session = record.herdrSession else { return true }
+            return !herdrWindows.contains { $0.session == session }
         }
-        let needsInput = matchedWindows.contains { $0.status == "needs input" }
+        let matchedWindows = displayRecords.compactMap { record in
+            windows.first {
+                $0.backend != "herdr" && $0.session == record.tmuxSession && $0.index == record.windowIndex
+            }
+        }
+        let needsInput = (matchedWindows + herdrWindows).contains { $0.status == "needs input" }
         return NavigationLink(value: host) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
@@ -233,7 +242,7 @@ struct HostsListView: View {
                             .overlay(Capsule().stroke(PocketshellTheme.accentBorder))
                     }
                 }
-                if records.isEmpty {
+                if displayRecords.isEmpty, herdrWindows.isEmpty {
                     HStack {
                         let sessions = store.tmuxSessions(for: host)
                         Text(
@@ -245,7 +254,7 @@ struct HostsListView: View {
                     .font(PocketshellTheme.mono(10))
                     .foregroundStyle(PocketshellTheme.faint)
                 } else {
-                    ForEach(Array(records.enumerated()), id: \.offset) { index, record in
+                    ForEach(Array(displayRecords.enumerated()), id: \.offset) { index, record in
                         let window = windows.first {
                             $0.session == record.tmuxSession && $0.index == record.windowIndex
                         }
@@ -256,6 +265,9 @@ struct HostsListView: View {
                             updatedAt: monitor.snapshot?.updatedAt,
                             unseen: unseenTab(host: host, record: record, window: window)
                         )
+                    }
+                    ForEach(Array(herdrWindows.enumerated()), id: \.offset) { _, window in
+                        herdrRow(host: host, window: window)
                     }
                 }
             }
@@ -276,6 +288,28 @@ struct HostsListView: View {
                 Button(snippet.name) { runningSnippet = SnippetRun(host: host, snippet: snippet) }
             }
             Button("Delete", role: .destructive) { store.hosts.removeAll { $0.id == host.id } }
+        }
+    }
+
+    private func herdrRow(host: HostConfig, window: SessionSnapshot.Window) -> some View {
+        let unseen =
+            window.paneID.map {
+                monitor.unseenFinished.contains(
+                    SessionMonitor.herdrAgentKey(hostID: host.id, session: window.session, paneID: $0))
+            } ?? false
+        return HStack(spacing: 6) {
+            statusDot(unseen ? .blue : statusColor(window.status), glow: unseen || window.status == "needs input")
+            Text(window.name)
+                .font(PocketshellTheme.mono(12, weight: .semibold))
+                .foregroundStyle(PocketshellTheme.body)
+                .lineLimit(1)
+            Text(window.status)
+                .font(PocketshellTheme.mono(10))
+                .foregroundStyle(statusTextColor(window.status))
+            Spacer()
+            Text("herdr")
+                .font(PocketshellTheme.mono(9, weight: .bold))
+                .foregroundStyle(PocketshellTheme.faint)
         }
     }
 

@@ -6,7 +6,15 @@ import Testing
     let snapshot = SessionSnapshot(
         windows: [
             .init(
-                host: "mac-mini", session: "claude", index: 0, name: "0: homeops", status: "busy", lastLine: "$ make"),
+                host: "mac-mini",
+                session: "default",
+                index: 1,
+                name: "PocketShell · Codex",
+                status: "busy",
+                lastLine: "working",
+                backend: "herdr",
+                workspaceID: "w1",
+                paneID: "w1:p1"),
             .init(host: "mac-mini", session: "claude", index: 1, name: "1: slocar", status: "idle", lastLine: ""),
         ],
         updatedAt: Date(timeIntervalSince1970: 1000)
@@ -15,6 +23,7 @@ import Testing
     let data = try JSONEncoder().encode(snapshot)
     let decoded = try JSONDecoder().decode(SessionSnapshot.self, from: data)
     #expect(decoded == snapshot)
+    #expect(decoded.windows[0].workspaceID == "w1")
 }
 
 @Test func snapshotStoreSaveLoadRoundtrip() throws {

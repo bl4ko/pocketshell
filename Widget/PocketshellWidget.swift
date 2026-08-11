@@ -102,7 +102,7 @@ struct PocketshellWidget: Widget {
             SessionsWidgetView(entry: entry)
         }
         .configurationDisplayName("Agent sessions")
-        .description("Status of Claude agent tmux windows.")
+        .description("Status of agents in Herdr and tmux sessions.")
         .supportedFamilies([.systemMedium, .systemLarge, .accessoryRectangular])
     }
 }

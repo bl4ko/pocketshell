@@ -242,6 +242,23 @@ final class ConnectionController: ObservableObject {
         return Herdr.parseSessions(output).filter(\.running)
     }
 
+    func currentHerdrSnapshot() async -> HerdrSnapshot? {
+        guard let connection, case .herdr(let session, _) = pendingShell,
+            let output = try? await connection.exec(Herdr.snapshotCommand(session: session)),
+            let snapshot = Herdr.parseSnapshot(output)
+        else { return nil }
+        pendingShell = .herdr(session: session, workspaceID: snapshot.focusedWorkspaceID)
+        return snapshot
+    }
+
+    func focusHerdrWorkspace(_ workspaceID: String) async {
+        guard let connection, case .herdr(let session, _) = pendingShell else { return }
+        guard
+            (try? await connection.exec(Herdr.focusWorkspaceCommand(session: session, workspaceID: workspaceID))) != nil
+        else { return }
+        pendingShell = .herdr(session: session, workspaceID: workspaceID)
+    }
+
     func tmuxWindows(session: String) async -> [TmuxWindow] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""

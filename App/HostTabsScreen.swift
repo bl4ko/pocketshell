@@ -473,7 +473,28 @@ struct HostTabsScreen: View {
         guard let target = router.pending, target.hostID == host.id else { return }
         router.pending = nil
         guard let session = target.session else { return }
-        openWindowInNewTab(session: session, windowIndex: target.windowIndex)
+        if target.backend == "herdr" {
+            openHerdrSessionInNewTab(session: session, workspaceID: target.workspaceID)
+        } else {
+            openWindowInNewTab(session: session, windowIndex: target.windowIndex)
+        }
+    }
+
+    private func openHerdrSessionInNewTab(session: String, workspaceID: String?) {
+        if let tab = tabs.first(where: { $0.controller.herdrTarget?.session == session }) {
+            selectedTab = tab.id
+            if let workspaceID {
+                Task { await tab.controller.focusHerdrWorkspace(workspaceID) }
+            }
+            return
+        }
+        let controller = makeController()
+        controller.presetHerdr(session: session, workspaceID: workspaceID)
+        let tab = TerminalTab(controller: controller, group: "Herdr · \(session)", number: nextTabNumber)
+        controller.onExit = { closeTab(id: tab.id) }
+        insertTab(tab)
+        selectedTab = tab.id
+        persistTabs()
     }
 
     private func closeTab(id: UUID) {
@@ -645,12 +666,37 @@ struct HostTabsScreen: View {
                 )
             }
             text = snapshot.text
+        } else if tab.controller.isHerdrAttached {
+            guard let snapshot = await tab.controller.currentHerdrSnapshot() else { return nil }
+            let status = snapshot.workspaces.first { $0.id == snapshot.focusedWorkspaceID }?.status.tabStatus
+            updateTabStatus(tab, status: status)
+            if tab.id == selectedTab, let target = tab.controller.herdrTarget, let workspaceID = target.workspaceID {
+                monitor.visibleWindowKey = SessionMonitor.herdrWorkspaceKey(
+                    hostID: host.id, session: target.session, workspaceID: workspaceID)
+                monitor.markHerdrSeen(
+                    hostID: host.id,
+                    session: target.session,
+                    paneIDs: snapshot.agents.filter { $0.workspaceID == workspaceID }.map(\.paneID)
+                )
+            }
+            return nil
         } else {
             text = tab.controller.bridge.visibleText()
             agentRunning = nil
         }
-        let previous = lastTabStatus[tab.id]
         let status = tabResolver.resolve(key: tab.id.uuidString, text: text, agentRunning: agentRunning)
+        updateTabStatus(tab, status: status)
+        tabQuickReplies[tab.id] = status == .waiting ? AgentQuickReply.options(in: text) : []
+        guard let status, !tab.controller.isMultiplexerAttached else { return nil }
+        return .init(
+            key: "tab-\(tab.id.uuidString)",
+            title: "\(host.name) \(tabLabel(tab))",
+            status: status
+        )
+    }
+
+    private func updateTabStatus(_ tab: TerminalTab, status: AgentStatus?) {
+        let previous = lastTabStatus[tab.id]
         tabStatuses[tab.id] = status
         if let status { lastTabStatus[tab.id] = status }
         if tab.id == selectedTab {
@@ -665,13 +711,6 @@ struct HostTabsScreen: View {
         {
             notifyNeedsInput(tab)
         }
-        tabQuickReplies[tab.id] = status == .waiting ? AgentQuickReply.options(in: text) : []
-        guard let status, !tab.controller.isTmuxAttached else { return nil }
-        return .init(
-            key: "tab-\(tab.id.uuidString)",
-            title: "\(host.name) \(tabLabel(tab))",
-            status: status
-        )
     }
 
     private func notifyNeedsInput(_ tab: TerminalTab) {

@@ -35,13 +35,14 @@ public enum HerdrAgentStatus: String, Codable, Equatable, Sendable {
 public struct HerdrWorkspace: Codable, Equatable, Sendable, Identifiable {
     public var id: String { workspaceID }
     public var workspaceID: String
+    public var number: Int
     public var label: String
     public var status: HerdrAgentStatus
     public var focused: Bool
 
     enum CodingKeys: String, CodingKey {
         case workspaceID = "workspace_id"
-        case label, focused
+        case number, label, focused
         case status = "agent_status"
     }
 }

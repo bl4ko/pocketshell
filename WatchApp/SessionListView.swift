@@ -14,10 +14,14 @@ struct SessionListView: View {
                 }
                 if let snapshot = client.snapshot {
                     ForEach(Array(snapshot.windows.enumerated()), id: \.offset) { _, window in
-                        NavigationLink {
-                            ReplyView(window: window)
-                        } label: {
+                        if window.backend == "herdr" {
                             row(window)
+                        } else {
+                            NavigationLink {
+                                ReplyView(window: window)
+                            } label: {
+                                row(window)
+                            }
                         }
                     }
                     Text(snapshot.updatedAt, style: .relative)

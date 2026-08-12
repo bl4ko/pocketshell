@@ -20,7 +20,10 @@
         let composeActive: Bool
         let multiplexer: Bool
         @AppStorage("pocketshell.toolbar.shortcuts") private var panelOpen = false
-        @AppStorage("pocketshell.toolbar.dpad") private var dpadOpen = true
+        // Default off: the extra row resizes the terminal right after attach, and the
+        // caret settle gate then parks on the last pane tmux redrew instead of the
+        // active one (caught by testTmuxRepaintsKeepCaretParked).
+        @AppStorage("pocketshell.toolbar.dpad") private var dpadOpen = false
         @State private var category: ShortcutCategory = .favorites
 
         public init(

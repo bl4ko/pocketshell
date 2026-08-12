@@ -218,6 +218,10 @@ public enum Tmux {
         return send.isEmpty ? enter : "\(send) \\; send-keys -t \(target) Enter"
     }
 
+    public static func paneDirectoryCommand(target: String) -> String {
+        "\(tmux) display-message -p -t \(shellQuote(target)) '#{pane_current_path}'"
+    }
+
     public static func capturePanesCommand(session: String) -> String {
         let target = shellQuote(session)
         return

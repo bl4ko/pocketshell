@@ -313,6 +313,23 @@ final class ConnectionController: ObservableObject {
         return snapshot
     }
 
+    func run(_ command: String) async -> String? {
+        guard let connection else { return nil }
+        return try? await connection.exec(command)
+    }
+
+    /// The directory the attached pane sits in; a plain shell has no pane to ask,
+    /// so the caller falls back to the login directory.
+    func currentDirectory() async -> String? {
+        guard let connection, let cloneTag, case .tmux(let session, _, _) = pendingShell else {
+            return (try? await connection?.exec("pwd"))??.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let target = Tmux.cloneName(session: session, clientTag: cloneTag)
+        let output = try? await connection.exec(Tmux.paneDirectoryCommand(target: target))
+        let path = output?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (path?.isEmpty ?? true) ? nil : path
+    }
+
     func dashboardItems(session: String) async -> [WindowDashboardItem] {
         guard let connection else { return [] }
         let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""

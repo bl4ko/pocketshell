@@ -35,6 +35,7 @@ targets:
           - LockKit
           - MonitorKit
           - SFTPKit
+          - GitKit
       - package: Core
         products:
           - VNCKit

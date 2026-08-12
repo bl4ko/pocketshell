@@ -50,6 +50,7 @@ struct HostTabsScreen: View {
     @State private var showSnippets = false
     @State private var showTmuxJump = false
     @State private var showFiles = false
+    @State private var showDiff = false
     @State private var showForward = false
     @State private var addingSnippet = false
     @State private var editingSnippet: Snippet?
@@ -149,6 +150,12 @@ struct HostTabsScreen: View {
                         Label("Snippets", systemImage: "text.badge.plus")
                     }
                     Button {
+                        showDiff = true
+                    } label: {
+                        Label("Diff", systemImage: "arrow.triangle.branch")
+                    }
+                    .accessibilityIdentifier("menu-diff")
+                    Button {
                         showFiles = true
                     } label: {
                         Label("Files", systemImage: "folder")
@@ -178,6 +185,11 @@ struct HostTabsScreen: View {
                 }
                 .keyboardShortcut("t", modifiers: .command)
                 .accessibilityIdentifier("new-tab")
+            }
+        }
+        .sheet(isPresented: $showDiff) {
+            if let activeController {
+                DiffView(controller: activeController)
             }
         }
         .sheet(isPresented: $showSnippets) {

@@ -481,6 +481,55 @@ final class SmokeUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testKoreanImeComposesInlineAtTheCaret() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed IME test skipped")
+        }
+
+        app.staticTexts["localbox"].firstMatch.tap()
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10))
+        keyboardButton.tap()
+        guard app.keyboards.element.waitForExistence(timeout: 5) else {
+            // The simulator hides it whenever a hardware keyboard is attached, and
+            // xcodebuild-driven runs usually have one.
+            throw XCTSkip("no software keyboard on this simulator")
+        }
+        let consonant = app.keys["ㅇ"]
+        if !consonant.exists {
+            let globe = app.buttons["Next keyboard"]
+            guard globe.exists else {
+                throw XCTSkip("Korean keyboard not installed on this simulator")
+            }
+            for _ in 0..<3 where !consonant.exists {
+                globe.tap()
+                _ = consonant.waitForExistence(timeout: 2)
+            }
+        }
+        guard consonant.exists else {
+            throw XCTSkip("Korean keyboard not installed on this simulator")
+        }
+
+        // Marked text is not sent to the host and SwiftTerm does not draw it, so the
+        // overlay is the only proof the user sees what they are composing.
+        consonant.tap()
+        let composition = app.otherElements["terminal.composition"]
+        XCTAssertTrue(composition.waitForExistence(timeout: 3))
+        XCTAssertEqual(composition.value as? String, "ㅇ")
+        app.keys["ㅏ"].tap()
+        XCTAssertEqual(composition.value as? String, "아")
+        app.keys["ㄴ"].tap()
+        XCTAssertEqual(composition.value as? String, "안")
+
+        // Space commits the composition: the bytes go to the shell and nothing is left over.
+        app.keys["space"].tap()
+        let cleared = NSPredicate(format: "value == ''")
+        expectation(for: cleared, evaluatedWith: composition)
+        waitForExpectations(timeout: 3)
+    }
+
     func testSettingsThemeSelection() {
         app.buttons["Settings"].tap()
         let dracula = app.buttons["Dracula"]

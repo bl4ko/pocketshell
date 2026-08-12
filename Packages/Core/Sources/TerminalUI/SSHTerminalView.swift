@@ -212,6 +212,12 @@
             view.inputAccessoryView = nil
             view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
+            let composition = IMECompositionView()
+            view.addSubview(composition)
+            view.markedTextObserver = { [weak view, weak composition] text, clause in
+                guard let view, let composition else { return }
+                composition.update(text: text, clause: clause, in: view)
+            }
             #if targetEnvironment(macCatalyst)
                 controller.sendControl = { [weak bridge] character in
                     guard let data = ToolbarKeyEncoder.applyCtrl(to: character) else { return }

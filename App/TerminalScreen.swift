@@ -104,7 +104,8 @@ struct TerminalScreen: View {
                             }
                         },
                         selectActive: connection.bridge.selectMode,
-                        composeActive: connection.composerVisible
+                        composeActive: connection.composerVisible,
+                        multiplexer: connection.isMultiplexerAttached
                     )
                 #endif
             }

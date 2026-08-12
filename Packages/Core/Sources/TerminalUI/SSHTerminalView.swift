@@ -276,6 +276,10 @@
                 )
                 swipe.direction = direction
                 swipe.delegate = gestureDelegate
+                // A swipe that swallows or delays touches costs the terminal its
+                // taps, and an unfocused terminal draws no caret.
+                swipe.cancelsTouchesInView = false
+                swipe.delaysTouchesEnded = false
                 view.addGestureRecognizer(swipe)
             }
             let linkPress = UILongPressGestureRecognizer(

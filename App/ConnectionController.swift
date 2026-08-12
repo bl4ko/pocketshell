@@ -25,7 +25,16 @@ final class ConnectionController: ObservableObject {
     // Composer state lives here, not in the view: HostTabsScreen state dies on navigation
     // and a half-written prompt must survive a trip to the session list.
     @Published var composerVisible = false
-    @Published var composerDraft = ""
+    // Per host, not per tab: HostTabsScreen state (and this controller with it) dies on
+    // navigation, and losing a half-written prompt on a trip to the session list is worse
+    // than two tabs on one host sharing a draft.
+    @Published var composerDraft = "" {
+        didSet { UserDefaults.standard.set(composerDraft, forKey: Self.draftKey(host)) }
+    }
+
+    private static func draftKey(_ host: HostConfig) -> String {
+        "pocketshell.composerDraft.\(host.id.uuidString)"
+    }
     let bridge = TerminalBridge()
     var onExit: (() -> Void)?
 
@@ -59,6 +68,8 @@ final class ConnectionController: ObservableObject {
         self.key = key
         self.knownHosts = knownHosts
         self.hops = hops
+        composerDraft = UserDefaults.standard.string(forKey: Self.draftKey(host)) ?? ""
+        composerVisible = !composerDraft.isEmpty
     }
 
     func start() async {

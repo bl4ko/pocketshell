@@ -83,9 +83,8 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed smoke skipped")
         }
 
-        let hostRow = app.staticTexts["localbox"].firstMatch
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
 
         let escKey = app.buttons["esc"].firstMatch
         XCTAssertTrue(escKey.waitForExistence(timeout: 10))
@@ -121,7 +120,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(theme.isSelected)
         app.navigationBars.buttons.firstMatch.tap()
 
-        app.staticTexts["localbox"].firstMatch.tap()
+        openHost("localbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.typeText("printf '\\033]11;#000000\\007'\n")
@@ -179,9 +178,8 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("status fixtures not set; tmux status e2e skipped")
         }
 
-        let hostRow = app.staticTexts["localbox"].firstMatch
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
 
         let tabs = (1...3).map { app.descendants(matching: .any)["terminal-tab-\($0)"] }
@@ -218,8 +216,8 @@ final class SmokeUITests: XCTestCase {
 
         firstGroup.tap()
         app.buttons["Back"].tap()
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(firstGroup.waitForExistence(timeout: 3))
         XCTAssertTrue(firstGroup.label.contains("collapsed"))
@@ -241,9 +239,8 @@ final class SmokeUITests: XCTestCase {
 
         let alternateHost = "backupbox-with-a-very-long-name"
         addHost(named: alternateHost, port: port, user: user)
-        let hostRow = app.staticTexts["localbox"].firstMatch
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
 
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         let hostSwitcher = app.descendants(matching: .any)["host-switcher"]
@@ -259,6 +256,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertLessThan(back.frame.maxX, switchedHost.frame.minX)
         for _ in 0..<7 {
             app.buttons["new-tab"].tap()
+            dismissSessionPicker()
         }
         XCTAssertTrue(hostSwitcher.isHittable)
         let hostTitleScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -366,7 +364,7 @@ final class SmokeUITests: XCTestCase {
         }
 
         addHost(named: "windowbox", port: port, user: user)
-        app.staticTexts["windowbox"].firstMatch.tap()
+        openHost("windowbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         app.buttons["tmux-sessions"].firstMatch.tap()
 
@@ -451,7 +449,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed keyboard test skipped")
         }
 
-        app.staticTexts["localbox"].firstMatch.tap()
+        openHost("localbox")
         let keyboardButton = app.buttons["terminal.keyboard"]
         XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10))
         let terminal = app.textViews["terminal.view"]
@@ -486,7 +484,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed composer test skipped")
         }
 
-        app.staticTexts["localbox"].firstMatch.tap()
+        openHost("localbox")
         XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
         // Cmd-J opens it: toolbar buttons in the clipped keyboard row are not reliably
         // hittable from XCUITest, and the shortcut is the same path an iPad user takes.
@@ -524,7 +522,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed IME test skipped")
         }
 
-        app.staticTexts["localbox"].firstMatch.tap()
+        openHost("localbox")
         let keyboardButton = app.buttons["terminal.keyboard"]
         guard keyboardButton.waitForExistence(timeout: 15) else {
             throw XCTSkip("terminal toolbar never appeared")
@@ -614,6 +612,22 @@ final class SmokeUITests: XCTestCase {
             }
         }
         return false
+    }
+
+    /// Opens a saved host and lands in a terminal.
+    ///
+    /// A host that already has tmux or Herdr sessions shows the session picker first, so a
+    /// test that wants a shell has to say so; on a host with no sessions it never appears.
+    private func openHost(_ name: String) {
+        app.staticTexts[name].firstMatch.tap()
+        dismissSessionPicker()
+    }
+
+    private func dismissSessionPicker() {
+        let plainShell = app.buttons["Plain shell"].firstMatch
+        if plainShell.waitForExistence(timeout: 5) {
+            plainShell.tap()
+        }
     }
 
     private func addHost(named name: String, port: String, user: String) {

@@ -175,6 +175,7 @@ struct HostTabsScreen: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("terminal.more")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

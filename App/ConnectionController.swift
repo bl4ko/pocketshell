@@ -2,6 +2,7 @@ import Foundation
 import HerdrKit
 import KeyKit
 import Models
+import MonitorKit
 import Network
 import ReconnectKit
 import SSHKit
@@ -311,6 +312,26 @@ final class ConnectionController: ObservableObject {
         pendingShell = .tmux(
             session: session, windowIndex: snapshot.windowIndex, windowID: snapshot.windowID ?? windowID)
         return snapshot
+    }
+
+    func recentDirectories() async -> [RecentDirectory] {
+        guard let connection else { return [] }
+        let output = (try? await connection.exec(AgentHistory.recentDirectoriesCommand())) ?? ""
+        return AgentHistory.parseRecentDirectories(output)
+    }
+
+    /// Opens a tmux window rooted in `path`, so a directory picked from history
+    /// keeps the persistence a plain shell would not.
+    func openDirectory(_ path: String) async {
+        guard let connection else { return }
+        let folder = (path as NSString).lastPathComponent
+        guard let session = host.tmuxSession else {
+            _ = try? await connection.exec(Tmux.newSessionCommand(name: folder, directory: path))
+            await jump(toSession: folder, windowIndex: nil)
+            return
+        }
+        let output = (try? await connection.exec(Tmux.newWindowCommand(session: session, directory: path))) ?? ""
+        await jump(toSession: session, windowIndex: Tmux.parseCurrentWindow(output))
     }
 
     func run(_ command: String) async -> String? {

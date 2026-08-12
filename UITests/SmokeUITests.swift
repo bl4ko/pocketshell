@@ -479,6 +479,24 @@ final class SmokeUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testDiffSheetListsTheWorkingTree() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed diff test skipped")
+        }
+
+        openHost("localbox")
+        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        app.buttons["terminal.more"].firstMatch.tap()
+        let diffItem = app.buttons["menu-diff"].firstMatch
+        XCTAssertTrue(diffItem.waitForExistence(timeout: 5))
+        diffItem.tap()
+        // The login directory is the developer's home: either a clean tree, a
+        // real diff, or "not a git repository" — all of them mean the sheet ran.
+        XCTAssertTrue(app.buttons["diff.reload"].waitForExistence(timeout: 15))
+        app.buttons["Close"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+    }
+
     func testComposerSendsAPromptAndKeepsTheDraftAcrossNavigation() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed composer test skipped")

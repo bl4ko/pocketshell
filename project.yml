@@ -78,7 +78,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: App/pocketshell-mac.entitlements
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.2.0
+        MARKETING_VERSION: 0.3.0
         SWIFT_VERSION: "6.0"
   pocketshellWatch:
     type: application
@@ -103,7 +103,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.2.0
+        MARKETING_VERSION: 0.3.0
         SWIFT_VERSION: "6.0"
   pocketshellWidget:
     type: app-extension
@@ -133,7 +133,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Widget/pocketshellWidget-mac.entitlements
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.2.0
+        MARKETING_VERSION: 0.3.0
         SWIFT_VERSION: "6.0"
         SKIP_INSTALL: YES
   pocketshellUITests:

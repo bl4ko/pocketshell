@@ -431,12 +431,18 @@ public enum Tmux {
         name.contains(/-psh-[[:alnum:]]+$/)
     }
 
-    public static func newSessionCommand(name: String) -> String {
-        "\(tmux) new-session -d -s \(shellQuote(name))"
+    public static func newSessionCommand(name: String, directory: String? = nil) -> String {
+        let start = directory.map { " -c \(shellQuote($0))" } ?? ""
+        return "\(tmux) new-session -d -s \(shellQuote(name))\(start)"
     }
 
     public static func newWindowCommand(session: String) -> String {
         "\(tmux) new-window -t \(shellQuote(session))"
+    }
+
+    /// Prints the new window's index so the caller can attach to it directly.
+    public static func newWindowCommand(session: String, directory: String) -> String {
+        "\(tmux) new-window -t \(shellQuote(session)) -c \(shellQuote(directory)) -P -F '#{window_index}'"
     }
 
     public static func renameWindowCommand(session: String, windowIndex: Int, name: String) -> String {

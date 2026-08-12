@@ -139,9 +139,11 @@ if ! xcrun simctl list devices available | grep -q "$SIM ("; then
     echo "PS_TEST_SIM not available, using: $SIM"
 fi
 xcrun simctl boot "$SIM" 2>/dev/null || true
+# Extra keyboards for the IME test; SpringBoard only reads the list at launch.
 xcrun simctl spawn "$SIM" defaults write -g AppleKeyboards -array \
     "en_US@sw=QWERTY;hw=Automatic" "ja_JP-Romaji@sw=Japanese-Romaji;hw=Automatic" \
     "ko_KR@sw=Korean 2-set;hw=Automatic" 2>/dev/null || true
+xcrun simctl spawn "$SIM" launchctl stop com.apple.SpringBoard 2>/dev/null || true
 xcrun simctl uninstall "$SIM" com.bl4ko.pocketshell 2>/dev/null || true
 if [ "$#" -eq 0 ]; then
     set -- "-only-testing:pocketshellUITests"

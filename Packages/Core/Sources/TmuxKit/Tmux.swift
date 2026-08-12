@@ -208,10 +208,14 @@ public enum Tmux {
     }
 
     public static func sendKeysCommand(session: String, windowIndex: Int, text: String, pressEnter: Bool) -> String {
-        let target = "\(shellQuote(session)):\(windowIndex)"
-        let send = "\(tmux) send-keys -t \(target) -l \(shellQuote(text))"
+        sendKeysCommand(target: "\(shellQuote(session)):\(windowIndex)", text: text, pressEnter: pressEnter)
+    }
+
+    public static func sendKeysCommand(target: String, text: String, pressEnter: Bool) -> String {
+        let send = text.isEmpty ? "" : "\(tmux) send-keys -t \(target) -l \(shellQuote(text))"
         guard pressEnter else { return send }
-        return "\(send) \\; send-keys -t \(target) Enter"
+        let enter = "\(tmux) send-keys -t \(target) Enter"
+        return send.isEmpty ? enter : "\(send) \\; send-keys -t \(target) Enter"
     }
 
     public static func capturePanesCommand(session: String) -> String {

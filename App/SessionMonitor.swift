@@ -50,8 +50,14 @@ final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDe
                 workspaceID: info["workspaceID"] as? String,
                 paneID: info["paneID"] as? String
             )
-            Task { @MainActor in
-                NotificationRouter.shared.pending = target
+            if let choice = AgentApproval.Choice(rawValue: response.actionIdentifier) {
+                Task { @MainActor in
+                    await ApprovalService.shared.respond(to: target, choice: choice)
+                }
+            } else {
+                Task { @MainActor in
+                    NotificationRouter.shared.pending = target
+                }
             }
         }
         completionHandler()
@@ -312,6 +318,9 @@ final class SessionMonitor: ObservableObject {
         content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"
         content.body = transition.title
         content.sound = .default
+        if transition.status == .waiting {
+            content.categoryIdentifier = ApprovalService.category
+        }
         if let userInfo {
             content.userInfo = userInfo
         }
@@ -339,6 +348,9 @@ final class SessionMonitor: ObservableObject {
         content.title = status == .blocked ? "Agent needs input" : "Agent finished"
         content.body = title
         content.sound = .default
+        if status == .blocked {
+            content.categoryIdentifier = ApprovalService.category
+        }
         content.userInfo = [
             "hostID": host.id.uuidString,
             "backend": "herdr",

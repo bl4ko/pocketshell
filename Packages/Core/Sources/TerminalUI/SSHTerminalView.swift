@@ -269,6 +269,15 @@
                 action: #selector(Coordinator.handlePinch(_:))
             )
             view.addGestureRecognizer(pinch)
+            for direction in [UISwipeGestureRecognizer.Direction.left, .right] {
+                let swipe = UISwipeGestureRecognizer(
+                    target: context.coordinator,
+                    action: #selector(Coordinator.handleWindowSwipe(_:))
+                )
+                swipe.direction = direction
+                swipe.delegate = gestureDelegate
+                view.addGestureRecognizer(swipe)
+            }
             let linkPress = UILongPressGestureRecognizer(
                 target: context.coordinator,
                 action: #selector(Coordinator.handleLinkPress(_:))
@@ -381,6 +390,16 @@
                     x: col,
                     y: row
                 )
+            }
+
+            /// Horizontal swipe walks tmux windows; a plain shell would just get the
+            /// prefix bytes, so it only fires while attached to a multiplexer.
+            @objc func handleWindowSwipe(_ gesture: UISwipeGestureRecognizer) {
+                MainActor.assumeIsolated {
+                    guard let view = gesture.view as? TerminalView, view.multiplexerMode else { return }
+                    noteUserPresence()
+                    bridge.processOutgoing(Data("\u{02}\(gesture.direction == .left ? "n" : "p")".utf8))
+                }
             }
 
             @objc func handleLinkPress(_ gesture: UILongPressGestureRecognizer) {

@@ -247,6 +247,12 @@ struct HostsListView: View {
                             .overlay(Capsule().stroke(PocketshellTheme.accentBorder))
                     }
                 }
+                let attention =
+                    attentionRows(host: host, records: displayRecords, windows: windows)
+                    + herdrWindows.filter { $0.status != "idle" || herdrUnseen(host: host, window: $0) }
+                    .map {
+                        AttentionRow(label: $0.name, status: $0.status, unseen: herdrUnseen(host: host, window: $0))
+                    }
                 if displayRecords.isEmpty, herdrWindows.isEmpty {
                     HStack {
                         let sessions = store.tmuxSessions(for: host)
@@ -259,20 +265,9 @@ struct HostsListView: View {
                     .font(PocketshellTheme.mono(10))
                     .foregroundStyle(PocketshellTheme.faint)
                 } else {
-                    ForEach(Array(displayRecords.enumerated()), id: \.offset) { index, record in
-                        let window = windows.first {
-                            $0.session == record.tmuxSession && $0.index == record.windowIndex
-                        }
-                        tabRow(
-                            record,
-                            index: index,
-                            window: window,
-                            updatedAt: monitor.snapshot?.updatedAt,
-                            unseen: unseenTab(host: host, record: record, window: window)
-                        )
-                    }
-                    ForEach(Array(herdrWindows.enumerated()), id: \.offset) { _, window in
-                        herdrRow(host: host, window: window)
+                    statusSummary(records: displayRecords, windows: windows, herdr: herdrWindows)
+                    ForEach(attention.prefix(4)) { row in
+                        attentionRow(row)
                     }
                 }
             }
@@ -296,25 +291,70 @@ struct HostsListView: View {
         }
     }
 
-    private func herdrRow(host: HostConfig, window: SessionSnapshot.Window) -> some View {
-        let unseen =
-            window.paneID.map {
-                monitor.unseenFinished.contains(
-                    SessionMonitor.herdrAgentKey(hostID: host.id, session: window.session, paneID: $0))
-            } ?? false
-        return HStack(spacing: 6) {
-            statusDot(unseen ? .blue : statusColor(window.status), glow: unseen || window.status == "needs input")
-            Text(window.name)
+    private func herdrUnseen(host: HostConfig, window: SessionSnapshot.Window) -> Bool {
+        window.paneID.map {
+            monitor.unseenFinished.contains(
+                SessionMonitor.herdrAgentKey(hostID: host.id, session: window.session, paneID: $0))
+        } ?? false
+    }
+
+    /// Only the tabs worth surfacing on the hosts list: busy, waiting, or finished-unseen.
+    private func attentionRows(host: HostConfig, records: [TabRecord], windows: [SessionSnapshot.Window])
+        -> [AttentionRow]
+    {
+        records.enumerated().compactMap { index, record in
+            let window = windows.first { $0.session == record.tmuxSession && $0.index == record.windowIndex }
+            let unseen = unseenTab(host: host, record: record, window: window)
+            guard let status = window?.status, status != "idle" || unseen else { return nil }
+            return AttentionRow(
+                label: record.name ?? window.map(windowName) ?? "tab \(index + 1)",
+                status: status,
+                unseen: unseen
+            )
+        }
+    }
+
+    private func statusSummary(
+        records: [TabRecord],
+        windows: [SessionSnapshot.Window],
+        herdr: [SessionSnapshot.Window]
+    ) -> some View {
+        let matched =
+            records.compactMap { record in
+                windows.first { $0.session == record.tmuxSession && $0.index == record.windowIndex }
+            } + herdr
+        let counts = Dictionary(grouping: matched, by: \.status).mapValues(\.count)
+        return HStack(spacing: 10) {
+            ForEach(["busy", "needs input", "idle"], id: \.self) { status in
+                if let count = counts[status], count > 0 {
+                    HStack(spacing: 4) {
+                        statusDot(statusColor(status), glow: status == "needs input")
+                        Text("\(count) \(status)")
+                            .font(PocketshellTheme.mono(10))
+                            .foregroundStyle(statusTextColor(status))
+                    }
+                }
+            }
+            Spacer()
+            if let updatedAt = monitor.snapshot?.updatedAt, !matched.isEmpty {
+                Text(age(updatedAt))
+                    .font(PocketshellTheme.mono(10))
+                    .foregroundStyle(PocketshellTheme.faint)
+            }
+        }
+    }
+
+    private func attentionRow(_ row: AttentionRow) -> some View {
+        HStack(spacing: 6) {
+            statusDot(row.unseen ? .blue : statusColor(row.status), glow: row.unseen || row.status == "needs input")
+            Text(row.label)
                 .font(PocketshellTheme.mono(12, weight: .semibold))
                 .foregroundStyle(PocketshellTheme.body)
                 .lineLimit(1)
-            Text(window.status)
+            Text(row.unseen ? "done" : row.status)
                 .font(PocketshellTheme.mono(10))
-                .foregroundStyle(statusTextColor(window.status))
+                .foregroundStyle(statusTextColor(row.status))
             Spacer()
-            Text("herdr")
-                .font(PocketshellTheme.mono(9, weight: .bold))
-                .foregroundStyle(PocketshellTheme.faint)
         }
     }
 
@@ -324,37 +364,6 @@ struct HostsListView: View {
         }
         return monitor.unseenFinished.contains(
             SessionMonitor.windowKey(hostID: host.id, session: session, windowIndex: index))
-    }
-
-    private func tabRow(
-        _ record: TabRecord,
-        index: Int,
-        window: SessionSnapshot.Window?,
-        updatedAt: Date?,
-        unseen: Bool
-    ) -> some View {
-        let status = window?.status
-        let label = record.name ?? window.map(windowName) ?? "tab \(index + 1)"
-        return HStack(spacing: 6) {
-            if let status {
-                statusDot(unseen ? .blue : statusColor(status), glow: unseen || status == "needs input")
-            }
-            Text(label)
-                .font(PocketshellTheme.mono(12, weight: .semibold))
-                .foregroundStyle(status == "idle" ? PocketshellTheme.muted : PocketshellTheme.body)
-                .lineLimit(1)
-            if let status {
-                Text(status)
-                    .font(PocketshellTheme.mono(10))
-                    .foregroundStyle(statusTextColor(status))
-            }
-            Spacer()
-            if status != nil, let updatedAt {
-                Text(age(updatedAt))
-                    .font(PocketshellTheme.mono(10))
-                    .foregroundStyle(PocketshellTheme.faint)
-            }
-        }
     }
 
     private func windowName(_ window: SessionSnapshot.Window) -> String {
@@ -425,6 +434,13 @@ struct HostsListView: View {
             $0.runMode == .execAndShowOutput && ($0.hostID == nil || $0.hostID == host.id)
         }
     }
+}
+
+struct AttentionRow: Identifiable {
+    let label: String
+    let status: String
+    let unseen: Bool
+    var id: String { "\(label)|\(status)|\(unseen)" }
 }
 
 struct SnippetRun: Identifiable {

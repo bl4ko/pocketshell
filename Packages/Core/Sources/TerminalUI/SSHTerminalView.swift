@@ -269,6 +269,14 @@
                 action: #selector(Coordinator.handlePinch(_:))
             )
             view.addGestureRecognizer(pinch)
+            let linkPress = UILongPressGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handleLinkPress(_:))
+            )
+            linkPress.minimumPressDuration = 0.5
+            linkPress.delegate = gestureDelegate
+            linkPress.cancelsTouchesInView = false
+            view.addGestureRecognizer(linkPress)
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
             let base = FontZoom.range.contains(saved) ? saved : Double(view.font.pointSize)
             view.font = UIFont.monospacedSystemFont(
@@ -373,6 +381,43 @@
                     x: col,
                     y: row
                 )
+            }
+
+            @objc func handleLinkPress(_ gesture: UILongPressGestureRecognizer) {
+                MainActor.assumeIsolated {
+                    guard gesture.state == .began, let view = gesture.view as? TerminalView else { return }
+                    let terminal = view.getTerminal()
+                    let location = gesture.location(in: view)
+                    let row = clamp(
+                        Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                    let col = clamp(
+                        Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
+                    let lines = (0..<terminal.rows).map {
+                        terminal.getLine(row: $0)?.translateToString(trimRight: false) ?? ""
+                    }
+                    let wrapped = (0..<terminal.rows).map { terminal.getLine(row: $0)?.isWrapped ?? false }
+                    guard let link = TerminalURL.find(lines: lines, wrapped: wrapped, row: row, column: col),
+                        let url = URL(string: link)
+                    else { return }
+                    presentLinkMenu(for: url, in: view, at: location)
+                }
+            }
+
+            @MainActor private func presentLinkMenu(for url: URL, in view: UIView, at point: CGPoint) {
+                guard let controller = view.window?.rootViewController else { return }
+                let sheet = UIAlertController(title: url.absoluteString, message: nil, preferredStyle: .actionSheet)
+                sheet.addAction(
+                    UIAlertAction(title: "Open Link", style: .default) { _ in
+                        UIApplication.shared.open(url)
+                    })
+                sheet.addAction(
+                    UIAlertAction(title: "Copy Link", style: .default) { _ in
+                        UIPasteboard.general.string = url.absoluteString
+                    })
+                sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+                sheet.popoverPresentationController?.sourceView = view
+                sheet.popoverPresentationController?.sourceRect = CGRect(origin: point, size: .zero)
+                controller.present(sheet, animated: true)
             }
 
             // Attaching from another device wins tmux's window-size latest with no

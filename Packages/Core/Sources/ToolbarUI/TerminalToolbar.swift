@@ -65,7 +65,9 @@
         let onPaste: (() -> Void)?
         let onCopy: (() -> Void)?
         let onToggleSelect: (() -> Void)?
+        let onCompose: (() -> Void)?
         let selectActive: Bool
+        let composeActive: Bool
         @State private var prefixPaletteActive = false
 
         public init(
@@ -78,7 +80,9 @@
             onPaste: (() -> Void)? = nil,
             onCopy: (() -> Void)? = nil,
             onToggleSelect: (() -> Void)? = nil,
-            selectActive: Bool = false
+            onCompose: (() -> Void)? = nil,
+            selectActive: Bool = false,
+            composeActive: Bool = false
         ) {
             self.keys = keys
             self.theme = theme
@@ -89,7 +93,9 @@
             self.onPaste = onPaste
             self.onCopy = onCopy
             self.onToggleSelect = onToggleSelect
+            self.onCompose = onCompose
             self.selectActive = selectActive
+            self.composeActive = composeActive
         }
 
         public var body: some View {
@@ -122,6 +128,17 @@
                                 if selectActive { onCopy?() } else { onPaste() }
                             }
                             .accessibilityIdentifier("terminal.clipboard")
+                        }
+                        // In the scrolling row, not the pinned cluster: a ninth pinned
+                        // button gets clipped off the right edge and stops being tappable.
+                        if let onCompose {
+                            Button {
+                                onCompose()
+                            } label: {
+                                keyLabel(icon: "text.bubble", active: composeActive)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("terminal.compose")
                         }
                         if !quickReplyOptions.isEmpty {
                             HStack(spacing: 5) {

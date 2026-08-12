@@ -22,6 +22,10 @@ final class ConnectionController: ObservableObject {
 
     @Published var phase: Phase = .idle
     @Published var findVisible = false
+    // Composer state lives here, not in the view: HostTabsScreen state dies on navigation
+    // and a half-written prompt must survive a trip to the session list.
+    @Published var composerVisible = false
+    @Published var composerDraft = ""
     let bridge = TerminalBridge()
     var onExit: (() -> Void)?
 

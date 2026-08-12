@@ -133,6 +133,12 @@ struct HostTabsScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
+                        activeController?.composerVisible = true
+                    } label: {
+                        Label("Compose", systemImage: "text.bubble")
+                    }
+                    .accessibilityIdentifier("menu-compose")
+                    Button {
                         activeController?.findVisible = true
                     } label: {
                         Label("Find", systemImage: "magnifyingglass")
@@ -740,6 +746,8 @@ struct HostTabsScreen: View {
                 .keyboardShortcut("w", modifiers: .command)
             Button("") { activeController?.findVisible = true }
                 .keyboardShortcut("f", modifiers: .command)
+            Button("") { activeController?.composerVisible.toggle() }
+                .keyboardShortcut("j", modifiers: .command)
             Button("") { cycleTab(by: -1) }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
             Button("") { cycleTab(by: 1) }

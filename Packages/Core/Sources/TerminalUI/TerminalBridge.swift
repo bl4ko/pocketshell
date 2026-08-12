@@ -102,6 +102,16 @@
             view?.paste(nil)
         }
 
+        /// Sends a prompt composed outside the terminal into the live session.
+        public func sendComposed(_ text: String) {
+            let payload = ComposerMessage.payload(
+                text,
+                bracketedPaste: view?.getTerminal().bracketedPasteMode == true
+            )
+            guard !payload.isEmpty else { return }
+            processOutgoing(Data(payload.utf8))
+        }
+
         public func sendPasted(_ text: String) {
             guard view?.getTerminal().bracketedPasteMode == true else {
                 sendToHost?(Data(text.utf8))

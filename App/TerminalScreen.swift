@@ -67,6 +67,17 @@ struct TerminalScreen: View {
                     multiplexerMode: connection.isMultiplexerAttached
                 )
                 .focusEffectDisabled()
+                if connection.composerVisible {
+                    ComposerBar(
+                        text: $connection.composerDraft,
+                        theme: TerminalTheme.named(themeName),
+                        onSend: { connection.bridge.sendComposed(connection.composerDraft) },
+                        onClose: {
+                            connection.composerVisible = false
+                            connection.bridge.setTerminalFocused(true)
+                        }
+                    )
+                }
                 #if !targetEnvironment(macCatalyst)
                     TerminalToolbar(
                         keys: store.toolbarKeys,
@@ -86,7 +97,14 @@ struct TerminalScreen: View {
                         onPaste: { connection.bridge.paste() },
                         onCopy: { connection.bridge.copySelection() },
                         onToggleSelect: { connection.bridge.toggleSelectMode() },
-                        selectActive: connection.bridge.selectMode
+                        onCompose: {
+                            connection.composerVisible.toggle()
+                            if !connection.composerVisible {
+                                connection.bridge.setTerminalFocused(true)
+                            }
+                        },
+                        selectActive: connection.bridge.selectMode,
+                        composeActive: connection.composerVisible
                     )
                 #endif
             }

@@ -50,6 +50,7 @@ struct HostTabsScreen: View {
     @State private var showSnippets = false
     @State private var showTmuxJump = false
     @State private var showFiles = false
+    @State private var showDiff = false
     @State private var showForward = false
     @State private var addingSnippet = false
     @State private var editingSnippet: Snippet?
@@ -133,6 +134,12 @@ struct HostTabsScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
+                        activeController?.composerVisible = true
+                    } label: {
+                        Label("Compose", systemImage: "text.bubble")
+                    }
+                    .accessibilityIdentifier("menu-compose")
+                    Button {
                         activeController?.findVisible = true
                     } label: {
                         Label("Find", systemImage: "magnifyingglass")
@@ -142,6 +149,12 @@ struct HostTabsScreen: View {
                     } label: {
                         Label("Snippets", systemImage: "text.badge.plus")
                     }
+                    Button {
+                        showDiff = true
+                    } label: {
+                        Label("Diff", systemImage: "arrow.triangle.branch")
+                    }
+                    .accessibilityIdentifier("menu-diff")
                     Button {
                         showFiles = true
                     } label: {
@@ -162,6 +175,7 @@ struct HostTabsScreen: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("terminal.more")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -172,6 +186,11 @@ struct HostTabsScreen: View {
                 }
                 .keyboardShortcut("t", modifiers: .command)
                 .accessibilityIdentifier("new-tab")
+            }
+        }
+        .sheet(isPresented: $showDiff) {
+            if let activeController {
+                DiffView(controller: activeController)
             }
         }
         .sheet(isPresented: $showSnippets) {
@@ -740,6 +759,8 @@ struct HostTabsScreen: View {
                 .keyboardShortcut("w", modifiers: .command)
             Button("") { activeController?.findVisible = true }
                 .keyboardShortcut("f", modifiers: .command)
+            Button("") { activeController?.composerVisible.toggle() }
+                .keyboardShortcut("j", modifiers: .command)
             Button("") { cycleTab(by: -1) }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
             Button("") { cycleTab(by: 1) }

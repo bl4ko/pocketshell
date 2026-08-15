@@ -2,6 +2,7 @@ import Foundation
 import HerdrKit
 import KeyKit
 import Models
+import MonitorKit
 import Network
 import ReconnectKit
 import SSHKit
@@ -22,6 +23,19 @@ final class ConnectionController: ObservableObject {
 
     @Published var phase: Phase = .idle
     @Published var findVisible = false
+    // Composer state lives here, not in the view: HostTabsScreen state dies on navigation
+    // and a half-written prompt must survive a trip to the session list.
+    @Published var composerVisible = false
+    // Per host, not per tab: HostTabsScreen state (and this controller with it) dies on
+    // navigation, and losing a half-written prompt on a trip to the session list is worse
+    // than two tabs on one host sharing a draft.
+    @Published var composerDraft = "" {
+        didSet { UserDefaults.standard.set(composerDraft, forKey: Self.draftKey(host)) }
+    }
+
+    private static func draftKey(_ host: HostConfig) -> String {
+        "pocketshell.composerDraft.\(host.id.uuidString)"
+    }
     let bridge = TerminalBridge()
     var onExit: (() -> Void)?
 
@@ -55,6 +69,8 @@ final class ConnectionController: ObservableObject {
         self.key = key
         self.knownHosts = knownHosts
         self.hops = hops
+        composerDraft = UserDefaults.standard.string(forKey: Self.draftKey(host)) ?? ""
+        composerVisible = !composerDraft.isEmpty
     }
 
     func start() async {
@@ -296,6 +312,43 @@ final class ConnectionController: ObservableObject {
         pendingShell = .tmux(
             session: session, windowIndex: snapshot.windowIndex, windowID: snapshot.windowID ?? windowID)
         return snapshot
+    }
+
+    func recentDirectories() async -> [RecentDirectory] {
+        guard let connection else { return [] }
+        let output = (try? await connection.exec(AgentHistory.recentDirectoriesCommand())) ?? ""
+        return AgentHistory.parseRecentDirectories(output)
+    }
+
+    /// Opens a tmux window rooted in `path`, so a directory picked from history
+    /// keeps the persistence a plain shell would not.
+    func openDirectory(_ path: String) async {
+        guard let connection else { return }
+        let folder = (path as NSString).lastPathComponent
+        guard let session = host.tmuxSession else {
+            _ = try? await connection.exec(Tmux.newSessionCommand(name: folder, directory: path))
+            await jump(toSession: folder, windowIndex: nil)
+            return
+        }
+        let output = (try? await connection.exec(Tmux.newWindowCommand(session: session, directory: path))) ?? ""
+        await jump(toSession: session, windowIndex: Tmux.parseCurrentWindow(output))
+    }
+
+    func run(_ command: String) async -> String? {
+        guard let connection else { return nil }
+        return try? await connection.exec(command)
+    }
+
+    /// The directory the attached pane sits in; a plain shell has no pane to ask,
+    /// so the caller falls back to the login directory.
+    func currentDirectory() async -> String? {
+        guard let connection, let cloneTag, case .tmux(let session, _, _) = pendingShell else {
+            return (try? await connection?.exec("pwd"))??.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let target = Tmux.cloneName(session: session, clientTag: cloneTag)
+        let output = try? await connection.exec(Tmux.paneDirectoryCommand(target: target))
+        let path = output?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (path?.isEmpty ?? true) ? nil : path
     }
 
     func dashboardItems(session: String) async -> [WindowDashboardItem] {

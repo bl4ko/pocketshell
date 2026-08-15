@@ -208,10 +208,18 @@ public enum Tmux {
     }
 
     public static func sendKeysCommand(session: String, windowIndex: Int, text: String, pressEnter: Bool) -> String {
-        let target = "\(shellQuote(session)):\(windowIndex)"
-        let send = "\(tmux) send-keys -t \(target) -l \(shellQuote(text))"
+        sendKeysCommand(target: "\(shellQuote(session)):\(windowIndex)", text: text, pressEnter: pressEnter)
+    }
+
+    public static func sendKeysCommand(target: String, text: String, pressEnter: Bool) -> String {
+        let send = text.isEmpty ? "" : "\(tmux) send-keys -t \(target) -l \(shellQuote(text))"
         guard pressEnter else { return send }
-        return "\(send) \\; send-keys -t \(target) Enter"
+        let enter = "\(tmux) send-keys -t \(target) Enter"
+        return send.isEmpty ? enter : "\(send) \\; send-keys -t \(target) Enter"
+    }
+
+    public static func paneDirectoryCommand(target: String) -> String {
+        "\(tmux) display-message -p -t \(shellQuote(target)) '#{pane_current_path}'"
     }
 
     public static func capturePanesCommand(session: String) -> String {
@@ -423,12 +431,18 @@ public enum Tmux {
         name.contains(/-psh-[[:alnum:]]+$/)
     }
 
-    public static func newSessionCommand(name: String) -> String {
-        "\(tmux) new-session -d -s \(shellQuote(name))"
+    public static func newSessionCommand(name: String, directory: String? = nil) -> String {
+        let start = directory.map { " -c \(shellQuote($0))" } ?? ""
+        return "\(tmux) new-session -d -s \(shellQuote(name))\(start)"
     }
 
     public static func newWindowCommand(session: String) -> String {
         "\(tmux) new-window -t \(shellQuote(session))"
+    }
+
+    /// Prints the new window's index so the caller can attach to it directly.
+    public static func newWindowCommand(session: String, directory: String) -> String {
+        "\(tmux) new-window -t \(shellQuote(session)) -c \(shellQuote(directory)) -P -F '#{window_index}'"
     }
 
     public static func renameWindowCommand(session: String, windowIndex: Int, name: String) -> String {

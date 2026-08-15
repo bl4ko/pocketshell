@@ -4,57 +4,7 @@
     import SwiftUI
 
     public struct TerminalToolbar: View {
-        private enum Palette {
-            static let dark = Color(red: 22 / 255, green: 24 / 255, blue: 26 / 255)
-            static let darkKey = Color(red: 35 / 255, green: 38 / 255, blue: 42 / 255)
-            static let darkBorder = Color(red: 60 / 255, green: 64 / 255, blue: 69 / 255)
-
-            static func bar(_ theme: TerminalTheme) -> Color { themed("ECEAE3", theme, mix: 0.12) }
-            static func pinned(_ theme: TerminalTheme) -> Color { themed("E5E3DA", theme, mix: 0.16) }
-            static func key(_ theme: TerminalTheme) -> Color { themed("FFFFFF", theme, mix: 0.08) }
-            static func border(_ theme: TerminalTheme) -> Color { themed("CFCCC0", theme, mix: 0.28) }
-            static func text(_ theme: TerminalTheme) -> Color { themed("3C4045", theme, dark: theme.foreground) }
-            static func accent(_ theme: TerminalTheme) -> Color { themed("E8590C", theme, dark: theme.accentHex) }
-            static func accentDark(_ theme: TerminalTheme) -> Color {
-                themed("C2410C", theme, dark: theme.accentHex)
-            }
-            static func accentTint(_ theme: TerminalTheme) -> Color {
-                themed("FDF1E8", theme, dark: mixed(theme.background, theme.accentHex, 0.18))
-            }
-            static func accentBorder(_ theme: TerminalTheme) -> Color {
-                themed("EAB896", theme, dark: mixed(theme.background, theme.accentHex, 0.50))
-            }
-
-            private static func themed(_ light: String, _ theme: TerminalTheme, dark: String) -> Color {
-                color(theme.lightChrome ? light : dark)
-            }
-
-            private static func themed(_ light: String, _ theme: TerminalTheme, mix: Double) -> Color {
-                themed(light, theme, dark: mixed(theme.background, theme.foreground, mix))
-            }
-
-            private static func color(_ hex: String) -> Color {
-                let rgb = RGBColor(hex: hex) ?? RGBColor(red: 0, green: 0, blue: 0)
-                return Color(
-                    red: Double(rgb.red) / 255,
-                    green: Double(rgb.green) / 255,
-                    blue: Double(rgb.blue) / 255
-                )
-            }
-
-            private static func mixed(_ from: String, _ to: String, _ amount: Double) -> String {
-                guard let from = RGBColor(hex: from), let to = RGBColor(hex: to) else { return from }
-                func channel(_ a: UInt8, _ b: UInt8) -> UInt8 {
-                    UInt8((Double(a) + (Double(b) - Double(a)) * amount).rounded())
-                }
-                return String(
-                    format: "%02x%02x%02x",
-                    channel(from.red, to.red),
-                    channel(from.green, to.green),
-                    channel(from.blue, to.blue)
-                )
-            }
-        }
+        private typealias Palette = ToolbarPalette
 
         let keys: [ToolbarKey]
         let theme: TerminalTheme
@@ -65,8 +15,16 @@
         let onPaste: (() -> Void)?
         let onCopy: (() -> Void)?
         let onToggleSelect: (() -> Void)?
+        let onCompose: (() -> Void)?
         let selectActive: Bool
-        @State private var prefixPaletteActive = false
+        let composeActive: Bool
+        let multiplexer: Bool
+        @AppStorage("pocketshell.toolbar.shortcuts") private var panelOpen = false
+        // Default off: the extra row resizes the terminal right after attach, and the
+        // caret settle gate then parks on the last pane tmux redrew instead of the
+        // active one (caught by testTmuxRepaintsKeepCaretParked).
+        @AppStorage("pocketshell.toolbar.dpad") private var dpadOpen = false
+        @State private var category: ShortcutCategory = .favorites
 
         public init(
             keys: [ToolbarKey],
@@ -78,7 +36,10 @@
             onPaste: (() -> Void)? = nil,
             onCopy: (() -> Void)? = nil,
             onToggleSelect: (() -> Void)? = nil,
-            selectActive: Bool = false
+            onCompose: (() -> Void)? = nil,
+            selectActive: Bool = false,
+            composeActive: Bool = false,
+            multiplexer: Bool = false
         ) {
             self.keys = keys
             self.theme = theme
@@ -89,215 +50,176 @@
             self.onPaste = onPaste
             self.onCopy = onCopy
             self.onToggleSelect = onToggleSelect
+            self.onCompose = onCompose
             self.selectActive = selectActive
+            self.composeActive = composeActive
+            self.multiplexer = multiplexer
         }
 
         public var body: some View {
-            Group {
-                if prefixPaletteActive {
-                    prefixPalette
-                } else {
-                    normalToolbar
+            VStack(spacing: 0) {
+                if panelOpen {
+                    ShortcutPanel(
+                        theme: theme,
+                        userKeys: keys,
+                        multiplexer: multiplexer,
+                        onKey: onKey,
+                        onClose: { panelOpen = false },
+                        category: $category
+                    )
+                    Divider().overlay(Palette.border(theme))
                 }
-            }
-        }
-
-        private var normalToolbar: some View {
-            HStack(spacing: 0) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        if let onPaste {
-                            Menu {
-                                Button("Paste") { onPaste() }
-                                if let onCopy { Button("Copy selection") { onCopy() } }
-                                if let onToggleSelect {
-                                    Button(selectActive ? "Done selecting" : "Select text") { onToggleSelect() }
-                                }
-                            } label: {
-                                keyLabel(
-                                    icon: selectActive ? "selection.pin.in.out" : "doc.on.clipboard",
-                                    active: selectActive
-                                )
-                            } primaryAction: {
-                                if selectActive { onCopy?() } else { onPaste() }
-                            }
-                            .accessibilityIdentifier("terminal.clipboard")
-                        }
-                        if !quickReplyOptions.isEmpty {
-                            HStack(spacing: 5) {
-                                ForEach(quickReplyOptions, id: \.self) { option in
-                                    Button {
-                                        onKey(.sequence("\(option)\n"))
-                                    } label: {
-                                        keyLabel(
-                                            "\(option)↵",
-                                            background: option == quickReplyOptions.first
-                                                ? Palette.accent(theme) : Palette.key(theme),
-                                            border: Palette.accentBorder(theme),
-                                            foreground: option == quickReplyOptions.first
-                                                ? .white : Palette.accentDark(theme)
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 4)
-                            .background(Palette.accentTint(theme))
-                            Divider().frame(height: 22).overlay(Palette.accentBorder(theme))
-                        }
-                        ForEach(ToolbarKey.scrollRow(from: keys)) { key in
-                            Button {
-                                handle(key)
-                            } label: {
-                                keyLabel(key.label)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                if !quickReplyOptions.isEmpty {
+                    quickReplyRow
                 }
-                .clipped()
-                Divider().frame(height: 22).overlay(Palette.border(theme))
-                HStack(spacing: 4) {
-                    arrowKey("↑", .arrowUp)
-                    arrowKey("↓", .arrowDown)
-                    arrowKey("←", .arrowLeft)
-                    arrowKey("→", .arrowRight)
-                    Button {
-                        onKey(.escape)
-                    } label: {
-                        keyLabel("esc")
-                    }
-                    .buttonStyle(.plain)
-                    Button {
-                        onKey(.ctrlModifier)
-                    } label: {
-                        keyLabel(
-                            "ctrl",
-                            background: ctrlActive ? Palette.accentTint(theme) : Palette.key(theme),
-                            border: ctrlActive ? Palette.accentBorder(theme) : Palette.border(theme),
-                            foreground: ctrlActive ? Palette.accentDark(theme) : Palette.text(theme)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    if let onHideKeyboard {
-                        Button {
-                            onHideKeyboard()
-                        } label: {
-                            keyLabel(icon: "keyboard.chevron.compact.down")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("terminal.keyboard")
-                    }
+                if dpadOpen {
+                    dpadRow
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .background(Palette.pinned(theme))
+                bar
             }
             .background(Palette.bar(theme))
         }
 
-        private var prefixPalette: some View {
-            HStack(spacing: 6) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        prefixKey("c", "new")
-                        prefixKey("n", "next")
-                        prefixKey("p", "prev")
-                        prefixKey("z", "zoom")
-                        prefixKey("%", "split")
-                        prefixKey("\"", "stack")
-                        prefixKey("o", "pane")
-                        prefixKey("x", "close")
+        private var bar: some View {
+            HStack(spacing: 5) {
+                slot(icon: "square.grid.2x2", active: panelOpen) { panelOpen.toggle() }
+                    .accessibilityIdentifier("terminal.shortcutsToggle")
+                slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
+                slot("esc") { onKey(.escape) }
+                slot("tab") { onKey(.tab) }
+                slot(icon: "dpad", active: dpadOpen) { dpadOpen.toggle() }
+                    .accessibilityIdentifier("terminal.dpad")
+                if multiplexer {
+                    slot("^b") {
+                        category = .multiplexer
+                        panelOpen = true
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .accessibilityIdentifier("terminal.prefix")
+                }
+                if let onPaste {
+                    Menu {
+                        Button("Paste") { onPaste() }
+                        if let onCopy { Button("Copy selection") { onCopy() } }
+                        if let onToggleSelect {
+                            Button(selectActive ? "Done selecting" : "Select text") { onToggleSelect() }
+                        }
+                    } label: {
+                        slotLabel(
+                            icon: selectActive ? "selection.pin.in.out" : "doc.on.clipboard",
+                            active: selectActive
+                        )
+                    } primaryAction: {
+                        if selectActive { onCopy?() } else { onPaste() }
+                    }
+                    .accessibilityIdentifier("terminal.clipboard")
+                }
+                if let onCompose {
+                    slot(icon: "text.bubble", active: composeActive) { onCompose() }
+                        .accessibilityIdentifier("terminal.compose")
+                }
+                if let onHideKeyboard {
+                    slot(icon: "keyboard.chevron.compact.down") { onHideKeyboard() }
+                        .accessibilityIdentifier("terminal.keyboard")
                 }
             }
-            .background(Palette.dark)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .background(Palette.pinned(theme))
         }
 
-        private func prefixKey(_ key: String, _ title: String) -> some View {
-            Button {
-                onKey(.sequence(key))
-                if key == "x" {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(300))
-                        guard !Task.isCancelled else { return }
-                        onKey(.sequence("y"))
-                        prefixPaletteActive = false
-                    }
-                } else {
-                    prefixPaletteActive = false
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(key).fontWeight(.bold)
-                    Text(title).foregroundStyle(.secondary)
-                }
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(red: 236 / 255, green: 234 / 255, blue: 227 / 255))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Palette.darkKey)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Palette.darkBorder))
+        private var dpadRow: some View {
+            HStack(spacing: 5) {
+                arrowKey("←", .arrowLeft)
+                arrowKey("↓", .arrowDown)
+                arrowKey("↑", .arrowUp)
+                arrowKey("→", .arrowRight)
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("tmux-prefix-\(key)")
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
         }
 
-        private func handle(_ key: ToolbarKey) {
-            onKey(key.action)
-            if key.action == .sequence("\u{02}") {
-                prefixPaletteActive = true
+        private var quickReplyRow: some View {
+            HStack(spacing: 5) {
+                ForEach(quickReplyOptions, id: \.self) { option in
+                    Button {
+                        onKey(.sequence("\(option)\n"))
+                    } label: {
+                        slotLabel(
+                            "\(option)↵",
+                            background: option == quickReplyOptions.first
+                                ? Palette.accent(theme) : Palette.key(theme),
+                            border: Palette.accentBorder(theme),
+                            foreground: option == quickReplyOptions.first ? .white : Palette.accentDark(theme)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Palette.accentTint(theme))
         }
 
         private func arrowKey(_ label: String, _ action: ToolbarKey.Action) -> some View {
             Button {
                 onKey(action)
             } label: {
-                keyLabel(label)
+                slotLabel(label)
             }
             .buttonStyle(.plain)
             .buttonRepeatBehavior(.enabled)
         }
 
-        private func keyLabel(
+        private func slot(_ label: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+            Button(action: action) {
+                slotLabel(
+                    label,
+                    background: active ? Palette.accentTint(theme) : Palette.key(theme),
+                    border: active ? Palette.accentBorder(theme) : Palette.border(theme),
+                    foreground: active ? Palette.accentDark(theme) : Palette.text(theme)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+
+        private func slot(icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+            Button(action: action) {
+                slotLabel(icon: icon, active: active)
+            }
+            .buttonStyle(.plain)
+        }
+
+        private func slotLabel(
             _ text: String,
             background: Color? = nil,
             border: Color? = nil,
             foreground: Color? = nil
         ) -> some View {
             Text(text)
-                .font(.system(size: 10.5, design: .monospaced))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 6)
-                .frame(minWidth: 28)
+                .font(.system(size: 11, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
                 .background(background ?? Palette.key(theme))
                 .foregroundStyle(foreground ?? Palette.text(theme))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(border ?? Palette.border(theme)))
-                .shadow(color: Palette.border(theme), radius: 0, y: 1)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(border ?? Palette.border(theme)))
         }
 
-        private func keyLabel(icon: String, active: Bool = false) -> some View {
+        private func slotLabel(icon: String, active: Bool = false) -> some View {
             Image(systemName: icon)
-                .font(.caption)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 6)
-                .frame(minWidth: 28)
+                .font(.system(size: 13))
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
                 .background(active ? Palette.accentTint(theme) : Palette.key(theme))
                 .foregroundStyle(active ? Palette.accentDark(theme) : Palette.text(theme))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: 8)
                         .stroke(active ? Palette.accentBorder(theme) : Palette.border(theme))
                 )
-                .shadow(color: Palette.border(theme), radius: 0, y: 1)
         }
     }
 #endif

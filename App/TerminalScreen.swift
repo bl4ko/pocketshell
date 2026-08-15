@@ -1,5 +1,6 @@
 import HerdrKit
 import Models
+import MonitorKit
 import SwiftUI
 import TerminalUI
 import TmuxKit
@@ -67,6 +68,17 @@ struct TerminalScreen: View {
                     multiplexerMode: connection.isMultiplexerAttached
                 )
                 .focusEffectDisabled()
+                if connection.composerVisible {
+                    ComposerBar(
+                        text: $connection.composerDraft,
+                        theme: TerminalTheme.named(themeName),
+                        onSend: { connection.bridge.sendComposed(connection.composerDraft) },
+                        onClose: {
+                            connection.composerVisible = false
+                            connection.bridge.setTerminalFocused(true)
+                        }
+                    )
+                }
                 #if !targetEnvironment(macCatalyst)
                     TerminalToolbar(
                         keys: store.toolbarKeys,
@@ -86,7 +98,15 @@ struct TerminalScreen: View {
                         onPaste: { connection.bridge.paste() },
                         onCopy: { connection.bridge.copySelection() },
                         onToggleSelect: { connection.bridge.toggleSelectMode() },
-                        selectActive: connection.bridge.selectMode
+                        onCompose: {
+                            connection.composerVisible.toggle()
+                            if !connection.composerVisible {
+                                connection.bridge.setTerminalFocused(true)
+                            }
+                        },
+                        selectActive: connection.bridge.selectMode,
+                        composeActive: connection.composerVisible,
+                        multiplexer: connection.isMultiplexerAttached
                     )
                 #endif
             }
@@ -242,6 +262,7 @@ struct WindowDashboardSheet: View {
     @State private var sessions: [TmuxSession] = []
     @State private var herdrSessions: [HerdrSession] = []
     @State private var windowsBySession: [String: [WindowDashboardItem]] = [:]
+    @State private var recent: [RecentDirectory] = []
 
     let host: HostConfig
 
@@ -269,6 +290,25 @@ struct WindowDashboardSheet: View {
                                 Task { await connection.selectWindow(window) }
                             } label: {
                                 Text("\(window.index): \(window.name)")
+                            }
+                        }
+                    }
+                }
+                if !recent.isEmpty {
+                    Section("Recent directories") {
+                        ForEach(recent) { directory in
+                            Button {
+                                Task { await connection.openDirectory(directory.path) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(directory.name)
+                                        .font(PocketshellTheme.mono(13, weight: .semibold))
+                                    Text(directory.path)
+                                        .font(PocketshellTheme.mono(10))
+                                        .foregroundStyle(PocketshellTheme.muted)
+                                        .lineLimit(1)
+                                        .truncationMode(.head)
+                                }
                             }
                         }
                     }
@@ -318,5 +358,6 @@ struct WindowDashboardSheet: View {
         }
         sessions = list
         windowsBySession = map
+        recent = await connection.recentDirectories()
     }
 }

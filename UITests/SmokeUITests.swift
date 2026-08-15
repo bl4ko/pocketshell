@@ -83,9 +83,8 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed smoke skipped")
         }
 
-        let hostRow = app.staticTexts["localbox"].firstMatch
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
 
         let escKey = app.buttons["esc"].firstMatch
         XCTAssertTrue(escKey.waitForExistence(timeout: 10))
@@ -121,7 +120,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(theme.isSelected)
         app.navigationBars.buttons.firstMatch.tap()
 
-        app.staticTexts["localbox"].firstMatch.tap()
+        openHost("localbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.typeText("printf '\\033]11;#000000\\007'\n")
@@ -179,9 +178,8 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("status fixtures not set; tmux status e2e skipped")
         }
 
-        let hostRow = app.staticTexts["localbox"].firstMatch
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
 
         let tabs = (1...3).map { app.descendants(matching: .any)["terminal-tab-\($0)"] }
@@ -218,8 +216,8 @@ final class SmokeUITests: XCTestCase {
 
         firstGroup.tap()
         app.buttons["Back"].tap()
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(firstGroup.waitForExistence(timeout: 3))
         XCTAssertTrue(firstGroup.label.contains("collapsed"))
@@ -241,9 +239,8 @@ final class SmokeUITests: XCTestCase {
 
         let alternateHost = "backupbox-with-a-very-long-name"
         addHost(named: alternateHost, port: port, user: user)
-        let hostRow = app.staticTexts["localbox"].firstMatch
-        XCTAssertTrue(hostRow.waitForExistence(timeout: 5))
-        hostRow.tap()
+        XCTAssertTrue(app.staticTexts["localbox"].firstMatch.waitForExistence(timeout: 5))
+        openHost("localbox")
 
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         let hostSwitcher = app.descendants(matching: .any)["host-switcher"]
@@ -259,6 +256,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertLessThan(back.frame.maxX, switchedHost.frame.minX)
         for _ in 0..<7 {
             app.buttons["new-tab"].tap()
+            dismissSessionPicker()
         }
         XCTAssertTrue(hostSwitcher.isHittable)
         let hostTitleScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -366,7 +364,7 @@ final class SmokeUITests: XCTestCase {
         }
 
         addHost(named: "windowbox", port: port, user: user)
-        app.staticTexts["windowbox"].firstMatch.tap()
+        openHost("windowbox")
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         app.buttons["tmux-sessions"].firstMatch.tap()
 
@@ -451,7 +449,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed keyboard test skipped")
         }
 
-        app.staticTexts["localbox"].firstMatch.tap()
+        openHost("localbox")
         let keyboardButton = app.buttons["terminal.keyboard"]
         XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10))
         let terminal = app.textViews["terminal.view"]
@@ -479,6 +477,106 @@ final class SmokeUITests: XCTestCase {
         screenshot.name = "terminal-long-scrollback-after-keyboard-toggle"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testDiffSheetListsTheWorkingTree() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed diff test skipped")
+        }
+
+        openHost("localbox")
+        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        app.buttons["terminal.more"].firstMatch.tap()
+        let diffItem = app.buttons["menu-diff"].firstMatch
+        XCTAssertTrue(diffItem.waitForExistence(timeout: 5))
+        diffItem.tap()
+        // The login directory is the developer's home: either a clean tree, a
+        // real diff, or "not a git repository" — all of them mean the sheet ran.
+        XCTAssertTrue(app.buttons["diff.reload"].waitForExistence(timeout: 15))
+        app.buttons["Close"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+    }
+
+    func testComposerSendsAPromptAndKeepsTheDraftAcrossNavigation() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed composer test skipped")
+        }
+
+        openHost("localbox")
+        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        // Cmd-J opens it: toolbar buttons in the clipped keyboard row are not reliably
+        // hittable from XCUITest, and the shortcut is the same path an iPad user takes.
+        // The first key event can land before the terminal screen has settled.
+        let field = app.descendants(matching: .any).matching(identifier: "composer.field").firstMatch
+        for _ in 0..<3 where !field.exists {
+            app.typeKey("j", modifierFlags: .command)
+            _ = field.waitForExistence(timeout: 3)
+        }
+        // A vertical-axis SwiftUI TextField surfaces as a text view, not a text field.
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("echo composed-ok")
+
+        // The draft belongs to the session, not to the screen: leaving and coming back
+        // must not lose a half-written prompt.
+        app.navigationBars.buttons.firstMatch.tap()
+        app.staticTexts["localbox"].firstMatch.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertEqual(field.value as? String, "echo composed-ok")
+
+        app.buttons["composer.send"].tap()
+        let empty = NSPredicate(format: "value == 'message…' OR value == ''")
+        expectation(for: empty, evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'error'")).firstMatch.exists)
+
+        // The toolbar button is the touch path for the same toggle.
+        app.buttons["terminal.compose"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertFalse(field.waitForExistence(timeout: 2))
+    }
+
+    func testJapaneseImeComposesInlineAtTheCaret() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed IME test skipped")
+        }
+
+        openHost("localbox")
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        guard keyboardButton.waitForExistence(timeout: 15) else {
+            throw XCTSkip("terminal toolbar never appeared")
+        }
+        keyboardButton.tap()
+        guard app.keyboards.element.waitForExistence(timeout: 5) else {
+            // The simulator hides it whenever a hardware keyboard is attached, and
+            // xcodebuild-driven runs usually have one.
+            throw XCTSkip("no software keyboard on this simulator")
+        }
+        // Japanese Romaji, not Korean: iOS composes kana through marked text, while the
+        // Korean keyboard hands SwiftTerm finished jamo that it assembles itself.
+        let globe = app.buttons["Next keyboard"]
+        for _ in 0..<3 where globe.exists && !app.otherElements["terminal.composition"].exists {
+            globe.tap()
+            _ = app.keys["n"].waitForExistence(timeout: 2)
+        }
+        guard app.keys["n"].exists else {
+            throw XCTSkip("no Japanese keyboard on this simulator")
+        }
+
+        // Marked text never reaches the host and SwiftTerm does not draw it, so this
+        // overlay is the only thing a CJK user sees while composing.
+        app.keys["n"].tap()
+        app.keys["i"].tap()
+        let composition = app.otherElements["terminal.composition"]
+        guard composition.waitForExistence(timeout: 3), composition.value as? String == "に" else {
+            throw XCTSkip(
+                "Japanese IME did not compose here: \(composition.value as? String ?? "no overlay")")
+        }
+
+        // Enter commits: the bytes go to the shell and the overlay clears.
+        app.keys["return"].firstMatch.tap()
+        let cleared = NSPredicate(format: "value == '' OR exists == false")
+        expectation(for: cleared, evaluatedWith: composition)
+        waitForExpectations(timeout: 3)
     }
 
     func testSettingsThemeSelection() {
@@ -532,6 +630,22 @@ final class SmokeUITests: XCTestCase {
             }
         }
         return false
+    }
+
+    /// Opens a saved host and lands in a terminal.
+    ///
+    /// A host that already has tmux or Herdr sessions shows the session picker first, so a
+    /// test that wants a shell has to say so; on a host with no sessions it never appears.
+    private func openHost(_ name: String) {
+        app.staticTexts[name].firstMatch.tap()
+        dismissSessionPicker()
+    }
+
+    private func dismissSessionPicker() {
+        let plainShell = app.buttons["Plain shell"].firstMatch
+        if plainShell.waitForExistence(timeout: 5) {
+            plainShell.tap()
+        }
     }
 
     private func addHost(named name: String, port: String, user: String) {

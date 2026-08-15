@@ -212,6 +212,12 @@
             view.inputAccessoryView = nil
             view.focusEffect = nil
             view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
+            let composition = IMECompositionView()
+            view.addSubview(composition)
+            view.markedTextObserver = { [weak view, weak composition] text, clause in
+                guard let view, let composition else { return }
+                composition.update(text: text, clause: clause, in: view)
+            }
             #if targetEnvironment(macCatalyst)
                 controller.sendControl = { [weak bridge] character in
                     guard let data = ToolbarKeyEncoder.applyCtrl(to: character) else { return }
@@ -263,6 +269,27 @@
                 action: #selector(Coordinator.handlePinch(_:))
             )
             view.addGestureRecognizer(pinch)
+            for direction in [UISwipeGestureRecognizer.Direction.left, .right] {
+                let swipe = UISwipeGestureRecognizer(
+                    target: context.coordinator,
+                    action: #selector(Coordinator.handleWindowSwipe(_:))
+                )
+                swipe.direction = direction
+                swipe.delegate = gestureDelegate
+                // A swipe that swallows or delays touches costs the terminal its
+                // taps, and an unfocused terminal draws no caret.
+                swipe.cancelsTouchesInView = false
+                swipe.delaysTouchesEnded = false
+                view.addGestureRecognizer(swipe)
+            }
+            let linkPress = UILongPressGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handleLinkPress(_:))
+            )
+            linkPress.minimumPressDuration = 0.5
+            linkPress.delegate = gestureDelegate
+            linkPress.cancelsTouchesInView = false
+            view.addGestureRecognizer(linkPress)
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
             let base = FontZoom.range.contains(saved) ? saved : Double(view.font.pointSize)
             view.font = UIFont.monospacedSystemFont(
@@ -367,6 +394,53 @@
                     x: col,
                     y: row
                 )
+            }
+
+            /// Horizontal swipe walks tmux windows; a plain shell would just get the
+            /// prefix bytes, so it only fires while attached to a multiplexer.
+            @objc func handleWindowSwipe(_ gesture: UISwipeGestureRecognizer) {
+                MainActor.assumeIsolated {
+                    guard let view = gesture.view as? TerminalView, view.multiplexerMode else { return }
+                    noteUserPresence()
+                    bridge.processOutgoing(Data("\u{02}\(gesture.direction == .left ? "n" : "p")".utf8))
+                }
+            }
+
+            @objc func handleLinkPress(_ gesture: UILongPressGestureRecognizer) {
+                MainActor.assumeIsolated {
+                    guard gesture.state == .began, let view = gesture.view as? TerminalView else { return }
+                    let terminal = view.getTerminal()
+                    let location = gesture.location(in: view)
+                    let row = clamp(
+                        Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                    let col = clamp(
+                        Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
+                    let lines = (0..<terminal.rows).map {
+                        terminal.getLine(row: $0)?.translateToString(trimRight: false) ?? ""
+                    }
+                    let wrapped = (0..<terminal.rows).map { terminal.getLine(row: $0)?.isWrapped ?? false }
+                    guard let link = TerminalURL.find(lines: lines, wrapped: wrapped, row: row, column: col),
+                        let url = URL(string: link)
+                    else { return }
+                    presentLinkMenu(for: url, in: view, at: location)
+                }
+            }
+
+            @MainActor private func presentLinkMenu(for url: URL, in view: UIView, at point: CGPoint) {
+                guard let controller = view.window?.rootViewController else { return }
+                let sheet = UIAlertController(title: url.absoluteString, message: nil, preferredStyle: .actionSheet)
+                sheet.addAction(
+                    UIAlertAction(title: "Open Link", style: .default) { _ in
+                        UIApplication.shared.open(url)
+                    })
+                sheet.addAction(
+                    UIAlertAction(title: "Copy Link", style: .default) { _ in
+                        UIPasteboard.general.string = url.absoluteString
+                    })
+                sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+                sheet.popoverPresentationController?.sourceView = view
+                sheet.popoverPresentationController?.sourceRect = CGRect(origin: point, size: .zero)
+                controller.present(sheet, animated: true)
             }
 
             // Attaching from another device wins tmux's window-size latest with no

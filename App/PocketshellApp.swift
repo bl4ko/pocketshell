@@ -40,6 +40,8 @@ struct PocketshellApp: App {
         _monitor = StateObject(wrappedValue: monitor)
         WatchRelay.shared.activate(store: store)
         UNUserNotificationCenter.current().delegate = ForegroundNotificationDelegate.shared
+        ApprovalService.registerCategory()
+        MainActor.assumeIsolated { ApprovalService.shared.store = store }
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: SessionMonitor.refreshTaskID,
             using: nil

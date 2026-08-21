@@ -82,6 +82,12 @@ public struct HerdrSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+public enum HerdrCompatibility: Equatable, Sendable {
+    case compatible
+    case liveHandoff(command: String)
+    case restartRequired(command: String)
+}
+
 public enum Herdr {
     private static let executable = "PATH=\"$HOME/.local/bin:$PATH:/opt/homebrew/bin:/usr/local/bin\" herdr"
 
@@ -95,6 +101,29 @@ public enum Herdr {
 
     public static func attachCommand(session: String) -> String {
         commandPrefix(session: session)
+    }
+
+    public static func clientStatusCommand(session: String) -> String {
+        "\(commandPrefix(session: session)) status client --json"
+    }
+
+    public static func serverStatusCommand(session: String) -> String {
+        "\(commandPrefix(session: session)) status server --json"
+    }
+
+    public static func compatibility(clientOutput: String, serverOutput: String, session: String) -> HerdrCompatibility
+    {
+        guard let client = decode(ClientStatus.self, from: clientOutput),
+            let server = decode(ServerStatus.self, from: serverOutput), server.running,
+            let serverProtocol = server.protocolVersion, serverProtocol != client.protocolVersion
+        else { return .compatible }
+        guard server.capabilities?.liveHandoff == true else {
+            return .restartRequired(command: restartCommand(session: session))
+        }
+        return .liveHandoff(
+            command:
+                "\(commandPrefix(session: session)) server live-handoff --import-exe \(shellQuote(client.binary)) --expected-protocol \(client.protocolVersion) --expected-version \(shellQuote(client.version))"
+        )
     }
 
     public static func focusWorkspaceCommand(session: String, workspaceID: String) -> String {
@@ -120,6 +149,46 @@ public enum Herdr {
     private static func shellQuote(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
+
+    private static func restartCommand(session: String) -> String {
+        session == "default" ? "herdr server stop" : "herdr session stop \(shellQuote(session))"
+    }
+
+    private static func decode<T: Decodable>(_ type: T.Type, from output: String) -> T? {
+        guard let data = output.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+}
+
+private struct ClientStatus: Decodable {
+    var version: String
+    var protocolVersion: Int
+    var binary: String
+
+    enum CodingKeys: String, CodingKey {
+        case version, binary
+        case protocolVersion = "protocol"
+    }
+}
+
+private struct ServerStatus: Decodable {
+    struct Capabilities: Decodable {
+        var liveHandoff: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case liveHandoff = "live_handoff"
+        }
+    }
+
+    var running: Bool
+    var protocolVersion: Int?
+    var capabilities: Capabilities?
+
+    enum CodingKeys: String, CodingKey {
+        case running, capabilities
+        case protocolVersion = "protocol"
+    }
+
 }
 
 private struct SessionEnvelope: Codable {

@@ -56,6 +56,23 @@ import Testing
             .hasSuffix("herdr --session 'work' workspace focus 'w'\\''1'"))
 }
 
+@Test func preparesProtocolMismatchWithoutStoppingLivePanes() {
+    let client = #"{"version":"0.8.2","protocol":20,"binary":"/opt/herdr bin/herdr"}"#
+    let handoffServer = #"{"running":true,"version":"0.8.0","protocol":19,"capabilities":{"live_handoff":true}}"#
+    let oldServer = #"{"running":true,"version":"0.7.0","protocol":18,"capabilities":{"live_handoff":false}}"#
+
+    #expect(
+        Herdr.compatibility(clientOutput: client, serverOutput: handoffServer, session: "default")
+            == .liveHandoff(
+                command:
+                    "PATH=\"$HOME/.local/bin:$PATH:/opt/homebrew/bin:/usr/local/bin\" herdr server live-handoff --import-exe '/opt/herdr bin/herdr' --expected-protocol 20 --expected-version '0.8.2'"
+            ))
+    #expect(
+        Herdr.compatibility(clientOutput: client, serverOutput: oldServer, session: "client's")
+            == .restartRequired(command: "herdr session stop 'client'\\''s'"))
+    #expect(Herdr.compatibility(clientOutput: client, serverOutput: "not json", session: "default") == .compatible)
+}
+
 @Test func buildsPushPluginInstallAndSessionLinkCommands() throws {
     let endpoint = try #require(URL(string: "https://push.example.test/"))
     let hostID = try #require(UUID(uuidString: "12345678-1234-1234-1234-123456789abc"))

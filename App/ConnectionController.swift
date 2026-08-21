@@ -470,6 +470,7 @@ final class ConnectionController: ObservableObject {
                 session: session, windowIndex: windowIndex, windowID: windowID, clientTag: tag)
         case .herdr(let session, let workspaceID):
             cloneTag = nil
+            guard await prepareHerdr(session: session, using: connection) else { return }
             if let workspaceID {
                 _ = try? await connection.exec(Herdr.focusWorkspaceCommand(session: session, workspaceID: workspaceID))
             }
@@ -513,6 +514,28 @@ final class ConnectionController: ObservableObject {
             }
         } catch {
             handleConnectFailure("\(error)")
+        }
+    }
+
+    private func prepareHerdr(session: String, using connection: SSHConnection) async -> Bool {
+        let client = (try? await connection.exec(Herdr.clientStatusCommand(session: session))) ?? ""
+        let server = (try? await connection.exec(Herdr.serverStatusCommand(session: session))) ?? ""
+        switch Herdr.compatibility(clientOutput: client, serverOutput: server, session: session) {
+        case .compatible:
+            return true
+        case .liveHandoff(let command):
+            do {
+                _ = try await connection.exec(command)
+                return true
+            } catch {
+                phase = .failed("Herdr could not hand off the outdated server: \(error)")
+                return false
+            }
+        case .restartRequired(let command):
+            phase = .failed(
+                "Herdr's running server is outdated. Run `\(command)` on the host, then reconnect. Stopping it exits its pane processes."
+            )
+            return false
         }
     }
 

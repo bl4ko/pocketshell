@@ -78,6 +78,8 @@ final class SessionMonitor: ObservableObject {
     private var connections: [UUID: SSHConnection] = [:]
     private var notifiedAt: [String: Date] = [:]
     private var lastHerdrStatus: [String: HerdrAgentStatus] = [:]
+    private var backgroundRefreshTask: BGAppRefreshTask?
+    private var backgroundRefreshWork: Task<Void, Never>?
 
     init(store: AppStore) {
         self.store = store
@@ -378,15 +380,29 @@ final class SessionMonitor: ObservableObject {
 
     func handleBackgroundRefresh(_ task: BGAppRefreshTask) {
         Self.scheduleBackgroundRefresh()
-        let work = Task { [weak self] in
-            await self?.pollOnce()
-            self?.stopPolling()
-            task.setTaskCompleted(success: true)
+        finishBackgroundRefresh(backgroundRefreshTask, success: false)
+        backgroundRefreshTask = task
+        let work = Task { [weak self, weak task] in
+            guard let self, let task else { return }
+            await self.pollOnce()
+            self.stopPolling()
+            self.finishBackgroundRefresh(task, success: !Task.isCancelled)
         }
+        backgroundRefreshWork = work
         task.expirationHandler = {
-            work.cancel()
-            task.setTaskCompleted(success: false)
+            Task { @MainActor [weak self, weak task] in
+                guard let self, let task else { return }
+                self.backgroundRefreshWork?.cancel()
+                self.finishBackgroundRefresh(task, success: false)
+            }
         }
+    }
+
+    private func finishBackgroundRefresh(_ task: BGAppRefreshTask?, success: Bool) {
+        guard let task, backgroundRefreshTask === task else { return }
+        backgroundRefreshTask = nil
+        backgroundRefreshWork = nil
+        task.setTaskCompleted(success: success)
     }
 }
 

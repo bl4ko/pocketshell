@@ -75,7 +75,7 @@ struct HostTabsScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if tabs.count > 1 {
+            if tabs.count > 1, activeController?.isHerdrAttached != true {
                 tabStrip
             }
             ZStack {

@@ -2,6 +2,10 @@ import BackgroundTasks
 import SwiftUI
 import UIKit
 
+private struct TransferredBackgroundRefresh: @unchecked Sendable {
+    let task: BGAppRefreshTask
+}
+
 @MainActor
 final class BackgroundKeepAlive {
     private var taskID: UIBackgroundTaskIdentifier = .invalid
@@ -42,18 +46,21 @@ struct PocketshellApp: App {
         UNUserNotificationCenter.current().delegate = ForegroundNotificationDelegate.shared
         ApprovalService.registerCategory()
         MainActor.assumeIsolated { ApprovalService.shared.store = store }
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: SessionMonitor.refreshTaskID,
-            using: nil
-        ) { task in
+        let backgroundRefreshHandler: @Sendable (BGTask) -> Void = { task in
             guard let refresh = task as? BGAppRefreshTask else {
                 task.setTaskCompleted(success: false)
                 return
             }
+            let transferred = TransferredBackgroundRefresh(task: refresh)
             Task { @MainActor in
-                monitor.handleBackgroundRefresh(refresh)
+                monitor.handleBackgroundRefresh(transferred.task)
             }
         }
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: SessionMonitor.refreshTaskID,
+            using: nil,
+            launchHandler: backgroundRefreshHandler
+        )
     }
 
     var body: some Scene {

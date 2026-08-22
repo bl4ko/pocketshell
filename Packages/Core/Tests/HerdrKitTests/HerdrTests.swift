@@ -59,6 +59,7 @@ import Testing
 @Test func preparesProtocolMismatchWithoutStoppingLivePanes() {
     let client = #"{"version":"0.8.2","protocol":20,"binary":"/opt/herdr bin/herdr"}"#
     let handoffServer = #"{"running":true,"version":"0.8.0","protocol":19,"capabilities":{"live_handoff":true}}"#
+    let newerServer = #"{"running":true,"version":"0.9.0","protocol":21,"capabilities":{"live_handoff":true}}"#
     let oldServer = #"{"running":true,"version":"0.7.0","protocol":18,"capabilities":{"live_handoff":false}}"#
 
     #expect(
@@ -67,6 +68,9 @@ import Testing
                 command:
                     "PATH=\"$HOME/.local/bin:$PATH:/opt/homebrew/bin:/usr/local/bin\" herdr server live-handoff --import-exe '/opt/herdr bin/herdr' --expected-protocol 20 --expected-version '0.8.2'"
             ))
+    #expect(
+        Herdr.compatibility(clientOutput: client, serverOutput: newerServer, session: "default")
+            == .clientUpdateRequired(serverVersion: "0.9.0"))
     #expect(
         Herdr.compatibility(clientOutput: client, serverOutput: oldServer, session: "client's")
             == .restartRequired(command: "herdr session stop 'client'\\''s'"))

@@ -85,6 +85,7 @@ public struct HerdrSnapshot: Codable, Equatable, Sendable {
 public enum HerdrCompatibility: Equatable, Sendable {
     case compatible
     case liveHandoff(command: String)
+    case clientUpdateRequired(serverVersion: String)
     case restartRequired(command: String)
 }
 
@@ -117,6 +118,9 @@ public enum Herdr {
             let server = decode(ServerStatus.self, from: serverOutput), server.running,
             let serverProtocol = server.protocolVersion, serverProtocol != client.protocolVersion
         else { return .compatible }
+        guard serverProtocol < client.protocolVersion else {
+            return .clientUpdateRequired(serverVersion: server.version ?? "newer")
+        }
         guard server.capabilities?.liveHandoff == true else {
             return .restartRequired(command: restartCommand(session: session))
         }
@@ -181,11 +185,12 @@ private struct ServerStatus: Decodable {
     }
 
     var running: Bool
+    var version: String?
     var protocolVersion: Int?
     var capabilities: Capabilities?
 
     enum CodingKeys: String, CodingKey {
-        case running, capabilities
+        case running, version, capabilities
         case protocolVersion = "protocol"
     }
 

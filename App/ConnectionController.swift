@@ -531,6 +531,11 @@ final class ConnectionController: ObservableObject {
                 phase = .failed("Herdr could not hand off the outdated server: \(error)")
                 return false
             }
+        case .clientUpdateRequired(let serverVersion):
+            phase = .failed(
+                "Herdr \(serverVersion) is running, but PocketShell found an older Herdr binary on the host. Update that binary, then reconnect."
+            )
+            return false
         case .restartRequired(let command):
             phase = .failed(
                 "Herdr's running server is outdated. Run `\(command)` on the host, then reconnect. Stopping it exits its pane processes."

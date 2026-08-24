@@ -49,6 +49,7 @@ import Testing
 
 @Test func buildsQuotedCommandsForDefaultAndNamedSessions() {
     #expect(Herdr.listSessionsCommand().hasSuffix("herdr session list --json"))
+    #expect(Herdr.updateCommand().hasSuffix("herdr update"))
     #expect(Herdr.attachCommand(session: "default").hasSuffix("herdr"))
     #expect(Herdr.attachCommand(session: "client's work").hasSuffix("herdr --session 'client'\\''s work'"))
     #expect(

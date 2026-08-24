@@ -112,6 +112,10 @@ public enum Herdr {
         "\(commandPrefix(session: session)) status server --json"
     }
 
+    public static func updateCommand() -> String {
+        "\(executable) update"
+    }
+
     public static func compatibility(clientOutput: String, serverOutput: String, session: String) -> HerdrCompatibility
     {
         guard let client = decode(ClientStatus.self, from: clientOutput),

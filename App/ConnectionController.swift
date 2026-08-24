@@ -515,7 +515,7 @@ final class ConnectionController: ObservableObject {
         }
     }
 
-    private func prepareHerdr(session: String, using connection: SSHConnection) async -> Bool {
+    private func prepareHerdr(session: String, using connection: SSHConnection, mayUpdate: Bool = true) async -> Bool {
         let client = (try? await connection.exec(Herdr.clientStatusCommand(session: session))) ?? ""
         let server = (try? await connection.exec(Herdr.serverStatusCommand(session: session))) ?? ""
         switch Herdr.compatibility(clientOutput: client, serverOutput: server, session: session) {
@@ -530,6 +530,15 @@ final class ConnectionController: ObservableObject {
                 return false
             }
         case .clientUpdateRequired(let serverVersion):
+            if mayUpdate {
+                do {
+                    _ = try await connection.exec(Herdr.updateCommand())
+                    return await prepareHerdr(session: session, using: connection, mayUpdate: false)
+                } catch {
+                    phase = .failed("Herdr could not update its client binary: \(error)")
+                    return false
+                }
+            }
             phase = .failed(
                 "Herdr \(serverVersion) is running, but PocketShell found an older Herdr binary on the host. Update that binary, then reconnect."
             )

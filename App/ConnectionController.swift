@@ -403,9 +403,7 @@ final class ConnectionController: ObservableObject {
             return
         }
 
-        if host.tmuxSession != nil {
-            Task { _ = try? await connection.exec(Tmux.cleanupClonesCommand()) }
-        }
+        Task { _ = try? await connection.exec(Tmux.cleanupClonesCommand()) }
 
         if pendingShell == nil {
             await listInitialSessions(connection: connection)

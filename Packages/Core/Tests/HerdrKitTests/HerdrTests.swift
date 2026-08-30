@@ -48,7 +48,9 @@ import Testing
 }
 
 @Test func buildsQuotedCommandsForDefaultAndNamedSessions() {
-    #expect(Herdr.listSessionsCommand().hasSuffix("herdr session list --json"))
+    #expect(
+        Herdr.listSessionsCommand()
+            == "PATH=\"$PATH:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin\" herdr session list --json")
     #expect(Herdr.updateCommand().hasSuffix("herdr update"))
     #expect(Herdr.attachCommand(session: "default").hasSuffix("herdr"))
     #expect(Herdr.attachCommand(session: "client's work").hasSuffix("herdr --session 'client'\\''s work'"))
@@ -67,7 +69,7 @@ import Testing
         Herdr.compatibility(clientOutput: client, serverOutput: handoffServer, session: "default")
             == .liveHandoff(
                 command:
-                    "PATH=\"$HOME/.local/bin:$PATH:/opt/homebrew/bin:/usr/local/bin\" herdr server live-handoff --import-exe '/opt/herdr bin/herdr' --expected-protocol 20 --expected-version '0.8.2'"
+                    "PATH=\"$PATH:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin\" herdr server live-handoff --import-exe '/opt/herdr bin/herdr' --expected-protocol 20 --expected-version '0.8.2'"
             ))
     #expect(
         Herdr.compatibility(clientOutput: client, serverOutput: newerServer, session: "default")

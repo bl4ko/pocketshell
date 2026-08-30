@@ -90,7 +90,7 @@ public enum HerdrCompatibility: Equatable, Sendable {
 }
 
 public enum Herdr {
-    private static let executable = "PATH=\"$HOME/.local/bin:$PATH:/opt/homebrew/bin:/usr/local/bin\" herdr"
+    private static let executable = "PATH=\"$PATH:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin\" herdr"
 
     public static func listSessionsCommand() -> String {
         "\(executable) session list --json"

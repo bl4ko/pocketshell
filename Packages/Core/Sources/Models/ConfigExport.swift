@@ -34,7 +34,9 @@ public struct TabRecord: Codable, Equatable, Sendable {
         self.herdrWorkspaceID = herdrWorkspaceID
     }
 
-    public var groupName: String { tabGroup ?? tmuxSession ?? herdrSession.map { "Herdr · \($0)" } ?? "Shells" }
+    public var groupName: String {
+        herdrSession == nil ? tabGroup ?? tmuxSession ?? "Shells" : "Shells"
+    }
 
     public func matchesWindow(of other: TabRecord) -> Bool {
         guard tmuxSession == other.tmuxSession else { return false }

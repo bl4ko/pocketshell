@@ -75,7 +75,7 @@ struct HostTabsScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if tabs.count > 1, activeController?.isHerdrAttached != true {
+            if tabs.count > 1 {
                 tabStrip
             }
             ZStack {
@@ -509,7 +509,7 @@ struct HostTabsScreen: View {
         }
         let controller = makeController()
         controller.presetHerdr(session: session, workspaceID: workspaceID)
-        let tab = TerminalTab(controller: controller, group: "Herdr · \(session)", number: nextTabNumber)
+        let tab = TerminalTab(controller: controller, group: "Shells", number: nextTabNumber)
         controller.onExit = { closeTab(id: tab.id) }
         insertTab(tab)
         selectedTab = tab.id

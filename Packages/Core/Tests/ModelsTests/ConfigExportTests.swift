@@ -43,7 +43,7 @@ import Testing
     )
     let data = try JSONEncoder().encode(record)
     #expect(try JSONDecoder().decode(TabRecord.self, from: data) == record)
-    #expect(record.groupName == "Herdr · work")
+    #expect(record.groupName == "Shells")
 }
 
 @Test func workspaceSyncWriteCommandEmbedsDecodablePayload() throws {

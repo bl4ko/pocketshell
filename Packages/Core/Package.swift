@@ -24,7 +24,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.101.3"),
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.15.1"),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.1"),
         .package(
             url: "https://github.com/bl4ko/SwiftTerm.git",
             revision: "8864784df3f5df8f48be4af9bf7c11a69a013615"),

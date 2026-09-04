@@ -10,7 +10,8 @@
     ":pinDevDependencies"
   ],
   "platformAutomerge": true,
-  "rebaseWhen": "conflicted",
+  "rebaseWhen": "behind-base-branch",
+  "prConcurrentLimit": 1,
   "pre-commit": {
     "enabled": true
   },

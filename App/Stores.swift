@@ -98,7 +98,7 @@ final class AppStore: ObservableObject {
         workspaceUpdatedAt = workspaceUpdatedAtStore.load() ?? [:]
         knownHosts = KnownHostsStore(fileURL: appDataURL("known-hosts.json"))
         if cloudSyncEnabled {
-            setCloudSyncEnabled(true)
+            refreshCloudConfig()
         }
     }
 

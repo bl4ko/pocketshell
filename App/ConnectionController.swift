@@ -255,7 +255,7 @@ final class ConnectionController: ObservableObject {
     func herdrSessions() async -> [HerdrSession] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
-        return Herdr.parseSessions(output).filter(\.running)
+        return Herdr.parseSessions(output)
     }
 
     func currentHerdrSnapshot() async -> HerdrSnapshot? {
@@ -442,7 +442,7 @@ final class ConnectionController: ObservableObject {
 
     private func listInitialSessions(connection: SSHConnection) async {
         let herdrOutput = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
-        let herdrSessions = Herdr.parseSessions(herdrOutput).filter(\.running)
+        let herdrSessions = Herdr.parseSessions(herdrOutput)
         var tmuxWindows: [TmuxWindow] = []
         if let session = host.tmuxSession,
             let output = try? await connection.exec(Tmux.listWindowsCommand(session: session))

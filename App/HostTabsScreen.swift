@@ -67,6 +67,7 @@ struct HostTabsScreen: View {
     @State private var dragGrabDelta: CGFloat = 0
 
     let host: HostConfig
+    var herdrSession: String? = nil
     var onSwitchHost: ((HostConfig) -> Void)?
 
     private let tabSpacing: CGFloat = 4
@@ -75,7 +76,7 @@ struct HostTabsScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if tabs.count > 1 {
+            if !herdrOnly, tabs.count > 1 {
                 tabStrip
             }
             ZStack {
@@ -118,16 +119,18 @@ struct HostTabsScreen: View {
                         .frame(width: 150)
                 }
             #endif
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showTmuxJump = true
-                } label: {
-                    Image(systemName: "rectangle.split.3x1")
+            if !herdrOnly {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showTmuxJump = true
+                    } label: {
+                        Image(systemName: "rectangle.split.3x1")
+                    }
+                    #if targetEnvironment(macCatalyst)
+                        .keyboardShortcut("k", modifiers: .command)
+                    #endif
+                    .accessibilityIdentifier("tmux-sessions")
                 }
-                #if targetEnvironment(macCatalyst)
-                    .keyboardShortcut("k", modifiers: .command)
-                #endif
-                .accessibilityIdentifier("tmux-sessions")
             }
             // Exactly three trailing items: a fourth lands in the system
             // overflow menu, which iOS 26 renders but does not open reliably.
@@ -177,15 +180,17 @@ struct HostTabsScreen: View {
                 }
                 .accessibilityIdentifier("terminal.more")
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    addTab()
-                } label: {
-                    Image(systemName: "plus.square.on.square")
-                        .foregroundStyle(PocketshellTheme.accent)
+            if !herdrOnly {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        addTab()
+                    } label: {
+                        Image(systemName: "plus.square.on.square")
+                            .foregroundStyle(PocketshellTheme.accent)
+                    }
+                    .keyboardShortcut("t", modifiers: .command)
+                    .accessibilityIdentifier("new-tab")
                 }
-                .keyboardShortcut("t", modifiers: .command)
-                .accessibilityIdentifier("new-tab")
             }
         }
         .sheet(isPresented: $showDiff) {
@@ -220,16 +225,20 @@ struct HostTabsScreen: View {
         .onAppear {
             loadCollapsedTabGroups()
             if tabs.isEmpty {
-                if !(store.savedTabs[host.id.uuidString] ?? []).isEmpty {
+                if let herdrSession {
+                    openHerdrSessionInNewTab(session: herdrSession, workspaceID: nil)
+                } else if !(store.savedTabs[host.id.uuidString] ?? []).isEmpty {
                     restoreTabs()
                     consumePendingTarget()
                 }
-                Task {
-                    await monitor.syncWorkspaceNow(for: host)
-                    if tabs.isEmpty {
-                        restoreTabs()
+                if !herdrOnly {
+                    Task {
+                        await monitor.syncWorkspaceNow(for: host)
+                        if tabs.isEmpty {
+                            restoreTabs()
+                        }
+                        consumePendingTarget()
                     }
-                    consumePendingTarget()
                 }
             } else {
                 consumePendingTarget()
@@ -267,7 +276,9 @@ struct HostTabsScreen: View {
             for tab in tabs {
                 Task { await tab.controller.stop() }
             }
-            Task { await monitor.syncWorkspaceNow(for: host) }
+            if !herdrOnly {
+                Task { await monitor.syncWorkspaceNow(for: host) }
+            }
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else {
@@ -284,7 +295,7 @@ struct HostTabsScreen: View {
                 } else {
                     await pollSelectedTab()
                 }
-                if tick % 9 == 0 {
+                if !herdrOnly, tick % 9 == 0 {
                     await monitor.syncWorkspaceNow(for: host)
                 }
                 tick += 1
@@ -297,6 +308,8 @@ struct HostTabsScreen: View {
     private var activeController: ConnectionController? {
         tabs.first { $0.id == selectedTab }?.controller
     }
+
+    private var herdrOnly: Bool { herdrSession != nil }
 
     private func debugReport() async -> String {
         let info = Bundle.main.infoDictionary
@@ -569,6 +582,7 @@ struct HostTabsScreen: View {
     }
 
     private func persistTabs() {
+        guard !herdrOnly else { return }
         let records = currentRecords
         if store.savedTabs[host.id.uuidString] != records {
             store.savedTabs[host.id.uuidString] = records
@@ -596,6 +610,7 @@ struct HostTabsScreen: View {
     }
 
     private func reconcileTabs() {
+        guard !herdrOnly else { return }
         let records = TabRecord.grouped(store.savedTabs[host.id.uuidString] ?? [])
         guard !tabs.isEmpty, !records.isEmpty, records != currentRecords else { return }
         var remaining = tabs

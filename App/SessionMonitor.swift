@@ -254,6 +254,13 @@ final class SessionMonitor: ObservableObject {
         await syncWorkspace(for: host, using: connection)
     }
 
+    func herdrSessions(for host: HostConfig) async -> [HerdrSession] {
+        guard let connection = await connection(for: host),
+            let output = try? await connection.exec(Herdr.listSessionsCommand())
+        else { return [] }
+        return Herdr.parseSessions(output)
+    }
+
     private func syncWorkspace(for host: HostConfig, using connection: SSHConnection) async {
         // The e2e sshd points at a real user home: a test app syncing its
         // throwaway tabs into ~/.config/pocketshell/workspace.json pollutes

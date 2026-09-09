@@ -13,6 +13,8 @@ struct HostsListView: View {
     @State private var addingVNCHost = false
     @State private var editingVNCHost: VNCHostConfig?
     @State private var runningSnippet: SnippetRun?
+    @State private var probingHost: UUID?
+    @State private var herdrChoice: HerdrHostDestination?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -53,6 +55,12 @@ struct HostsListView: View {
                     path.append(newHost)
                 }
             }
+            .navigationDestination(for: HerdrHostDestination.self) { destination in
+                HostTabsScreen(host: destination.host, herdrSession: destination.session) { newHost in
+                    path.removeLast()
+                    path.append(newHost)
+                }
+            }
             .navigationDestination(for: VNCHostConfig.self) { host in
                 VNCDesktopScreen(host: host)
             }
@@ -71,6 +79,21 @@ struct HostsListView: View {
                         description: Text("Add a host, then install the device key from the Keys screen.")
                     )
                 }
+            }
+            .confirmationDialog(
+                "Open \(herdrChoice?.host.name ?? "host")",
+                isPresented: Binding(
+                    get: { herdrChoice != nil },
+                    set: { if !$0 { herdrChoice = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                if let destination = herdrChoice {
+                    Button("Herdr") { path.append(destination) }
+                    Button("Shells & tmux") { path.append(destination.host) }
+                }
+            } message: {
+                Text("Herdr mode uses Herdr alone, without PocketShell tabs or tab groups.")
             }
             .paperScreen()
         }
@@ -219,7 +242,9 @@ struct HostsListView: View {
             }
         }
         let needsInput = (matchedWindows + herdrWindows).contains { $0.status == "needs input" }
-        return NavigationLink(value: host) {
+        return Button {
+            openHost(host)
+        } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -236,6 +261,10 @@ struct HostsListView: View {
                         }
                     }
                     Spacer()
+                    if probingHost == host.id {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                     if !records.isEmpty {
                         Text("\(records.count) TABS OPEN")
                             .font(PocketshellTheme.mono(10, weight: .bold))
@@ -282,12 +311,26 @@ struct HostsListView: View {
             .shadow(color: needsInput ? PocketshellTheme.accent.opacity(0.08) : .clear, radius: 0, x: 0, y: 0)
         }
         .buttonStyle(.plain)
+        .disabled(probingHost != nil)
         .contextMenu {
             Button("Edit") { editingHost = host }
             ForEach(execSnippets(for: host)) { snippet in
                 Button(snippet.name) { runningSnippet = SnippetRun(host: host, snippet: snippet) }
             }
             Button("Delete", role: .destructive) { store.hosts.removeAll { $0.id == host.id } }
+        }
+    }
+
+    private func openHost(_ host: HostConfig) {
+        probingHost = host.id
+        Task {
+            let sessions = await monitor.herdrSessions(for: host)
+            probingHost = nil
+            guard let session = sessions.first(where: \.isDefault) ?? sessions.first else {
+                path.append(host)
+                return
+            }
+            herdrChoice = HerdrHostDestination(host: host, session: session.name)
         }
     }
 
@@ -447,4 +490,9 @@ struct SnippetRun: Identifiable {
     let host: HostConfig
     let snippet: Snippet
     var id: UUID { snippet.id }
+}
+
+private struct HerdrHostDestination: Hashable {
+    let host: HostConfig
+    let session: String
 }

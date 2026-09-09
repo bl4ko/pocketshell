@@ -19,6 +19,14 @@ private func appDataURL(_ filename: String) -> URL {
     return url
 }
 
+private func testConfig(_ key: String) -> ConfigExport? {
+    guard ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1",
+        let encoded = ProcessInfo.processInfo.environment[key],
+        let data = Data(base64Encoded: encoded)
+    else { return nil }
+    return try? JSONDecoder().decode(ConfigExport.self, from: data)
+}
+
 struct JSONStore<T: Codable> {
     let url: URL
 
@@ -88,10 +96,11 @@ final class AppStore: ObservableObject {
     private static let cloudCredentialsAccount = "credentials-v1"
 
     init() {
-        hosts = hostsStore.load() ?? []
-        vncHosts = vncHostsStore.load() ?? []
-        snippets = snippetsStore.load() ?? []
-        toolbarKeys = toolbarStore.load() ?? ToolbarKey.defaults
+        let localFixture = testConfig("PS_UI_TEST_LOCAL_CONFIG")
+        hosts = localFixture?.hosts ?? hostsStore.load() ?? []
+        vncHosts = localFixture?.vncHosts ?? vncHostsStore.load() ?? []
+        snippets = localFixture?.snippets ?? snippetsStore.load() ?? []
+        toolbarKeys = localFixture?.toolbarKeys ?? toolbarStore.load() ?? ToolbarKey.defaults
         importedKeys = importedKeysStore.load() ?? []
         savedTabs = savedTabsStore.load() ?? [:]
         sessionOrder = sessionOrderStore.load() ?? [:]
@@ -198,7 +207,8 @@ final class AppStore: ObservableObject {
     }
 
     private var cloudSyncEnabled: Bool {
-        UserDefaults.standard.bool(forKey: AppSettings.iCloudSyncKey)
+        testConfig("PS_UI_TEST_CLOUD_CONFIG") != nil
+            || UserDefaults.standard.bool(forKey: AppSettings.iCloudSyncKey)
     }
 
     private var credentialsSyncEnabled: Bool {
@@ -206,6 +216,7 @@ final class AppStore: ObservableObject {
     }
 
     private func cloudConfig() -> ConfigExport? {
+        if let fixture = testConfig("PS_UI_TEST_CLOUD_CONFIG") { return fixture }
         do {
             guard let data = try SynchronizableStore.get(account: Self.cloudConfigAccount) else { return nil }
             configSyncError = nil
@@ -228,6 +239,7 @@ final class AppStore: ObservableObject {
     }
 
     func saveConfigToCloud() {
+        guard testConfig("PS_UI_TEST_CLOUD_CONFIG") == nil else { return }
         guard cloudSyncEnabled, !applyingConfig else { return }
         var config = exportConfig()
         config.workspace = nil

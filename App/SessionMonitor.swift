@@ -255,6 +255,9 @@ final class SessionMonitor: ObservableObject {
     }
 
     func herdrSessions(for host: HostConfig) async -> [HerdrSession] {
+        if let fixture = ProcessInfo.processInfo.environment["PS_UI_TEST_HERDR_SESSIONS"] {
+            return Herdr.parseSessions(fixture)
+        }
         guard let connection = await connection(for: host),
             let output = try? await connection.exec(Herdr.listSessionsCommand())
         else { return [] }

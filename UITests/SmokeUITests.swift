@@ -24,6 +24,19 @@ final class SmokeUITests: XCTestCase {
         if name.contains("testKeyboardToggle") {
             app.launchEnvironment["PS_UI_TEST_KEYBOARD_RESIZE"] = "1"
         }
+        if name.contains("testHerdrHostChoice") {
+            app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
+                #"{"sessions":[{"name":"default","default":true,"running":true}]}"#
+        }
+        if name.contains("testZZCloudRefresh") {
+            app.launchEnvironment["PS_UI_TEST_LOCAL_CONFIG"] = configFixture(
+                hosts: [
+                    ("00000000-0000-0000-0000-000000000001", "bl4ot"),
+                    ("00000000-0000-0000-0000-000000000002", "bl4ot-tailscale"),
+                ])
+            app.launchEnvironment["PS_UI_TEST_CLOUD_CONFIG"] = configFixture(
+                hosts: [("00000000-0000-0000-0000-000000000001", "bl4ot")])
+        }
         app.launch()
     }
 
@@ -75,6 +88,29 @@ final class SmokeUITests: XCTestCase {
         picker.tap()
         XCTAssertTrue(app.buttons["lab"].waitForExistence(timeout: 3))
         app.buttons["Cancel"].tap()
+    }
+
+    func testHerdrHostChoiceSurvivesRestoredTabsAndOpensWithoutTabChrome() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; Herdr host choice skipped")
+        }
+
+        let host = app.staticTexts["localbox"].firstMatch
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        XCTAssertTrue(app.buttons["Herdr"].waitForExistence(timeout: 5))
+        app.buttons["Shells & tmux"].tap()
+        dismissSessionPicker()
+        XCTAssertTrue(app.descendants(matching: .any)["host-switcher"].waitForExistence(timeout: 10))
+        app.buttons["Back"].tap()
+
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        XCTAssertTrue(app.buttons["Herdr"].waitForExistence(timeout: 5))
+        app.buttons["Herdr"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["host-switcher"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["new-tab"].exists)
+        XCTAssertFalse(app.buttons["tmux-sessions"].exists)
     }
 
     func testTerminalOpensShellWithToolbar() throws {
@@ -620,6 +656,11 @@ final class SmokeUITests: XCTestCase {
         XCTAssertLessThan(accent.blue, 100)
     }
 
+    func testZZCloudRefreshKeepsRemoteDeletion() {
+        XCTAssertTrue(app.staticTexts["bl4ot"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["bl4ot-tailscale"].firstMatch.exists)
+    }
+
     private func caretVisible(_ image: UIImage, terminal: CGRect) -> Bool {
         for x in stride(from: terminal.minX + 1, through: terminal.minX + 50, by: 2) {
             for y in stride(from: terminal.minY + 1, through: terminal.minY + 18, by: 2) {
@@ -671,6 +712,15 @@ final class SmokeUITests: XCTestCase {
         app.textFields["Group (optional)"].tap()
         app.textFields["Group (optional)"].typeText("lab")
         app.buttons["Save"].tap()
+    }
+
+    private func configFixture(hosts: [(id: String, name: String)]) -> String {
+        let hostsJSON = hosts.map { host in
+            #"{"id":"\#(host.id)","name":"\#(host.name)","hostname":"127.0.0.1","port":22,"username":"test","keyTag":"pocketshell-device-key"}"#
+        }.joined(separator: ",")
+        let json =
+            #"{"version":1,"hosts":[\#(hostsJSON)],"vncHosts":[],"snippets":[],"toolbarKeys":[],"knownHosts":{}}"#
+        return Data(json.utf8).base64EncodedString()
     }
 
 }

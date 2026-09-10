@@ -25,15 +25,6 @@
         "pinDigest"
       ],
       "automerge": true
-    },
-    {
-      "matchUpdateTypes": [
-        "pin",
-        "pinDigest",
-        "digest",
-        "replacement"
-      ],
-      "minimumReleaseAge": null
     }
   ],
   "minimumReleaseAge": "3 days"

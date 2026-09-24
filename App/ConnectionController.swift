@@ -382,6 +382,11 @@ final class ConnectionController: ObservableObject {
         }
     }
 
+    var canRetryNow: Bool {
+        if case .waitingToReconnect = machine.state { return true }
+        return false
+    }
+
     private func establish(initial: Bool) async {
         phase = initial ? .connecting : phase
         let connection = SSHConnection(host: host, key: key, knownHosts: knownHosts, hops: hops)
@@ -501,7 +506,7 @@ final class ConnectionController: ObservableObject {
             bridge.userInteracted = { [weak self] in
                 self?.nudgeTmuxSizing()
             }
-            _ = machine.handle(.established)
+            applyAction(machine.handle(.established))
             lastErrorMessage = nil
             phase = .attached
             Task { [weak self] in
@@ -612,24 +617,31 @@ final class ConnectionController: ObservableObject {
             retryTask = Task { [weak self] in
                 try? await Task.sleep(for: delay)
                 guard !Task.isCancelled else { return }
-                await self?.retryNow()
+                self?.retryNow()
             }
         case .connect:
             Task { await reconnect() }
-        case .disconnect, .cancelRetry, .none:
+        case .cancelRetry:
+            retryTask?.cancel()
+        case .disconnect, .none:
             break
         }
     }
 
-    private func retryNow() async {
+    func retryNow() {
         guard !stopped else { return }
         if machine.handle(.retryTimerFired) == .connect {
-            await reconnect()
+            retryTask?.cancel()
+            Task { await reconnect() }
         }
     }
 
     private func reconnect() async {
         guard !stopped else { return }
+        shellGeneration += 1
+        shell = nil
+        bridge.sendToHost = nil
+        bridge.resizeHost = nil
         if let lastErrorMessage {
             phase = .reconnecting("reconnecting…\nlast error: \(lastErrorMessage)")
         } else {

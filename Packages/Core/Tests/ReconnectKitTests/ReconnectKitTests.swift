@@ -59,6 +59,19 @@ import Testing
     #expect(action == .scheduleRetry(after: .seconds(1)))
 }
 
+@Test func establishedDuringPendingRetryCancelsIt() {
+    var machine = ReconnectMachine()
+    _ = machine.handle(.userConnect)
+    _ = machine.handle(.established)
+    _ = machine.handle(.connectionLost)
+    _ = machine.handle(.retryTimerFired)
+    _ = machine.handle(.connectionLost)
+
+    #expect(machine.handle(.established) == .cancelRetry)
+    #expect(machine.state == .connected)
+    #expect(machine.handle(.retryTimerFired) == .none)
+}
+
 @Test func retryTimerFiredConnects() {
     var machine = ReconnectMachine()
     _ = machine.handle(.userConnect)

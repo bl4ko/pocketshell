@@ -210,7 +210,7 @@ struct TerminalScreen: View {
             case .connecting:
                 banner("connecting…", color: .blue, icon: "bolt.horizontal")
             case .reconnecting(let message):
-                banner(message, color: .orange, icon: "arrow.clockwise")
+                banner(message, color: .orange, icon: "arrow.clockwise", retry: connection.canRetryNow)
             case .failed(let message):
                 banner(message, color: .red, icon: "exclamationmark.triangle.fill")
             default:
@@ -219,7 +219,7 @@ struct TerminalScreen: View {
         }
     }
 
-    private func banner(_ text: String, color: Color, icon: String) -> some View {
+    private func banner(_ text: String, color: Color, icon: String, retry: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
                 .font(.caption)
@@ -229,6 +229,11 @@ struct TerminalScreen: View {
                 .multilineTextAlignment(.leading)
                 .lineLimit(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if retry {
+                Button("Retry now") { connection.retryNow() }
+                    .font(.caption)
+                    .accessibilityIdentifier("reconnect-now")
+            }
         }
         .foregroundStyle(color)
         .padding(.horizontal, 12)

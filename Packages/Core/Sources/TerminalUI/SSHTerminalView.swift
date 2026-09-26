@@ -18,6 +18,7 @@
 
     private final class BottomAnchoredTerminalView: TerminalView {
         private var previousSize = CGSize.zero
+        private var resizeCount = 0
         var pasteImage: (() -> Bool)?
 
         override func paste(_ sender: Any?) {
@@ -34,6 +35,10 @@
                 scroll(toPosition: 1)
             }
             accessibilityValue = !canScroll || scrollPosition >= 0.999 ? "bottom" : "history"
+            if sizeChanged, ProcessInfo.processInfo.environment["PS_UI_TEST_RESIZE_COUNT"] == "1" {
+                resizeCount += 1
+                accessibilityLabel = "Terminal resize count: \(resizeCount)"
+            }
             previousSize = bounds.size
         }
 

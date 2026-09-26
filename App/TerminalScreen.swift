@@ -10,6 +10,7 @@ import UIKit
 @MainActor
 final class KeyboardObserver: ObservableObject {
     @Published var height: CGFloat = 0
+    private(set) var duration: Double = 0.25
     nonisolated(unsafe) private var token: NSObjectProtocol?
 
     init() {
@@ -19,7 +20,9 @@ final class KeyboardObserver: ObservableObject {
             queue: .main
         ) { note in
             guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
             Task { @MainActor [weak self] in
+                self?.duration = duration
                 let screenHeight =
                     UIApplication.shared.connectedScenes
                     .compactMap { ($0 as? UIWindowScene)?.screen.bounds.height }
@@ -36,9 +39,69 @@ final class KeyboardObserver: ObservableObject {
     }
 }
 
+// Animate only the visible clip and toolbar position. Terminal layout changes once,
+// so keyboard motion does not reflow scrollback or send a PTY resize on every frame.
+private struct KeyboardReveal: AnimatableModifier {
+    let inset: CGFloat
+    var animatableData: CGFloat
+
+    init(inset: CGFloat) {
+        self.inset = inset
+        animatableData = inset
+    }
+
+    func body(content: Content) -> some View {
+        content.offset(y: min(0, inset - animatableData))
+            .mask {
+                Rectangle().padding(.bottom, max(0, animatableData - inset))
+            }
+    }
+}
+
+private struct KeyboardToolbarSlide: AnimatableModifier {
+    let inset: CGFloat
+    var animatableData: CGFloat
+
+    init(inset: CGFloat) {
+        self.inset = inset
+        animatableData = inset
+    }
+
+    func body(content: Content) -> some View {
+        content.offset(y: inset - animatableData)
+            .overlay(alignment: .topLeading) {
+                if ProcessInfo.processInfo.environment["PS_UI_TEST_RESIZE_COUNT"] == "1" {
+                    KeyboardMotionProbe(offset: inset - animatableData).frame(width: 1, height: 1)
+                }
+            }
+    }
+}
+
+// UI tests observe actual intermediate display offsets, not a timer or animation flag.
+private struct KeyboardMotionProbe: UIViewRepresentable {
+    let offset: CGFloat
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isAccessibilityElement = true
+        view.accessibilityIdentifier = "keyboard.motion"
+        view.accessibilityLabel = "Keyboard motion frames: 0"
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        if view.accessibilityValue != String(Double(offset)) {
+            let count = Int(view.accessibilityLabel?.split(separator: " ").last ?? "") ?? 0
+            view.accessibilityLabel = "Keyboard motion frames: \(count + 1)"
+            view.accessibilityValue = String(Double(offset))
+        }
+    }
+}
+
 struct TerminalScreen: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var connection: ConnectionController
     @StateObject private var keyboard = KeyboardObserver()
     @State private var testKeyboardHeight: CGFloat =
@@ -56,6 +119,12 @@ struct TerminalScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let testKeyboardResize = ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1"
+            let keyboardInset =
+                testKeyboardResize ? testKeyboardHeight : max(0, keyboard.height - proxy.safeAreaInsets.bottom)
+            let inset = isActive ? keyboardInset : 0
+            let motion: Animation? =
+                reduceMotion ? nil : .easeOut(duration: testKeyboardResize ? 0.25 : keyboard.duration)
             VStack(spacing: 0) {
                 statusBanner
                 if connection.findVisible {
@@ -68,54 +137,57 @@ struct TerminalScreen: View {
                     multiplexerMode: connection.isMultiplexerAttached
                 )
                 .focusEffectDisabled()
-                if connection.composerVisible {
-                    ComposerBar(
-                        text: $connection.composerDraft,
-                        theme: TerminalTheme.named(themeName),
-                        onSend: { connection.bridge.sendComposed(connection.composerDraft) },
-                        onClose: {
-                            connection.composerVisible = false
-                            connection.bridge.setTerminalFocused(true)
-                        }
-                    )
-                }
-                #if !targetEnvironment(macCatalyst)
-                    TerminalToolbar(
-                        keys: store.toolbarKeys,
-                        theme: TerminalTheme.named(themeName),
-                        ctrlActive: Binding(
-                            get: { connection.bridge.ctrlActive },
-                            set: { connection.bridge.ctrlActive = $0 }
-                        ),
-                        quickReplyOptions: quickReplyOptions,
-                        onKey: { connection.bridge.handleToolbar($0) },
-                        onHideKeyboard: {
-                            connection.bridge.toggleKeyboard()
-                            if ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" {
-                                testKeyboardHeight = testKeyboardHeight == 0 ? 300 : 0
-                            }
-                        },
-                        onPaste: { connection.bridge.paste() },
-                        onCopy: { connection.bridge.copySelection() },
-                        onToggleSelect: { connection.bridge.toggleSelectMode() },
-                        onCompose: {
-                            connection.composerVisible.toggle()
-                            if !connection.composerVisible {
+                .transaction { $0.animation = nil }
+                .modifier(KeyboardReveal(inset: inset))
+                .animation(motion, value: inset)
+                VStack(spacing: 0) {
+                    if connection.composerVisible {
+                        ComposerBar(
+                            text: $connection.composerDraft,
+                            theme: TerminalTheme.named(themeName),
+                            onSend: { connection.bridge.sendComposed(connection.composerDraft) },
+                            onClose: {
+                                connection.composerVisible = false
                                 connection.bridge.setTerminalFocused(true)
                             }
-                        },
-                        selectActive: connection.bridge.selectMode,
-                        composeActive: connection.composerVisible,
-                        multiplexer: connection.isMultiplexerAttached
-                    )
-                #endif
+                        )
+                    }
+                    #if !targetEnvironment(macCatalyst)
+                        TerminalToolbar(
+                            keys: store.toolbarKeys,
+                            theme: TerminalTheme.named(themeName),
+                            ctrlActive: Binding(
+                                get: { connection.bridge.ctrlActive },
+                                set: { connection.bridge.ctrlActive = $0 }
+                            ),
+                            quickReplyOptions: quickReplyOptions,
+                            onKey: { connection.bridge.handleToolbar($0) },
+                            onHideKeyboard: {
+                                connection.bridge.toggleKeyboard()
+                                if ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" {
+                                    testKeyboardHeight = testKeyboardHeight == 0 ? 300 : 0
+                                }
+                            },
+                            onPaste: { connection.bridge.paste() },
+                            onCopy: { connection.bridge.copySelection() },
+                            onToggleSelect: { connection.bridge.toggleSelectMode() },
+                            onCompose: {
+                                connection.composerVisible.toggle()
+                                if !connection.composerVisible {
+                                    connection.bridge.setTerminalFocused(true)
+                                }
+                            },
+                            selectActive: connection.bridge.selectMode,
+                            composeActive: connection.composerVisible,
+                            multiplexer: connection.isMultiplexerAttached
+                        )
+                    #endif
+                }
+                .modifier(KeyboardToolbarSlide(inset: inset))
+                .animation(motion, value: inset)
             }
-            .padding(
-                .bottom,
-                isActive
-                    ? max(testKeyboardHeight, max(0, keyboard.height - proxy.safeAreaInsets.bottom))
-                    : 0
-            )
+            .background(Color(hexRGB: TerminalTheme.named(themeName).background))
+            .padding(.bottom, inset)
         }
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: windowPickerShown) {

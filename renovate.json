@@ -34,6 +34,13 @@
         "replacement"
       ],
       "minimumReleaseAge": null
+    },
+    {
+      "description": "Hold Crypto 5 until swift-nio-ssh supports it",
+      "matchPackageNames": [
+        "apple/swift-crypto"
+      ],
+      "allowedVersions": "<5.0.0"
     }
   ],
   "minimumReleaseAge": "3 days"

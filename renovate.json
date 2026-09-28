@@ -27,15 +27,6 @@
       "automerge": true
     },
     {
-      "matchUpdateTypes": [
-        "pin",
-        "pinDigest",
-        "digest",
-        "replacement"
-      ],
-      "minimumReleaseAge": null
-    },
-    {
       "description": "Hold Crypto 5 until swift-nio-ssh supports it",
       "matchPackageNames": [
         "apple/swift-crypto"

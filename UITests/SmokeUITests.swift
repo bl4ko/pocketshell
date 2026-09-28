@@ -24,6 +24,9 @@ final class SmokeUITests: XCTestCase {
         if name.contains("testKeyboardToggle") {
             app.launchEnvironment["PS_UI_TEST_KEYBOARD_RESIZE"] = "1"
         }
+        if name.contains("testKeyboard") {
+            app.launchEnvironment["PS_UI_TEST_RESIZE_COUNT"] = "1"
+        }
         if name.contains("testHerdrHostChoice") {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
                 #"{"sessions":[{"name":"default","default":true,"running":true}]}"#
@@ -498,21 +501,93 @@ final class SmokeUITests: XCTestCase {
         terminal.swipeDown()
         XCTAssertEqual(terminal.value as? String, "history")
         terminal.swipeUp()
+        for _ in 0..<4 where terminal.value as? String != "bottom" {
+            terminal.swipeUp()
+        }
         XCTAssertEqual(terminal.value as? String, "bottom")
 
         for _ in 0..<3 {
+            let beforeHide = terminal.label
+            let motionBeforeHide = keyboardMotionFrames()
             keyboardButton.tap()
+            waitForKeyboardLayout(terminal, button: keyboardButton)
             XCTAssertGreaterThan(terminal.frame.height, compactHeight + 200)
             XCTAssertEqual(terminal.value as? String, "bottom")
+            assertSingleTerminalResize(terminal, from: beforeHide)
+            XCTAssertGreaterThan(keyboardMotionFrames(), motionBeforeHide + 3)
+            XCTAssertEqual(terminal.frame.maxY, keyboardButton.frame.minY, accuracy: 20)
+            let beforeShow = terminal.label
+            let motionBeforeShow = keyboardMotionFrames()
             keyboardButton.tap()
+            waitForKeyboardLayout(terminal, button: keyboardButton)
             XCTAssertEqual(terminal.frame.height, compactHeight, accuracy: 2)
             XCTAssertEqual(terminal.value as? String, "bottom")
+            assertSingleTerminalResize(terminal, from: beforeShow)
+            XCTAssertGreaterThan(keyboardMotionFrames(), motionBeforeShow + 3)
         }
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "terminal-long-scrollback-after-keyboard-toggle"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    private func assertSingleTerminalResize(_ terminal: XCUIElement, from previousLabel: String) {
+        let previous = Int(previousLabel.split(separator: " ").last ?? "")
+        let current = Int(terminal.label.split(separator: " ").last ?? "")
+        XCTAssertNotNil(previous)
+        XCTAssertNotNil(current)
+        if let previous, let current { XCTAssertEqual(current - previous, 1) }
+    }
+
+    private func keyboardMotionFrames() -> Int {
+        let probe = app.otherElements["keyboard.motion"]
+        XCTAssertTrue(probe.exists)
+        return Int(probe.label.split(separator: " ").last ?? "") ?? 0
+    }
+
+    private func waitForKeyboardLayout(_ terminal: XCUIElement, button: XCUIElement) {
+        let settled = NSPredicate { _, _ in abs(terminal.frame.maxY - button.frame.minY) < 20 }
+        let wait = XCTNSPredicateExpectation(predicate: settled, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [wait], timeout: 5), .completed)
+    }
+
+    func testKeyboardTracksSoftwareKeyboard() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; keyboard layout test skipped")
+        }
+        openHost("localbox")
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 5))
+        let fullHeight = terminal.frame.height
+        terminal.tap()
+        terminal.typeText(" ")
+        let visibleKeyboard = NSPredicate { _, _ in
+            self.app.keyboards.element.exists && self.app.keyboards.element.isHittable
+        }
+        guard
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: visibleKeyboard, object: nil)], timeout: 5)
+                == .completed
+        else {
+            throw XCTSkip("no software keyboard on this simulator")
+        }
+        let shown = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shown.name = "terminal-with-software-keyboard"
+        shown.lifetime = .keepAlways
+        add(shown)
+        XCTAssertLessThan(terminal.frame.height, fullHeight - 200)
+        let beforeHide = terminal.label
+        let motionBeforeHide = keyboardMotionFrames()
+        keyboardButton.tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.keyboards.element)
+        waitForExpectations(timeout: 5)
+        waitForKeyboardLayout(terminal, button: keyboardButton)
+        XCTAssertEqual(terminal.frame.height, fullHeight, accuracy: 2)
+        assertSingleTerminalResize(terminal, from: beforeHide)
+        XCTAssertGreaterThan(keyboardMotionFrames(), motionBeforeHide + 3)
+        XCTAssertEqual(terminal.frame.maxY, keyboardButton.frame.minY, accuracy: 20)
     }
 
     func testDiffSheetListsTheWorkingTree() throws {
@@ -679,6 +754,8 @@ final class SmokeUITests: XCTestCase {
     /// test that wants a shell has to say so; on a host with no sessions it never appears.
     private func openHost(_ name: String) {
         app.staticTexts[name].firstMatch.tap()
+        let shellMode = app.buttons["Shells & tmux"].firstMatch
+        if shellMode.waitForExistence(timeout: 3) { shellMode.tap() }
         dismissSessionPicker()
     }
 

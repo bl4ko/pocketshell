@@ -10,7 +10,7 @@
     ":pinDevDependencies"
   ],
   "platformAutomerge": true,
-  "rebaseWhen": "behind-base-branch",
+  "rebaseWhen": "conflicted",
   "prConcurrentLimit": 1,
   "pre-commit": {
     "enabled": true
@@ -25,6 +25,13 @@
         "pinDigest"
       ],
       "automerge": true
+    },
+    {
+      "description": "Hold Crypto 5 until swift-nio-ssh supports it",
+      "matchPackageNames": [
+        "apple/swift-crypto"
+      ],
+      "allowedVersions": "<5.0.0"
     }
   ],
   "minimumReleaseAge": "3 days"

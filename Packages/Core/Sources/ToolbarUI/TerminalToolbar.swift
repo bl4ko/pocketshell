@@ -24,6 +24,7 @@
         // caret settle gate then parks on the last pane tmux redrew instead of the
         // active one (caught by testTmuxRepaintsKeepCaretParked).
         @AppStorage("pocketshell.toolbar.dpad") private var dpadOpen = false
+        @State private var dpadShiftActive = false
         @State private var category: ShortcutCategory = .favorites
 
         public init(
@@ -87,8 +88,11 @@
                 slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
                 slot("esc") { onKey(.escape) }
                 slot("tab") { onKey(.tab) }
-                slot(icon: "dpad", active: dpadOpen) { dpadOpen.toggle() }
-                    .accessibilityIdentifier("terminal.dpad")
+                slot(icon: "dpad", active: dpadOpen) {
+                    dpadShiftActive = false
+                    dpadOpen.toggle()
+                }
+                .accessibilityIdentifier("terminal.dpad")
                 if multiplexer {
                     slot("^b") {
                         category = .multiplexer
@@ -129,6 +133,10 @@
 
         private var dpadRow: some View {
             HStack(spacing: 5) {
+                slot("⇧", active: dpadShiftActive) { dpadShiftActive.toggle() }
+                    .accessibilityLabel("Shift arrows")
+                    .accessibilityValue(dpadShiftActive ? "on" : "off")
+                    .accessibilityIdentifier("terminal.arrowShift")
                 arrowKey("←", .arrowLeft)
                 arrowKey("↓", .arrowDown)
                 arrowKey("↑", .arrowUp)
@@ -163,12 +171,18 @@
 
         private func arrowKey(_ label: String, _ action: ToolbarKey.Action) -> some View {
             Button {
-                onKey(action)
+                if dpadShiftActive, let data = ToolbarKeyEncoder.data(for: action, shift: true) {
+                    onKey(.sequence(String(decoding: data, as: UTF8.self)))
+                } else {
+                    onKey(action)
+                }
+                dpadShiftActive = false
+                dpadOpen = false
             } label: {
-                slotLabel(label)
+                slotLabel(dpadShiftActive ? "⇧\(label)" : label)
             }
             .buttonStyle(.plain)
-            .buttonRepeatBehavior(.enabled)
+            .accessibilityIdentifier("terminal.arrow.\(label)")
         }
 
         private func slot(_ label: String, active: Bool = false, action: @escaping () -> Void) -> some View {

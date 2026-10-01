@@ -2,15 +2,15 @@ import Foundation
 import Models
 
 public enum ToolbarKeyEncoder {
-    public static func data(for action: ToolbarKey.Action) -> Data? {
+    public static func data(for action: ToolbarKey.Action, shift: Bool = false) -> Data? {
         switch action {
         case .escape: Data([0x1b])
         case .tab: Data([0x09])
         case .ctrlModifier: nil
-        case .arrowUp: Data("\u{1b}[A".utf8)
-        case .arrowDown: Data("\u{1b}[B".utf8)
-        case .arrowLeft: Data("\u{1b}[D".utf8)
-        case .arrowRight: Data("\u{1b}[C".utf8)
+        case .arrowUp: Data("\u{1b}[\(shift ? "1;2" : "")A".utf8)
+        case .arrowDown: Data("\u{1b}[\(shift ? "1;2" : "")B".utf8)
+        case .arrowLeft: Data("\u{1b}[\(shift ? "1;2" : "")D".utf8)
+        case .arrowRight: Data("\u{1b}[\(shift ? "1;2" : "")C".utf8)
         case .sequence(let value): Data(value.utf8)
         }
     }

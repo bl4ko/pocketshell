@@ -19,6 +19,13 @@ import Testing
     #expect(ToolbarKeyEncoder.data(for: .arrowLeft) == Data("\u{1b}[D".utf8))
 }
 
+@Test func shiftedArrowsEncodeModifierSequences() {
+    #expect(ToolbarKeyEncoder.data(for: .arrowUp, shift: true) == Data("\u{1b}[1;2A".utf8))
+    #expect(ToolbarKeyEncoder.data(for: .arrowDown, shift: true) == Data("\u{1b}[1;2B".utf8))
+    #expect(ToolbarKeyEncoder.data(for: .arrowRight, shift: true) == Data("\u{1b}[1;2C".utf8))
+    #expect(ToolbarKeyEncoder.data(for: .arrowLeft, shift: true) == Data("\u{1b}[1;2D".utf8))
+}
+
 @Test func customSequenceEncodesUTF8() {
     #expect(ToolbarKeyEncoder.data(for: .sequence("\u{02}n")) == Data([0x02, 0x6e]))
 }

@@ -144,6 +144,33 @@ final class SmokeUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testTerminalArrowRowClosesAndClearsShift() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; toolbar test skipped")
+        }
+        openHost("localbox")
+        let dpad = app.buttons["terminal.dpad"]
+        XCTAssertTrue(dpad.waitForExistence(timeout: 10))
+        let shift = app.buttons["terminal.arrowShift"]
+        if shift.exists { dpad.tap() }
+
+        dpad.tap()
+        XCTAssertTrue(shift.waitForExistence(timeout: 3))
+        XCTAssertEqual(shift.value as? String, "off")
+        shift.tap()
+        XCTAssertEqual(shift.value as? String, "on")
+        app.buttons["terminal.arrow.←"].tap()
+        XCTAssertTrue(shift.waitForNonExistence(timeout: 3))
+
+        for arrow in ["←", "↓", "↑", "→"] {
+            dpad.tap()
+            XCTAssertTrue(shift.waitForExistence(timeout: 3))
+            XCTAssertEqual(shift.value as? String, "off")
+            app.buttons["terminal.arrow.\(arrow)"].tap()
+            XCTAssertTrue(shift.waitForNonExistence(timeout: 3))
+        }
+    }
+
     func testTerminalUsesSelectedTheme() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed theme test skipped")

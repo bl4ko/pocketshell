@@ -9,9 +9,10 @@
         let onKey: (ToolbarKey.Action) -> Void
         let onClose: () -> Void
         @Binding var category: ShortcutCategory
+        @State private var arrowShiftActive = false
 
         private typealias Palette = ToolbarPalette
-        private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 4)
+        private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
 
         public init(
             theme: TerminalTheme,
@@ -30,10 +31,10 @@
         }
 
         public var body: some View {
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 header
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 6) {
+                    LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(ShortcutCatalog.chips(category, userKeys: userKeys)) { chip in
                             chipButton(chip)
                         }
@@ -44,7 +45,7 @@
                             .foregroundStyle(Palette.text(theme).opacity(0.6))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 8)
-                        LazyVGrid(columns: columns, spacing: 6) {
+                        LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(ShortcutCatalog.windowChips()) { chip in
                                 chipButton(chip)
                             }
@@ -53,7 +54,7 @@
                 }
                 .frame(maxHeight: .infinity)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(Palette.bar(theme))
             .accessibilityElement(children: .contain)
@@ -61,6 +62,8 @@
             .onChange(of: multiplexer, initial: true) { _, attached in
                 if !attached, category == .multiplexer { category = .favorites }
             }
+            .onChange(of: category) { _, _ in arrowShiftActive = false }
+            .onDisappear { arrowShiftActive = false }
         }
 
         private var header: some View {
@@ -69,27 +72,32 @@
                     Button {
                         category = item
                     } label: {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 12))
-                            .frame(width: 32, height: 26)
-                            .background(category == item ? Palette.accentTint(theme) : Palette.key(theme))
-                            .foregroundStyle(category == item ? Palette.accentDark(theme) : Palette.text(theme))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(category == item ? Palette.accentBorder(theme) : Palette.border(theme))
-                            )
+                        headerIcon(item.icon, active: category == item)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(item.rawValue)
                     .accessibilityValue(category == item ? "selected" : "")
                     .accessibilityIdentifier("shortcuts.\(item.rawValue)")
                 }
-                Spacer()
-                Button(action: onClose) {
+                if category == .arrows {
+                    Button {
+                        arrowShiftActive.toggle()
+                    } label: {
+                        headerIcon("shift", active: arrowShiftActive)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Shift arrows")
+                    .accessibilityValue(arrowShiftActive ? "on" : "off")
+                    .accessibilityIdentifier("terminal.arrowShift")
+                }
+                Spacer(minLength: 0)
+                Button {
+                    arrowShiftActive = false
+                    onClose()
+                } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11))
-                        .frame(width: 32, height: 26)
+                        .font(.system(size: 14, weight: .medium))
+                        .frame(width: 44, height: 44)
                         .foregroundStyle(Palette.text(theme))
                 }
                 .buttonStyle(.plain)
@@ -98,30 +106,53 @@
             }
         }
 
+        private func headerIcon(_ icon: String, active: Bool) -> some View {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 36, height: 36)
+                .background(active ? Palette.accentTint(theme) : Palette.key(theme))
+                .foregroundStyle(active ? Palette.accentDark(theme) : Palette.text(theme))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(active ? Palette.accentBorder(theme) : Palette.border(theme))
+                )
+                .padding(4)
+                .contentShape(Rectangle())
+        }
+
         private func chipButton(_ chip: ShortcutChip) -> some View {
             Button {
-                onKey(chip.action)
+                if category == .arrows, arrowShiftActive,
+                    let data = ToolbarKeyEncoder.data(for: chip.action, shift: true)
+                {
+                    onKey(.sequence(String(decoding: data, as: UTF8.self)))
+                } else {
+                    onKey(chip.action)
+                }
+                arrowShiftActive = false
             } label: {
-                VStack(spacing: 1) {
+                VStack(spacing: 2) {
                     Text(chip.glyph)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Palette.text(theme))
-                    if !chip.label.isEmpty {
-                        Text(chip.label)
-                            .font(.system(size: 8.5, design: .monospaced))
-                            .foregroundStyle(Palette.text(theme).opacity(0.6))
-                    }
+                    Text(chip.label.isEmpty ? " " : chip.label)
+                        .font(.system(size: 9))
+                        .foregroundStyle(Palette.text(theme).opacity(0.6))
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .padding(.horizontal, 4)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
+                .frame(height: 46)
                 .background(Palette.key(theme))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Palette.border(theme)))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.border(theme)))
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("shortcuts.key.\(chip.glyph)")
+            .buttonRepeatBehavior(category == .arrows ? .enabled : .disabled)
+            .accessibilityIdentifier(
+                category == .arrows ? "terminal.arrow.\(chip.glyph)" : "shortcuts.key.\(chip.glyph)")
         }
     }
 #endif

@@ -244,6 +244,7 @@ struct TerminalScreen: View {
                             composeActive: connection.composerVisible,
                             multiplexer: connection.isMultiplexerAttached,
                             shortcutsActive: bridge.shortcutsActive,
+                            shortcutCategory: bridge.shortcutCategory,
                             onShortcuts: { bridge.toggleShortcuts(category: $0) }
                         )
                     #endif

@@ -17,6 +17,7 @@ public struct ShortcutChip: Identifiable, Hashable, Sendable {
 
 public enum ShortcutCategory: String, CaseIterable, Sendable {
     case favorites
+    case arrows
     case shell
     case agent
     case multiplexer
@@ -24,6 +25,7 @@ public enum ShortcutCategory: String, CaseIterable, Sendable {
     public var icon: String {
         switch self {
         case .favorites: "star"
+        case .arrows: "dpad"
         case .shell: "chevron.left.forwardslash.chevron.right"
         case .agent: "sparkles"
         case .multiplexer: "square.grid.2x2"
@@ -35,7 +37,7 @@ public enum ShortcutCatalog {
     public static let tmuxPrefix = "\u{02}"
 
     public static func categories(multiplexer: Bool) -> [ShortcutCategory] {
-        multiplexer ? ShortcutCategory.allCases : [.favorites, .shell, .agent]
+        multiplexer ? ShortcutCategory.allCases : [.favorites, .arrows, .shell, .agent]
     }
 
     public static func chips(
@@ -45,6 +47,7 @@ public enum ShortcutCatalog {
     ) -> [ShortcutChip] {
         switch category {
         case .favorites: favorites(userKeys)
+        case .arrows: arrows
         case .shell: shell
         case .agent: agent
         case .multiplexer: multiplexer(prefix)
@@ -56,6 +59,17 @@ public enum ShortcutCatalog {
             ShortcutChip(glyph: $0.label, label: name(for: $0.action), action: $0.action)
         }
     }
+
+    private static let arrows: [ShortcutChip] = [
+        ShortcutChip(glyph: "←", label: "left", action: .arrowLeft),
+        ShortcutChip(glyph: "↓", label: "down", action: .arrowDown),
+        ShortcutChip(glyph: "↑", label: "up", action: .arrowUp),
+        ShortcutChip(glyph: "→", label: "right", action: .arrowRight),
+        ShortcutChip(glyph: "home", label: "line start", action: .sequence("\u{1b}[H")),
+        ShortcutChip(glyph: "end", label: "line end", action: .sequence("\u{1b}[F")),
+        ShortcutChip(glyph: "pgup", label: "page up", action: .sequence("\u{1b}[5~")),
+        ShortcutChip(glyph: "pgdn", label: "page down", action: .sequence("\u{1b}[6~")),
+    ]
 
     private static let shell: [ShortcutChip] = [
         ShortcutChip(glyph: "^C", label: "interrupt", action: .sequence("\u{03}")),

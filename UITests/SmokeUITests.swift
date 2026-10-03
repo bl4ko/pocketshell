@@ -144,31 +144,44 @@ final class SmokeUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testTerminalArrowRowClosesAndClearsShift() throws {
+    func testTerminalArrowPanelReplacesKeyboardAndClearsShift() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; toolbar test skipped")
         }
         openHost("localbox")
         let dpad = app.buttons["terminal.dpad"]
         XCTAssertTrue(dpad.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        terminal.tap()
+        terminal.typeText(" ")
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        let typingHeight = terminal.frame.height
         let shift = app.buttons["terminal.arrowShift"]
-        if shift.exists { dpad.tap() }
-
         dpad.tap()
-        XCTAssertTrue(shift.waitForExistence(timeout: 3))
+        XCTAssertTrue(shift.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
+        XCTAssertGreaterThan(terminal.frame.height, typingHeight - 30)
+        XCTAssertGreaterThan(shift.frame.minY, dpad.frame.maxY)
         XCTAssertEqual(shift.value as? String, "off")
         shift.tap()
         XCTAssertEqual(shift.value as? String, "on")
         app.buttons["terminal.arrow.←"].tap()
-        XCTAssertTrue(shift.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(shift.exists)
+        XCTAssertEqual(shift.value as? String, "off")
 
         for arrow in ["←", "↓", "↑", "→"] {
-            dpad.tap()
-            XCTAssertTrue(shift.waitForExistence(timeout: 3))
-            XCTAssertEqual(shift.value as? String, "off")
             app.buttons["terminal.arrow.\(arrow)"].tap()
-            XCTAssertTrue(shift.waitForNonExistence(timeout: 3))
+            XCTAssertTrue(shift.exists)
+            XCTAssertEqual(shift.value as? String, "off")
         }
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "terminal-arrows-in-keyboard"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        dpad.tap()
+        XCTAssertTrue(shift.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
     }
 
     func testTerminalShortcutsReplaceKeyboardAndRememberCategory() throws {
@@ -194,6 +207,20 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
         XCTAssertGreaterThan(terminal.frame.height, typingHeight - 30)
         XCTAssertGreaterThan(shell.frame.minY, toggle.frame.maxY)
+        app.buttons["shortcuts.favorites"].tap()
+        let keys = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'shortcuts.key.'"))
+            .allElementsBoundByIndex
+        XCTAssertGreaterThan(keys.count, 5)
+        let keySize = try XCTUnwrap(keys.first?.frame.size)
+        XCTAssertGreaterThanOrEqual(keySize.height, 44)
+        for key in keys {
+            XCTAssertEqual(key.frame.height, keySize.height, accuracy: 1, key.identifier)
+            XCTAssertEqual(key.frame.width, keySize.width, accuracy: 1, key.identifier)
+        }
+        let uniformGrid = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        uniformGrid.name = "uniform-special-keys"
+        uniformGrid.lifetime = .keepAlways
+        add(uniformGrid)
         shell.tap()
         XCTAssertEqual(shell.value as? String, "selected")
         app.buttons["shortcuts.key.^C"].tap()

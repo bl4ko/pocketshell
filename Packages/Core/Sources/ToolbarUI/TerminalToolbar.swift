@@ -19,12 +19,8 @@
         let composeActive: Bool
         let multiplexer: Bool
         let shortcutsActive: Bool
+        let shortcutCategory: ShortcutCategory
         let onShortcuts: (ShortcutCategory?) -> Void
-        // Default off: the extra row resizes the terminal right after attach, and the
-        // caret settle gate then parks on the last pane tmux redrew instead of the
-        // active one (caught by testTmuxRepaintsKeepCaretParked).
-        @AppStorage("pocketshell.toolbar.dpad") private var dpadOpen = false
-        @State private var dpadShiftActive = false
 
         public init(
             theme: TerminalTheme = .pocketshell,
@@ -40,6 +36,7 @@
             composeActive: Bool = false,
             multiplexer: Bool = false,
             shortcutsActive: Bool = false,
+            shortcutCategory: ShortcutCategory = .favorites,
             onShortcuts: @escaping (ShortcutCategory?) -> Void
         ) {
             self.theme = theme
@@ -55,6 +52,7 @@
             self.composeActive = composeActive
             self.multiplexer = multiplexer
             self.shortcutsActive = shortcutsActive
+            self.shortcutCategory = shortcutCategory
             self.onShortcuts = onShortcuts
         }
 
@@ -62,9 +60,6 @@
             VStack(spacing: 0) {
                 if !quickReplyOptions.isEmpty {
                     quickReplyRow
-                }
-                if dpadOpen {
-                    dpadRow
                 }
                 bar
             }
@@ -79,10 +74,10 @@
                 slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
                 slot("esc") { onKey(.escape) }
                 slot("tab") { onKey(.tab) }
-                slot(icon: "dpad", active: dpadOpen) {
-                    dpadShiftActive = false
-                    dpadOpen.toggle()
+                slot(icon: "dpad", active: shortcutsActive && shortcutCategory == .arrows) {
+                    onShortcuts(shortcutsActive && shortcutCategory == .arrows ? nil : .arrows)
                 }
+                .accessibilityLabel("Arrow keys")
                 .accessibilityIdentifier("terminal.dpad")
                 if multiplexer {
                     slot("^b") {
@@ -121,21 +116,6 @@
             .background(Palette.pinned(theme))
         }
 
-        private var dpadRow: some View {
-            HStack(spacing: 5) {
-                slot("⇧", active: dpadShiftActive) { dpadShiftActive.toggle() }
-                    .accessibilityLabel("Shift arrows")
-                    .accessibilityValue(dpadShiftActive ? "on" : "off")
-                    .accessibilityIdentifier("terminal.arrowShift")
-                arrowKey("←", .arrowLeft)
-                arrowKey("↓", .arrowDown)
-                arrowKey("↑", .arrowUp)
-                arrowKey("→", .arrowRight)
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-        }
-
         private var quickReplyRow: some View {
             HStack(spacing: 5) {
                 ForEach(quickReplyOptions, id: \.self) { option in
@@ -157,22 +137,6 @@
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .background(Palette.accentTint(theme))
-        }
-
-        private func arrowKey(_ label: String, _ action: ToolbarKey.Action) -> some View {
-            Button {
-                if dpadShiftActive, let data = ToolbarKeyEncoder.data(for: action, shift: true) {
-                    onKey(.sequence(String(decoding: data, as: UTF8.self)))
-                } else {
-                    onKey(action)
-                }
-                dpadShiftActive = false
-                dpadOpen = false
-            } label: {
-                slotLabel(dpadShiftActive ? "⇧\(label)" : label)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("terminal.arrow.\(label)")
         }
 
         private func slot(_ label: String, active: Bool = false, action: @escaping () -> Void) -> some View {

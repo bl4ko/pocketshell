@@ -11,7 +11,7 @@
         @Published public var ctrlActive = false
         @Published public var selectMode = false
         @Published public private(set) var shortcutsActive = false
-        @Published var shortcutCategory =
+        @Published public private(set) var shortcutCategory =
             ShortcutCategory(rawValue: UserDefaults.standard.string(forKey: "pocketshell.shortcuts.category") ?? "")
             ?? .favorites
         var updateShortcutKeyboard: (() -> Void)?

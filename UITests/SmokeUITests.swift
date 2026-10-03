@@ -202,6 +202,11 @@ final class SmokeUITests: XCTestCase {
         app.buttons["shortcuts.close"].tap()
         XCTAssertTrue(shell.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        let restored = NSPredicate { _, _ in
+            toggle.isHittable && toggle.frame.maxY <= self.app.keyboards.element.frame.minY + 5
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: restored, object: nil)], timeout: 5), .completed)
         toggle.tap()
         XCTAssertTrue(shell.waitForExistence(timeout: 5))
         XCTAssertEqual(shell.value as? String, "selected")

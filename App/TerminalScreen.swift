@@ -18,16 +18,10 @@ final class KeyboardObserver: ObservableObject {
             forName: UIResponder.keyboardWillChangeFrameNotification,
             object: nil,
             queue: .main
-        ) { note in
-            guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+        ) { [weak self] note in
             let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.duration = duration
-                let screenHeight =
-                    UIApplication.shared.connectedScenes
-                    .compactMap { ($0 as? UIWindowScene)?.screen.bounds.height }
-                    .max() ?? 0
-                self?.height = max(0, screenHeight - end.origin.y)
             }
         }
     }
@@ -35,6 +29,59 @@ final class KeyboardObserver: ObservableObject {
     deinit {
         if let token {
             NotificationCenter.default.removeObserver(token)
+        }
+    }
+}
+
+// Input-view replacement can emit a hide notification for the old keyboard after
+// the new one appears. The native guide tracks the keyboard that is actually visible.
+private struct KeyboardLayoutProbe: UIViewRepresentable {
+    let observer: KeyboardObserver
+
+    func makeUIView(context: Context) -> KeyboardLayoutView {
+        let view = KeyboardLayoutView()
+        view.onHeight = { [weak observer] height in
+            if observer?.height != height { observer?.height = height }
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: KeyboardLayoutView, context: Context) {}
+}
+
+private final class KeyboardLayoutView: UIView {
+    var onHeight: ((CGFloat) -> Void)?
+    private var updateScheduled = false
+
+    init() {
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        accessibilityElementsHidden = true
+        let marker = UIView()
+        marker.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(marker)
+        NSLayoutConstraint.activate([
+            marker.topAnchor.constraint(equalTo: keyboardLayoutGuide.topAnchor),
+            marker.leadingAnchor.constraint(equalTo: leadingAnchor),
+            marker.widthAnchor.constraint(equalToConstant: 0),
+            marker.heightAnchor.constraint(equalToConstant: 0),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard !updateScheduled else { return }
+        updateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.updateScheduled = false
+            guard let window = self.window else { return }
+            let frame = self.keyboardLayoutGuide.layoutFrame
+            let visible = frame.height > self.safeAreaInsets.bottom + 1
+            let top = self.convert(frame, to: window).minY
+            self.onHeight?(visible ? max(0, window.bounds.maxY - top) : 0)
         }
     }
 }
@@ -207,6 +254,7 @@ struct TerminalScreen: View {
             .background(Color(hexRGB: TerminalTheme.named(themeName).background))
             .padding(.bottom, inset)
         }
+        .background(KeyboardLayoutProbe(observer: keyboard))
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: windowPickerShown) {
             windowPicker

@@ -228,17 +228,20 @@ final class SmokeUITests: XCTestCase {
         terminal.tap()
         let path = "/tmp/psh-cursor-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: path) }
-        terminal.typeText("stty -icanon -echo; dd bs=1 count=3 of=\(path) 2>/dev/null; stty sane\n")
+        // Record the whole gesture and the quiet period after release, not just its first key.
+        terminal.typeText(
+            "stty -icanon -echo; /usr/bin/perl -e '$SIG{ALRM}=sub{exit}; alarm 8; "
+                + "open my $f, \">\", \"\(path)\"; while (sysread STDIN, my $b, 256) { print $f $b; }'; stty sane\n")
         sleep(2)
         let start = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
         let end = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.4))
-        start.press(forDuration: 0.6, thenDragTo: end)
+        start.press(forDuration: 0.6, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
 
         let finished = NSPredicate { _, _ in
-            (try? Data(contentsOf: URL(fileURLWithPath: path)).count) == 3
+            (try? Data(contentsOf: URL(fileURLWithPath: path)).isEmpty) == false
         }
         XCTAssertEqual(
-            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: finished, object: nil)], timeout: 5), .completed)
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: finished, object: nil)], timeout: 10), .completed)
         let bytes = try Data(contentsOf: URL(fileURLWithPath: path))
         XCTAssertTrue(bytes == Data("\u{1b}[C".utf8) || bytes == Data("\u{1b}OC".utf8))
         let indicator = app.staticTexts["terminal.cursorGesture"]

@@ -9,6 +9,7 @@
         private let onStationaryPress: (CGPoint) -> Void
         private var origin = CGPoint.zero
         private var movement: CursorGesture.Movement?
+        private var repeatGate = CursorGesture.RepeatGate()
         private var repeatTask: Task<Void, Never>?
         private var selecting = false
         private var moved = false
@@ -67,14 +68,13 @@
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 repeatTask = Task { [weak self] in
                     while !Task.isCancelled {
-                        let interval = self?.movement?.interval ?? 0.05
-                        try? await Task.sleep(for: .seconds(interval))
+                        try? await Task.sleep(for: .milliseconds(50))
                         guard !Task.isCancelled, let self else { break }
                         guard self.view?.window != nil, self.view?.layer.isHidden == false else {
                             self.stop()
                             break
                         }
-                        if let movement = self.movement { self.bridge.handleToolbar(movement.action) }
+                        self.sendPendingKey()
                     }
                 }
             case .changed:
@@ -90,12 +90,12 @@
                     x: Double(windowPoint.x - origin.x), y: Double(windowPoint.y - origin.y))
                 if let next {
                     moved = true
-                    if next.action != movement?.action { bridge.handleToolbar(next.action) }
                     indicator.text = "\(next.symbol)  \(String(repeating: "›", count: next.speed))"
                 } else {
                     indicator.text = "← ↑ ↓ →"
                 }
                 movement = next
+                sendPendingKey()
             case .ended:
                 let stationary = !moved && !selecting
                 stop()
@@ -109,10 +109,17 @@
             }
         }
 
+        private func sendPendingKey() {
+            if let action = repeatGate.key(for: movement, at: ProcessInfo.processInfo.systemUptime) {
+                bridge.handleToolbar(action)
+            }
+        }
+
         private func stop() {
             repeatTask?.cancel()
             repeatTask = nil
             movement = nil
+            repeatGate = CursorGesture.RepeatGate()
             indicator.isHidden = true
         }
     }

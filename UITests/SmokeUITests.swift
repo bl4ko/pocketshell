@@ -171,6 +171,48 @@ final class SmokeUITests: XCTestCase {
         }
     }
 
+    func testTerminalShortcutsReplaceKeyboardAndRememberCategory() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; shortcut keyboard test skipped")
+        }
+        openHost("localbox")
+        let toggle = app.buttons["terminal.shortcutsToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        terminal.tap()
+        terminal.typeText(" ")
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        let typingHeight = terminal.frame.height
+
+        toggle.tap()
+        let shell = app.buttons["shortcuts.shell"]
+        let opened = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        opened.name = "shortcut-keyboard-opened"
+        opened.lifetime = .keepAlways
+        add(opened)
+        XCTAssertTrue(shell.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
+        XCTAssertGreaterThan(terminal.frame.height, typingHeight - 30)
+        XCTAssertGreaterThan(shell.frame.minY, toggle.frame.maxY)
+        shell.tap()
+        XCTAssertEqual(shell.value as? String, "selected")
+        app.buttons["shortcuts.key.^C"].tap()
+        XCTAssertTrue(shell.exists)
+
+        app.buttons["shortcuts.close"].tap()
+        XCTAssertTrue(shell.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        toggle.tap()
+        XCTAssertTrue(shell.waitForExistence(timeout: 5))
+        XCTAssertEqual(shell.value as? String, "selected")
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "terminal-shortcuts-in-keyboard"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["shortcuts.close"].tap()
+    }
+
     func testTerminalUsesSelectedTheme() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed theme test skipped")

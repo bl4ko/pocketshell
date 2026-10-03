@@ -103,6 +103,7 @@ struct TerminalScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var connection: ConnectionController
+    @ObservedObject private var bridge: TerminalBridge
     @StateObject private var keyboard = KeyboardObserver()
     @State private var testKeyboardHeight: CGFloat =
         ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" ? 300 : 0
@@ -116,6 +117,21 @@ struct TerminalScreen: View {
     var isActive = true
     var quickReplyOptions: [Int] = []
     var onQuickReply: (() -> Void)?
+
+    init(
+        connection: ConnectionController,
+        host: HostConfig,
+        isActive: Bool = true,
+        quickReplyOptions: [Int] = [],
+        onQuickReply: (() -> Void)? = nil
+    ) {
+        self.connection = connection
+        self.bridge = connection.bridge
+        self.host = host
+        self.isActive = isActive
+        self.quickReplyOptions = quickReplyOptions
+        self.onQuickReply = onQuickReply
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -134,7 +150,8 @@ struct TerminalScreen: View {
                     bridge: connection.bridge,
                     theme: TerminalTheme.named(themeName),
                     scale: uiScale,
-                    multiplexerMode: connection.isMultiplexerAttached
+                    multiplexerMode: connection.isMultiplexerAttached,
+                    shortcutKeys: store.toolbarKeys
                 )
                 .focusEffectDisabled()
                 .transaction { $0.animation = nil }
@@ -154,7 +171,6 @@ struct TerminalScreen: View {
                     }
                     #if !targetEnvironment(macCatalyst)
                         TerminalToolbar(
-                            keys: store.toolbarKeys,
                             theme: TerminalTheme.named(themeName),
                             ctrlActive: Binding(
                                 get: { connection.bridge.ctrlActive },
@@ -179,7 +195,9 @@ struct TerminalScreen: View {
                             },
                             selectActive: connection.bridge.selectMode,
                             composeActive: connection.composerVisible,
-                            multiplexer: connection.isMultiplexerAttached
+                            multiplexer: connection.isMultiplexerAttached,
+                            shortcutsActive: bridge.shortcutsActive,
+                            onShortcuts: { bridge.toggleShortcuts(category: $0) }
                         )
                     #endif
                 }

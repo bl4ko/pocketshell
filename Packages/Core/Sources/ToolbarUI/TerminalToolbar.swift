@@ -6,7 +6,6 @@
     public struct TerminalToolbar: View {
         private typealias Palette = ToolbarPalette
 
-        let keys: [ToolbarKey]
         let theme: TerminalTheme
         @Binding var ctrlActive: Bool
         let quickReplyOptions: [Int]
@@ -19,16 +18,15 @@
         let selectActive: Bool
         let composeActive: Bool
         let multiplexer: Bool
-        @AppStorage("pocketshell.toolbar.shortcuts") private var panelOpen = false
+        let shortcutsActive: Bool
+        let onShortcuts: (ShortcutCategory?) -> Void
         // Default off: the extra row resizes the terminal right after attach, and the
         // caret settle gate then parks on the last pane tmux redrew instead of the
         // active one (caught by testTmuxRepaintsKeepCaretParked).
         @AppStorage("pocketshell.toolbar.dpad") private var dpadOpen = false
         @State private var dpadShiftActive = false
-        @State private var category: ShortcutCategory = .favorites
 
         public init(
-            keys: [ToolbarKey],
             theme: TerminalTheme = .pocketshell,
             ctrlActive: Binding<Bool>,
             quickReplyOptions: [Int] = [],
@@ -40,9 +38,10 @@
             onCompose: (() -> Void)? = nil,
             selectActive: Bool = false,
             composeActive: Bool = false,
-            multiplexer: Bool = false
+            multiplexer: Bool = false,
+            shortcutsActive: Bool = false,
+            onShortcuts: @escaping (ShortcutCategory?) -> Void
         ) {
-            self.keys = keys
             self.theme = theme
             self._ctrlActive = ctrlActive
             self.quickReplyOptions = quickReplyOptions
@@ -55,21 +54,12 @@
             self.selectActive = selectActive
             self.composeActive = composeActive
             self.multiplexer = multiplexer
+            self.shortcutsActive = shortcutsActive
+            self.onShortcuts = onShortcuts
         }
 
         public var body: some View {
             VStack(spacing: 0) {
-                if panelOpen {
-                    ShortcutPanel(
-                        theme: theme,
-                        userKeys: keys,
-                        multiplexer: multiplexer,
-                        onKey: onKey,
-                        onClose: { panelOpen = false },
-                        category: $category
-                    )
-                    Divider().overlay(Palette.border(theme))
-                }
                 if !quickReplyOptions.isEmpty {
                     quickReplyRow
                 }
@@ -83,7 +73,8 @@
 
         private var bar: some View {
             HStack(spacing: 5) {
-                slot(icon: "square.grid.2x2", active: panelOpen) { panelOpen.toggle() }
+                slot(icon: "square.grid.2x2", active: shortcutsActive) { onShortcuts(nil) }
+                    .accessibilityLabel("Special keys")
                     .accessibilityIdentifier("terminal.shortcutsToggle")
                 slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
                 slot("esc") { onKey(.escape) }
@@ -95,8 +86,7 @@
                 .accessibilityIdentifier("terminal.dpad")
                 if multiplexer {
                     slot("^b") {
-                        category = .multiplexer
-                        panelOpen = true
+                        onShortcuts(.multiplexer)
                     }
                     .accessibilityIdentifier("terminal.prefix")
                 }

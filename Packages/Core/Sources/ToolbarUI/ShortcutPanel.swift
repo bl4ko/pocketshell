@@ -2,7 +2,7 @@
     import Models
     import SwiftUI
 
-    struct ShortcutPanel: View {
+    public struct ShortcutPanel: View {
         let theme: TerminalTheme
         let userKeys: [ToolbarKey]
         let multiplexer: Bool
@@ -13,7 +13,23 @@
         private typealias Palette = ToolbarPalette
         private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 4)
 
-        var body: some View {
+        public init(
+            theme: TerminalTheme,
+            userKeys: [ToolbarKey],
+            multiplexer: Bool,
+            onKey: @escaping (ToolbarKey.Action) -> Void,
+            onClose: @escaping () -> Void,
+            category: Binding<ShortcutCategory>
+        ) {
+            self.theme = theme
+            self.userKeys = userKeys
+            self.multiplexer = multiplexer
+            self.onKey = onKey
+            self.onClose = onClose
+            self._category = category
+        }
+
+        public var body: some View {
             VStack(spacing: 6) {
                 header
                 ScrollView {
@@ -35,12 +51,16 @@
                         }
                     }
                 }
-                .frame(maxHeight: 168)
+                .frame(maxHeight: .infinity)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .background(Palette.bar(theme))
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("terminal.shortcuts")
+            .onChange(of: multiplexer, initial: true) { _, attached in
+                if !attached, category == .multiplexer { category = .favorites }
+            }
         }
 
         private var header: some View {
@@ -61,6 +81,8 @@
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(item.rawValue)
+                    .accessibilityValue(category == item ? "selected" : "")
                     .accessibilityIdentifier("shortcuts.\(item.rawValue)")
                 }
                 Spacer()
@@ -71,6 +93,7 @@
                         .foregroundStyle(Palette.text(theme))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Show keyboard")
                 .accessibilityIdentifier("shortcuts.close")
             }
         }
@@ -98,6 +121,7 @@
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Palette.border(theme)))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("shortcuts.key.\(chip.glyph)")
         }
     }
 #endif

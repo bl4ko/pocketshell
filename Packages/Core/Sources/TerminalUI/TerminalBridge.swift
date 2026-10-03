@@ -10,6 +10,11 @@
         public static var bytesFed = 0
         @Published public var ctrlActive = false
         @Published public var selectMode = false
+        @Published public private(set) var shortcutsActive = false
+        @Published var shortcutCategory =
+            ShortcutCategory(rawValue: UserDefaults.standard.string(forKey: "pocketshell.shortcuts.category") ?? "")
+            ?? .favorites
+        var updateShortcutKeyboard: (() -> Void)?
         @Published public private(set) var terminalTitle: String?
         public private(set) var inputEvents = 0
         public private(set) var inputBytes = 0
@@ -220,6 +225,27 @@
             } else {
                 _ = view.becomeFirstResponder()
             }
+        }
+
+        public func toggleShortcuts(category: ShortcutCategory? = nil) {
+            if let category {
+                selectShortcutCategory(category)
+                shortcutsActive = true
+            } else {
+                shortcutsActive.toggle()
+            }
+            updateShortcutKeyboard?()
+            setTerminalFocused(true)
+        }
+
+        func showTypingKeyboard() {
+            shortcutsActive = false
+            updateShortcutKeyboard?()
+        }
+
+        func selectShortcutCategory(_ category: ShortcutCategory) {
+            shortcutCategory = category
+            UserDefaults.standard.set(category.rawValue, forKey: "pocketshell.shortcuts.category")
         }
 
         public func handleToolbar(_ action: ToolbarKey.Action) {

@@ -55,6 +55,46 @@
         var sendControl: ((Character) -> Void)?
         var sendEscape: (() -> Void)?
         var sendBytes: ((Data) -> Void)?
+        #if !targetEnvironment(macCatalyst)
+            private var shortcutHost: UIHostingController<ShortcutPanel>?
+            private let shortcutInput = UIInputView(
+                frame: CGRect(x: 0, y: 0, width: 0, height: 260), inputViewStyle: .keyboard)
+
+            func updateShortcuts(bridge: TerminalBridge, keys: [ToolbarKey], theme: TerminalTheme) {
+                let panel = ShortcutPanel(
+                    theme: theme,
+                    userKeys: keys,
+                    multiplexer: terminalView.multiplexerMode,
+                    onKey: { [weak bridge] in bridge?.handleToolbar($0) },
+                    onClose: { [weak bridge] in bridge?.showTypingKeyboard() },
+                    category: Binding(
+                        get: { bridge.shortcutCategory },
+                        set: { bridge.selectShortcutCategory($0) }
+                    )
+                )
+                if let shortcutHost {
+                    shortcutHost.rootView = panel
+                } else {
+                    let host = UIHostingController(rootView: panel)
+                    shortcutHost = host
+                    // UIKit installs input views in its keyboard window, outside this controller's hierarchy.
+                    host.view.backgroundColor = .clear
+                    host.view.translatesAutoresizingMaskIntoConstraints = false
+                    shortcutInput.addSubview(host.view)
+                    NSLayoutConstraint.activate([
+                        host.view.leadingAnchor.constraint(equalTo: shortcutInput.leadingAnchor),
+                        host.view.trailingAnchor.constraint(equalTo: shortcutInput.trailingAnchor),
+                        host.view.topAnchor.constraint(equalTo: shortcutInput.topAnchor),
+                        host.view.bottomAnchor.constraint(equalTo: shortcutInput.safeAreaLayoutGuide.bottomAnchor),
+                    ])
+                }
+                let input: UIView? = bridge.shortcutsActive ? shortcutInput : nil
+                if terminalView.inputView !== input {
+                    terminalView.inputView = input
+                    terminalView.reloadInputViews()
+                }
+            }
+        #endif
 
         override func loadView() {
             view = terminalView
@@ -155,21 +195,24 @@
     }
 
     public struct SSHTerminalView: UIViewControllerRepresentable {
-        private let bridge: TerminalBridge
+        @ObservedObject private var bridge: TerminalBridge
         private let theme: TerminalTheme
         private let scale: Double
         private let multiplexerMode: Bool
+        private let shortcutKeys: [ToolbarKey]
 
         public init(
             bridge: TerminalBridge,
             theme: TerminalTheme = .defaultTheme,
             scale: Double = 1,
-            multiplexerMode: Bool = false
+            multiplexerMode: Bool = false,
+            shortcutKeys: [ToolbarKey] = ToolbarKey.defaults
         ) {
             self.bridge = bridge
             self.theme = theme
             self.scale = scale
             self.multiplexerMode = multiplexerMode
+            self.shortcutKeys = shortcutKeys
         }
 
         static func apply(_ theme: TerminalTheme, to view: TerminalView) {
@@ -302,6 +345,13 @@
             context.coordinator.scale = scale
             bridge.view = view
             bridge.setTheme(theme)
+            #if !targetEnvironment(macCatalyst)
+                bridge.updateShortcutKeyboard = { [weak controller, weak bridge] in
+                    guard let bridge else { return }
+                    controller?.updateShortcuts(bridge: bridge, keys: shortcutKeys, theme: theme)
+                }
+                controller.updateShortcuts(bridge: bridge, keys: shortcutKeys, theme: theme)
+            #endif
             return controller
         }
 
@@ -309,6 +359,15 @@
             guard let uiView = (uiViewController as? TerminalViewController)?.terminalView else { return }
             uiView.multiplexerMode = multiplexerMode
             bridge.setTheme(theme)
+            #if !targetEnvironment(macCatalyst)
+                if let controller = uiViewController as? TerminalViewController {
+                    bridge.updateShortcutKeyboard = { [weak controller, weak bridge] in
+                        guard let bridge else { return }
+                        controller?.updateShortcuts(bridge: bridge, keys: shortcutKeys, theme: theme)
+                    }
+                    controller.updateShortcuts(bridge: bridge, keys: shortcutKeys, theme: theme)
+                }
+            #endif
             guard context.coordinator.scale != scale else { return }
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
             let base =

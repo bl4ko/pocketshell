@@ -15,6 +15,8 @@
         let onCopy: (() -> Void)?
         let onToggleSelect: (() -> Void)?
         let onCompose: (() -> Void)?
+        let onAttach: (() -> Void)?
+        let uploadingFile: Bool
         let selectActive: Bool
         let composeActive: Bool
         let multiplexer: Bool
@@ -31,6 +33,8 @@
             onCopy: (() -> Void)? = nil,
             onToggleSelect: (() -> Void)? = nil,
             onCompose: (() -> Void)? = nil,
+            onAttach: (() -> Void)? = nil,
+            uploadingFile: Bool = false,
             selectActive: Bool = false,
             composeActive: Bool = false,
             multiplexer: Bool = false,
@@ -46,6 +50,8 @@
             self.onCopy = onCopy
             self.onToggleSelect = onToggleSelect
             self.onCompose = onCompose
+            self.onAttach = onAttach
+            self.uploadingFile = uploadingFile
             self.selectActive = selectActive
             self.composeActive = composeActive
             self.multiplexer = multiplexer
@@ -76,6 +82,13 @@
                         onShortcuts(.multiplexer)
                     }
                     .accessibilityIdentifier("terminal.prefix")
+                }
+                if let onAttach {
+                    slot(icon: "paperclip", busy: uploadingFile, action: onAttach)
+                        .disabled(uploadingFile)
+                        .accessibilityLabel("Attach file")
+                        .accessibilityValue(uploadingFile ? "Uploading" : "Ready")
+                        .accessibilityIdentifier("terminal.attach")
                 }
                 if let onPaste {
                     Menu {
@@ -143,9 +156,11 @@
             .buttonStyle(.plain)
         }
 
-        private func slot(icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+        private func slot(
+            icon: String, active: Bool = false, busy: Bool = false, action: @escaping () -> Void
+        ) -> some View {
             Button(action: action) {
-                slotLabel(icon: icon, active: active)
+                slotLabel(icon: icon, active: active, busy: busy)
             }
             .buttonStyle(.plain)
         }
@@ -168,9 +183,13 @@
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(border ?? Palette.border(theme)))
         }
 
-        private func slotLabel(icon: String, active: Bool = false) -> some View {
+        private func slotLabel(icon: String, active: Bool = false, busy: Bool = false) -> some View {
             Image(systemName: icon)
                 .font(.system(size: 13))
+                .opacity(busy ? 0 : 1)
+                .overlay {
+                    if busy { ProgressView().controlSize(.mini).tint(Palette.text(theme)) }
+                }
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
                 .background(active ? Palette.accentTint(theme) : Palette.key(theme))

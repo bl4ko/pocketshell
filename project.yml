@@ -50,6 +50,8 @@ targets:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: Connects to SSH hosts on your local network.
         NSFaceIDUsageDescription: Unlock pocketshell.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

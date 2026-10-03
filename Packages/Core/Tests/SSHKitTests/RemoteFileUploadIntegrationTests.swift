@@ -5,6 +5,40 @@
     import Testing
 
     @Suite(.serialized) struct RemoteFileUploadIntegrationTests {
+        @Test func uploadsFilesWithoutChangingBytesOrNames() async throws {
+            let sshd = try TestSSHD()
+            defer { sshd.stop() }
+            let connection = makeUploadConnection(sshd)
+            try await connection.connect()
+            let payload = Data((0..<150_013).map { UInt8($0 % 256) })
+            for data in [payload, Data()] {
+                let file = sshd.dir.appendingPathComponent("report draft's.bin")
+                try data.write(to: file)
+                let path = try await connection.uploadFile(at: file)
+                let quote = RemoteFileUpload.quotedPath(path)
+                let remoteHash = try await connection.exec("shasum -a 256 \(quote) | cut -d' ' -f1")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let localHash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                #expect(remoteHash == localHash)
+                #expect(URL(fileURLWithPath: path).lastPathComponent == file.lastPathComponent)
+                let permissions = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
+                #expect(permissions == 0o600)
+                let directory = URL(fileURLWithPath: path).deletingLastPathComponent()
+                let directoryPermissions =
+                    try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions] as? Int
+                #expect(directoryPermissions == 0o700)
+                #expect(!FileManager.default.fileExists(atPath: path + ".b64"))
+                try FileManager.default.removeItem(at: directory)
+            }
+            do {
+                _ = try await connection.uploadFile(at: sshd.dir)
+                Issue.record("A directory must not be attached as a file")
+            } catch is CocoaError {
+                // The picker can return only a readable file.
+            }
+            await connection.disconnect()
+        }
+
         @Test func uploadsRealisticImagePayload() async throws {
             let sshd = try TestSSHD()
             defer { sshd.stop() }

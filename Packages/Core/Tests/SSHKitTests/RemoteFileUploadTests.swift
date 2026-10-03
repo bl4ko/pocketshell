@@ -28,3 +28,13 @@ import Testing
     #expect(path.hasSuffix(".jpg"))
     #expect(path != RemoteFileUpload.remotePath())
 }
+
+@Test func attachmentPathKeepsFilenameInUniqueDirectory() {
+    let filename = "report draft's.pdf"
+    let path = RemoteFileUpload.remotePath(filename: filename)
+    #expect(path.hasPrefix("/tmp/psh-"))
+    #expect(URL(fileURLWithPath: path).lastPathComponent == filename)
+    #expect(path != RemoteFileUpload.remotePath(filename: filename))
+    #expect(RemoteFileUpload.quotedPath(path).contains("draft'\\''s.pdf"))
+    #expect(RemoteFileUpload.remotePath(filename: "../note\n.txt").hasSuffix("/note_.txt"))
+}

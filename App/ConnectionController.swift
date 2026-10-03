@@ -23,6 +23,7 @@ final class ConnectionController: ObservableObject {
 
     @Published var phase: Phase = .idle
     @Published var findVisible = false
+    @Published private(set) var isUploadingFile = false
     // Composer state lives here, not in the view: HostTabsScreen state dies on navigation
     // and a half-written prompt must survive a trip to the session list.
     @Published var composerVisible = false
@@ -586,6 +587,20 @@ final class ConnectionController: ObservableObject {
         }
         bridge.sendPasted(path)
         bridge.sendToHost?(Data(" ".utf8))
+    }
+
+    func attachFile(_ url: URL) async throws {
+        guard let connection, phase == .attached, !isUploadingFile else { throw SSHError.notConnected }
+        isUploadingFile = true
+        defer { isUploadingFile = false }
+        let generation = shellGeneration
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        let path = try await connection.uploadFile(at: url)
+        guard !stopped, generation == shellGeneration, self.connection === connection, phase == .attached else {
+            throw SSHError.connectionClosed
+        }
+        bridge.sendPasted(RemoteFileUpload.quotedPath(path) + " ")
     }
 
     private func handleStreamEnded(generation: Int) async {

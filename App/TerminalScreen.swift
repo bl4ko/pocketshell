@@ -6,6 +6,7 @@ import TerminalUI
 import TmuxKit
 import ToolbarUI
 import UIKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class KeyboardObserver: ObservableObject {
@@ -158,6 +159,8 @@ struct TerminalScreen: View {
     @AppStorage(AppSettings.uiScaleKey) private var uiScale = 1.0
     @State private var findTerm = ""
     @State private var findFailed = false
+    @State private var attachingFile = false
+    @State private var attachmentError: String?
     @FocusState private var findFocused: Bool
 
     let host: HostConfig
@@ -240,6 +243,17 @@ struct TerminalScreen: View {
                                     connection.bridge.setTerminalFocused(true)
                                 }
                             },
+                            onAttach: {
+                                let env = ProcessInfo.processInfo.environment
+                                if env["PS_UI_TEST"] == "1", let content = env["PS_UI_TEST_ATTACHMENT"] {
+                                    try? content.write(
+                                        to: URL.documentsDirectory.appendingPathComponent(
+                                            "pocketshell-attachment-test.txt"),
+                                        atomically: true, encoding: .utf8)
+                                }
+                                attachingFile = true
+                            },
+                            uploadingFile: connection.isUploadingFile,
                             selectActive: connection.bridge.selectMode,
                             composeActive: connection.composerVisible,
                             multiplexer: connection.isMultiplexerAttached,
@@ -258,6 +272,27 @@ struct TerminalScreen: View {
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: windowPickerShown) {
             windowPicker
+        }
+        .fileImporter(isPresented: $attachingFile, allowedContentTypes: [.item]) { result in
+            Task {
+                do {
+                    try await connection.attachFile(result.get())
+                } catch {
+                    if (error as? CocoaError)?.code != .userCancelled {
+                        attachmentError = error.localizedDescription
+                    }
+                }
+            }
+        }
+        .alert(
+            "File upload failed",
+            isPresented: Binding(
+                get: { attachmentError != nil }, set: { if !$0 { attachmentError = nil } }
+            )
+        ) {
+            Button("OK") { attachmentError = nil }
+        } message: {
+            Text(attachmentError ?? "")
         }
         .task {
             connection.bridge.userSentInput = { onQuickReply?() }

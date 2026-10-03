@@ -27,6 +27,9 @@ final class SmokeUITests: XCTestCase {
         if name.contains("testKeyboard") {
             app.launchEnvironment["PS_UI_TEST_RESIZE_COUNT"] = "1"
         }
+        if name.contains("testTerminalAttachment") {
+            app.launchEnvironment["PS_UI_TEST_ATTACHMENT"] = "pocketshell-file-attachment\n"
+        }
         if name.contains("testHerdrHostChoice") {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
                 #"{"sessions":[{"name":"default","default":true,"running":true}]}"#
@@ -186,6 +189,63 @@ final class SmokeUITests: XCTestCase {
         app.buttons["shortcuts.close"].tap()
         XCTAssertTrue(shift.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+    }
+
+    func testTerminalAttachmentUploadsFileAndInsertsPath() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; file attachment test skipped")
+        }
+        openHost("localbox")
+        let attach = app.buttons["terminal.attach"]
+        XCTAssertTrue(attach.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["terminal.dpad"].exists)
+        attach.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 30), app.debugDescription)
+        defer { if cancel.exists && cancel.isHittable { cancel.tap() } }
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.alerts["File upload failed"].exists)
+        XCTAssertTrue(attach.isEnabled)
+
+        let capture = "/tmp/psh-attachment-path-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: capture) }
+        let terminal = app.textViews["terminal.view"]
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText("printf '%s' ")
+        attach.tap()
+        XCTAssertTrue(cancel.waitForExistence(timeout: 30), app.debugDescription)
+        let file = app.cells["pocketshell-attachment-test, txt"]
+        if !file.waitForExistence(timeout: 3) {
+            let browse = app.buttons["Browse"].firstMatch
+            if browse.exists && !browse.isSelected { browse.tap() }
+            let local = app.cells["DOC.sidebar.item.On My iPhone"]
+            if local.exists { local.tap() }
+            let folder = app.staticTexts["pocketshell"].firstMatch
+            XCTAssertTrue(folder.waitForExistence(timeout: 5), app.debugDescription)
+            folder.tap()
+        }
+        XCTAssertTrue(file.waitForExistence(timeout: 5), app.debugDescription)
+        file.tap()
+        let imported = NSPredicate { _, _ in
+            attach.exists && attach.isEnabled && attach.value as? String == "Ready" && !cancel.exists
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: imported, object: nil)], timeout: 15), .completed)
+        terminal.tap()
+        terminal.typeText(" > '\(capture)'\n")
+        let captured = NSPredicate { _, _ in
+            FileManager.default.contents(atPath: capture)?.isEmpty == false
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: captured, object: nil)], timeout: 5), .completed)
+        let path = try XCTUnwrap(
+            FileManager.default.contents(atPath: capture).flatMap { String(data: $0, encoding: .utf8) })
+        XCTAssertTrue(path.hasPrefix("/tmp/psh-"))
+        XCTAssertEqual(URL(fileURLWithPath: path).lastPathComponent, "pocketshell-attachment-test.txt")
+        XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), "pocketshell-file-attachment\n")
+        try FileManager.default.removeItem(at: URL(fileURLWithPath: path).deletingLastPathComponent())
     }
 
     func testTerminalShortcutsReplaceKeyboardAndRememberCategory() throws {

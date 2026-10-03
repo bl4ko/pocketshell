@@ -437,8 +437,8 @@
                 MainActor.assumeIsolated {
                     guard gesture.state == .ended, let view = gesture.view as? TerminalView else { return }
                     noteUserPresence()
+                    _ = view.becomeFirstResponder()
                     #if targetEnvironment(macCatalyst)
-                        _ = view.becomeFirstResponder()
                         if view.selectionActive {
                             view.clearSelection()
                         }

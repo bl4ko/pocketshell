@@ -26,6 +26,15 @@ import Testing
     #expect(ToolbarKeyEncoder.data(for: .arrowLeft, shift: true) == Data("\u{1b}[1;2D".utf8))
 }
 
+@Test func applicationCursorArrowsUseSS3WithoutChangingShiftEncoding() {
+    #expect(ToolbarKeyEncoder.data(for: .arrowUp, applicationCursor: true) == Data("\u{1b}OA".utf8))
+    #expect(ToolbarKeyEncoder.data(for: .arrowDown, applicationCursor: true) == Data("\u{1b}OB".utf8))
+    #expect(ToolbarKeyEncoder.data(for: .arrowRight, applicationCursor: true) == Data("\u{1b}OC".utf8))
+    #expect(ToolbarKeyEncoder.data(for: .arrowLeft, applicationCursor: true) == Data("\u{1b}OD".utf8))
+    #expect(
+        ToolbarKeyEncoder.data(for: .arrowLeft, shift: true, applicationCursor: true) == Data("\u{1b}[1;2D".utf8))
+}
+
 @Test func customSequenceEncodesUTF8() {
     #expect(ToolbarKeyEncoder.data(for: .sequence("\u{02}n")) == Data([0x02, 0x6e]))
 }

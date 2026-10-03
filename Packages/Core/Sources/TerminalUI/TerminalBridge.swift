@@ -253,7 +253,9 @@
                 ctrlActive.toggle()
                 return
             }
-            if let data = ToolbarKeyEncoder.data(for: action) {
+            if let data = ToolbarKeyEncoder.data(
+                for: action, applicationCursor: view?.getTerminal().applicationCursor == true)
+            {
                 processOutgoing(data)
             }
         }

@@ -338,6 +338,19 @@
             linkPress.delegate = gestureDelegate
             linkPress.cancelsTouchesInView = false
             view.addGestureRecognizer(linkPress)
+            #if !targetEnvironment(macCatalyst)
+                let cursorGesture = CursorGestureController(view: view, bridge: bridge) {
+                    [weak coordinator = context.coordinator, weak view] point in
+                    guard let view else { return }
+                    if coordinator?.openLink(in: view, at: point) != true { view.selectWord(at: point) }
+                }
+                context.coordinator.cursorGesture = cursorGesture
+                pan.require(toFail: cursorGesture.press)
+                tap.require(toFail: cursorGesture.press)
+                for gesture in view.gestureRecognizers ?? [] where gesture is UISwipeGestureRecognizer {
+                    gesture.require(toFail: cursorGesture.press)
+                }
+            #endif
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
             let base = FontZoom.range.contains(saved) ? saved : Double(view.font.pointSize)
             view.font = UIFont.monospacedSystemFont(
@@ -396,6 +409,9 @@
             private let bridge: TerminalBridge
             private var scrollTracker = PanScrollTracker(step: 1)
             var gestureDelegate: SimultaneousGestureDelegate?
+            #if !targetEnvironment(macCatalyst)
+                var cursorGesture: CursorGestureController?
+            #endif
 
             init(bridge: TerminalBridge) {
                 self.bridge = bridge
@@ -473,21 +489,25 @@
             @objc func handleLinkPress(_ gesture: UILongPressGestureRecognizer) {
                 MainActor.assumeIsolated {
                     guard gesture.state == .began, let view = gesture.view as? TerminalView else { return }
-                    let terminal = view.getTerminal()
-                    let location = gesture.location(in: view)
-                    let row = clamp(
-                        Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
-                    let col = clamp(
-                        Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
-                    let lines = (0..<terminal.rows).map {
-                        terminal.getLine(row: $0)?.translateToString(trimRight: false) ?? ""
-                    }
-                    let wrapped = (0..<terminal.rows).map { terminal.getLine(row: $0)?.isWrapped ?? false }
-                    guard let link = TerminalURL.find(lines: lines, wrapped: wrapped, row: row, column: col),
-                        let url = URL(string: link)
-                    else { return }
-                    presentLinkMenu(for: url, in: view, at: location)
+                    _ = openLink(in: view, at: gesture.location(in: view))
                 }
+            }
+
+            @MainActor fileprivate func openLink(in view: TerminalView, at location: CGPoint) -> Bool {
+                let terminal = view.getTerminal()
+                let row = clamp(
+                    Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                let col = clamp(
+                    Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
+                let lines = (0..<terminal.rows).map {
+                    terminal.getLine(row: $0)?.translateToString(trimRight: false) ?? ""
+                }
+                let wrapped = (0..<terminal.rows).map { terminal.getLine(row: $0)?.isWrapped ?? false }
+                guard let link = TerminalURL.find(lines: lines, wrapped: wrapped, row: row, column: col),
+                    let url = URL(string: link)
+                else { return false }
+                presentLinkMenu(for: url, in: view, at: location)
+                return true
             }
 
             @MainActor private func presentLinkMenu(for url: URL, in view: UIView, at point: CGPoint) {

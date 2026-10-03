@@ -213,6 +213,33 @@ final class SmokeUITests: XCTestCase {
         app.buttons["shortcuts.close"].tap()
     }
 
+    func testTerminalHoldAndDragSendsArrowsAndStopsOnRelease() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; cursor gesture test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        let path = "/tmp/psh-cursor-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        terminal.typeText("stty -icanon -echo; dd bs=1 count=3 of=\(path) 2>/dev/null; stty sane\n")
+        sleep(2)
+        let start = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        let end = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.4))
+        start.press(forDuration: 0.6, thenDragTo: end)
+
+        let finished = NSPredicate { _, _ in
+            (try? Data(contentsOf: URL(fileURLWithPath: path)).count) == 3
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: finished, object: nil)], timeout: 5), .completed)
+        let bytes = try Data(contentsOf: URL(fileURLWithPath: path))
+        XCTAssertTrue(bytes == Data("\u{1b}[C".utf8) || bytes == Data("\u{1b}OC".utf8))
+        let indicator = app.staticTexts["terminal.cursorGesture"]
+        XCTAssertFalse(indicator.isHittable)
+    }
+
     func testTerminalUsesSelectedTheme() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed theme test skipped")

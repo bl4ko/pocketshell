@@ -19,7 +19,6 @@
         let composeActive: Bool
         let multiplexer: Bool
         let shortcutsActive: Bool
-        let shortcutCategory: ShortcutCategory
         let onShortcuts: (ShortcutCategory?) -> Void
 
         public init(
@@ -36,7 +35,6 @@
             composeActive: Bool = false,
             multiplexer: Bool = false,
             shortcutsActive: Bool = false,
-            shortcutCategory: ShortcutCategory = .favorites,
             onShortcuts: @escaping (ShortcutCategory?) -> Void
         ) {
             self.theme = theme
@@ -52,7 +50,6 @@
             self.composeActive = composeActive
             self.multiplexer = multiplexer
             self.shortcutsActive = shortcutsActive
-            self.shortcutCategory = shortcutCategory
             self.onShortcuts = onShortcuts
         }
 
@@ -74,11 +71,6 @@
                 slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
                 slot("esc") { onKey(.escape) }
                 slot("tab") { onKey(.tab) }
-                slot(icon: "dpad", active: shortcutsActive && shortcutCategory == .arrows) {
-                    onShortcuts(shortcutsActive && shortcutCategory == .arrows ? nil : .arrows)
-                }
-                .accessibilityLabel("Arrow keys")
-                .accessibilityIdentifier("terminal.dpad")
                 if multiplexer {
                     slot("^b") {
                         onShortcuts(.multiplexer)

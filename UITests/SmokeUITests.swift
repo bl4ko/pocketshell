@@ -149,19 +149,23 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; toolbar test skipped")
         }
         openHost("localbox")
-        let dpad = app.buttons["terminal.dpad"]
-        XCTAssertTrue(dpad.waitForExistence(timeout: 10))
+        let toggle = app.buttons["terminal.shortcutsToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["terminal.dpad"].exists)
         let terminal = app.textViews["terminal.view"]
         terminal.tap()
         terminal.typeText(" ")
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
         let typingHeight = terminal.frame.height
         let shift = app.buttons["terminal.arrowShift"]
-        dpad.tap()
+        toggle.tap()
+        let arrows = app.buttons["shortcuts.arrows"]
+        XCTAssertTrue(arrows.waitForExistence(timeout: 5))
+        arrows.tap()
         XCTAssertTrue(shift.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
         XCTAssertGreaterThan(terminal.frame.height, typingHeight - 30)
-        XCTAssertGreaterThan(shift.frame.minY, dpad.frame.maxY)
+        XCTAssertGreaterThan(shift.frame.minY, toggle.frame.maxY)
         XCTAssertEqual(shift.value as? String, "off")
         shift.tap()
         XCTAssertEqual(shift.value as? String, "on")
@@ -179,7 +183,7 @@ final class SmokeUITests: XCTestCase {
         screenshot.name = "terminal-arrows-in-keyboard"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        dpad.tap()
+        app.buttons["shortcuts.close"].tap()
         XCTAssertTrue(shift.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
     }

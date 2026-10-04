@@ -56,7 +56,11 @@ struct HostsListView: View {
                 }
             }
             .navigationDestination(for: HerdrHostDestination.self) { destination in
-                HostTabsScreen(host: destination.host, herdrSession: destination.session) { newHost in
+                HostTabsScreen(
+                    host: destination.host,
+                    herdrSession: destination.session,
+                    herdrWorkspaceID: destination.workspaceID
+                ) { newHost in
                     path.removeLast()
                     path.append(newHost)
                 }
@@ -100,13 +104,25 @@ struct HostsListView: View {
         .onChange(of: router.pending) { _, target in
             openPendingTarget(target)
         }
-        .onAppear { openPendingTarget(router.pending) }
+        .onAppear {
+            if ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1",
+                let fixture = ProcessInfo.processInfo.environment["PS_UI_TEST_NOTIFICATION_TARGET"],
+                let target = try? JSONDecoder().decode(SessionTarget.self, from: Data(fixture.utf8))
+            {
+                router.pending = target
+            }
+            openPendingTarget(router.pending)
+        }
     }
 
     private func openPendingTarget(_ target: SessionTarget?) {
         guard let target, let host = store.hosts.first(where: { $0.id == target.hostID }) else { return }
         path = NavigationPath()
-        path.append(host)
+        if target.backend == "herdr", let session = target.session {
+            path.append(HerdrHostDestination(host: host, session: session, workspaceID: target.workspaceID))
+        } else {
+            path.append(host)
+        }
     }
 
     private var header: some View {
@@ -495,4 +511,5 @@ struct SnippetRun: Identifiable {
 private struct HerdrHostDestination: Hashable {
     let host: HostConfig
     let session: String
+    var workspaceID: String? = nil
 }

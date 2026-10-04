@@ -68,6 +68,7 @@ struct HostTabsScreen: View {
 
     let host: HostConfig
     var herdrSession: String? = nil
+    var herdrWorkspaceID: String? = nil
     var onSwitchHost: ((HostConfig) -> Void)?
 
     private let tabSpacing: CGFloat = 4
@@ -226,7 +227,10 @@ struct HostTabsScreen: View {
             loadCollapsedTabGroups()
             if tabs.isEmpty {
                 if let herdrSession {
-                    openHerdrSessionInNewTab(session: herdrSession, workspaceID: nil)
+                    consumePendingTarget()
+                    if tabs.isEmpty {
+                        openHerdrSessionInNewTab(session: herdrSession, workspaceID: herdrWorkspaceID)
+                    }
                 } else if !(store.savedTabs[host.id.uuidString] ?? []).isEmpty {
                     restoreTabs()
                     consumePendingTarget()
@@ -384,6 +388,21 @@ struct HostTabsScreen: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("host-switcher")
+        .accessibilityValue(notificationTestTarget)
+    }
+
+    private var notificationTestTarget: String {
+        guard ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1",
+            ProcessInfo.processInfo.environment["PS_UI_TEST_NOTIFICATION_TARGET"] != nil
+        else { return "" }
+        let pending = router.pending == nil ? "consumed" : "pending"
+        if let target = activeController?.herdrTarget {
+            return "herdr:\(target.session):\(target.workspaceID ?? "-"):\(pending):\(tabs.count)"
+        }
+        if let target = activeController?.tmuxTarget {
+            return "tmux:\(target.session):\(target.windowIndex.map(String.init) ?? "-"):\(pending)"
+        }
+        return pending
     }
 
     private var tabJumpItems: [TabJumpItem] {

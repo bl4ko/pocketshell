@@ -9,7 +9,7 @@ import TmuxKit
 import UserNotifications
 import WidgetKit
 
-struct SessionTarget: Equatable {
+struct SessionTarget: Equatable, Decodable {
     var hostID: UUID
     var session: String?
     var windowIndex: Int?

@@ -68,17 +68,23 @@
 
         private var header: some View {
             HStack(spacing: 6) {
-                ForEach(ShortcutCatalog.categories(multiplexer: multiplexer), id: \.self) { item in
-                    Button {
-                        category = item
-                    } label: {
-                        headerIcon(item.icon, active: category == item)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 6) {
+                        ForEach(ShortcutCatalog.categories(multiplexer: multiplexer), id: \.self) { item in
+                            Button {
+                                category = item
+                            } label: {
+                                headerIcon(item.icon, active: category == item)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(item == .herdr ? "Herdr" : item.rawValue)
+                            .accessibilityValue(category == item ? "selected" : "")
+                            .accessibilityIdentifier("shortcuts.\(item.rawValue)")
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(item.rawValue)
-                    .accessibilityValue(category == item ? "selected" : "")
-                    .accessibilityIdentifier("shortcuts.\(item.rawValue)")
                 }
+                .scrollIndicators(.hidden)
+                .frame(height: 44)
                 if category == .arrows {
                     Button {
                         arrowShiftActive.toggle()
@@ -90,7 +96,6 @@
                     .accessibilityValue(arrowShiftActive ? "on" : "off")
                     .accessibilityIdentifier("terminal.arrowShift")
                 }
-                Spacer(minLength: 0)
                 Button {
                     arrowShiftActive = false
                     onClose()

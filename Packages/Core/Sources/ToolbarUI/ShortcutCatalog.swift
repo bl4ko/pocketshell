@@ -21,6 +21,7 @@ public enum ShortcutCategory: String, CaseIterable, Sendable {
     case shell
     case agent
     case multiplexer
+    case herdr
 
     public var icon: String {
         switch self {
@@ -29,6 +30,7 @@ public enum ShortcutCategory: String, CaseIterable, Sendable {
         case .shell: "chevron.left.forwardslash.chevron.right"
         case .agent: "sparkles"
         case .multiplexer: "square.grid.2x2"
+        case .herdr: "rectangle.3.group"
         }
     }
 }
@@ -37,7 +39,7 @@ public enum ShortcutCatalog {
     public static let tmuxPrefix = "\u{02}"
 
     public static func categories(multiplexer: Bool) -> [ShortcutCategory] {
-        multiplexer ? ShortcutCategory.allCases : [.favorites, .arrows, .shell, .agent]
+        ShortcutCategory.allCases.filter { multiplexer || $0 != .multiplexer }
     }
 
     public static func chips(
@@ -51,6 +53,7 @@ public enum ShortcutCatalog {
         case .shell: shell
         case .agent: agent
         case .multiplexer: multiplexer(prefix)
+        case .herdr: herdr(prefix)
         }
     }
 
@@ -107,6 +110,26 @@ public enum ShortcutCatalog {
         ].map { key, label in
             ShortcutChip(glyph: "^b,\(key)", label: label, action: .sequence(prefix + key))
         }
+    }
+
+    // Herdr's default prefix bindings. Keep this category available for shells
+    // where Herdr was started manually as well as PocketShell's Herdr attaches.
+    private static func herdr(_ prefix: String) -> [ShortcutChip] {
+        let actions = [
+            ("w", "spaces"), ("g", "go to"), ("b", "sidebar"), ("?", "help"),
+            ("c", "new tab"), ("p", "prev tab"), ("n", "next tab"), ("T", "rename tab"),
+            ("h", "pane left"), ("j", "pane down"), ("k", "pane up"), ("l", "pane right"),
+            ("v", "split vertical"), ("-", "split horizontal"), ("z", "zoom"), ("r", "resize"),
+            ("N", "new space"), ("W", "rename space"), ("G", "new worktree"), ("o", "notification"),
+            ("e", "scrollback"), ("s", "settings"), ("R", "reload config"), ("q", "detach"),
+            ("x", "close pane"), ("X", "close tab"), ("D", "close space"),
+        ].map { key, label in
+            ShortcutChip(glyph: "^b,\(key)", label: label, action: .sequence(prefix + key))
+        }
+        return actions
+            + (1...9).map {
+                ShortcutChip(glyph: "\($0)", label: "tab \($0)", action: .sequence(prefix + "\($0)"))
+            }
     }
 
     public static func windowChips(_ count: Int = 9, prefix: String = tmuxPrefix) -> [ShortcutChip] {

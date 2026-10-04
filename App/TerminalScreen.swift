@@ -256,7 +256,6 @@ struct TerminalScreen: View {
                             uploadingFile: connection.isUploadingFile,
                             selectActive: connection.bridge.selectMode,
                             composeActive: connection.composerVisible,
-                            multiplexer: connection.isMultiplexerAttached,
                             shortcutsActive: bridge.shortcutsActive,
                             onShortcuts: { bridge.toggleShortcuts(category: $0) }
                         )

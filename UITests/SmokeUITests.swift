@@ -261,6 +261,20 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
         let typingHeight = terminal.frame.height
 
+        let enter = app.buttons["terminal.enter"]
+        XCTAssertTrue(enter.isHittable)
+        XCTAssertFalse(app.buttons["terminal.prefix"].exists)
+        let path = "/tmp/psh-enter-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        terminal.typeText("\u{03}printf toolbar-enter > \(path)")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+        enter.tap()
+        let entered = NSPredicate { _, _ in
+            (try? String(contentsOfFile: path, encoding: .utf8)) == "toolbar-enter"
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: entered, object: nil)], timeout: 10), .completed)
+
         toggle.tap()
         let shell = app.buttons["shortcuts.shell"]
         let opened = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -289,6 +303,25 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(shell.value as? String, "selected")
         app.buttons["shortcuts.key.^C"].tap()
         XCTAssertTrue(shell.exists)
+
+        let herdr = app.buttons["shortcuts.herdr"]
+        XCTAssertTrue(herdr.exists)
+        if !herdr.isHittable { shell.swipeLeft() }
+        XCTAssertTrue(herdr.isHittable)
+        herdr.tap()
+        XCTAssertEqual(herdr.value as? String, "selected")
+        XCTAssertTrue(app.buttons["shortcuts.key.^b,w"].isHittable)
+        XCTAssertTrue(app.buttons["shortcuts.key.^b,v"].exists)
+        XCTAssertTrue(app.buttons["shortcuts.key.^b,-"].exists)
+        let close = app.buttons["shortcuts.close"]
+        XCTAssertGreaterThan(herdr.frame.maxY, toggle.frame.maxY)
+        XCTAssertLessThanOrEqual(herdr.frame.maxX, close.frame.minX)
+        let herdrPanel = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        herdrPanel.name = "terminal-herdr-shortcuts"
+        herdrPanel.lifetime = .keepAlways
+        add(herdrPanel)
+        if !shell.isHittable { herdr.swipeRight() }
+        shell.tap()
 
         app.buttons["shortcuts.close"].tap()
         XCTAssertTrue(shell.waitForNonExistence(timeout: 5))

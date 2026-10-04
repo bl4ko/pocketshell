@@ -19,7 +19,6 @@
         let uploadingFile: Bool
         let selectActive: Bool
         let composeActive: Bool
-        let multiplexer: Bool
         let shortcutsActive: Bool
         let onShortcuts: (ShortcutCategory?) -> Void
 
@@ -37,7 +36,6 @@
             uploadingFile: Bool = false,
             selectActive: Bool = false,
             composeActive: Bool = false,
-            multiplexer: Bool = false,
             shortcutsActive: Bool = false,
             onShortcuts: @escaping (ShortcutCategory?) -> Void
         ) {
@@ -54,7 +52,6 @@
             self.uploadingFile = uploadingFile
             self.selectActive = selectActive
             self.composeActive = composeActive
-            self.multiplexer = multiplexer
             self.shortcutsActive = shortcutsActive
             self.onShortcuts = onShortcuts
         }
@@ -77,12 +74,9 @@
                 slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
                 slot("esc") { onKey(.escape) }
                 slot("tab") { onKey(.tab) }
-                if multiplexer {
-                    slot("^b") {
-                        onShortcuts(.multiplexer)
-                    }
-                    .accessibilityIdentifier("terminal.prefix")
-                }
+                slot(icon: "return") { onKey(.sequence("\r")) }
+                    .accessibilityLabel("Enter")
+                    .accessibilityIdentifier("terminal.enter")
                 if let onAttach {
                     slot(icon: "paperclip", busy: uploadingFile, action: onAttach)
                         .disabled(uploadingFile)

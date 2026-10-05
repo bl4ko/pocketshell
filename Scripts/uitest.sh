@@ -70,6 +70,48 @@ int main(int argc, char **argv) {
 }
 EOF
 cc -O2 -o "$DIR/codex" "$DIR/codex.c"
+cat > "$DIR/arrow-prompt.c" << 'EOF'
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
+#include <termios.h>
+#include <unistd.h>
+
+int main(void) {
+    struct termios original, raw;
+    tcgetattr(STDIN_FILENO, &original);
+    raw = original;
+    cfmakeraw(&raw);
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+    printf("\033[?1049h");
+    for (;;) {
+        struct winsize size;
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
+        printf("\033[2J\033[HSelect an option\033[%d;1HEnter to select\033[%d;1H↑/↓ to navigate · Esc to cancel",
+               size.ws_row - 2, size.ws_row - 1);
+        fflush(stdout);
+        fd_set input;
+        FD_ZERO(&input);
+        FD_SET(STDIN_FILENO, &input);
+        struct timeval timeout = {0, 100000};
+        if (select(STDIN_FILENO + 1, &input, NULL, NULL, &timeout) > 0) {
+            char bytes[64];
+            ssize_t count = read(STDIN_FILENO, bytes, sizeof(bytes));
+            if (count <= 0) break;
+            int done = 0;
+            for (ssize_t i = 0; i < count; i++) {
+                if (bytes[i] == '\r' || bytes[i] == '\n' || bytes[i] == 3) done = 1;
+            }
+            if (done) break;
+        }
+    }
+    printf("\033[?1049l");
+    fflush(stdout);
+    tcsetattr(STDIN_FILENO, TCSANOW, &original);
+    return 0;
+}
+EOF
+cc -O2 -o "$DIR/arrow-prompt" "$DIR/arrow-prompt.c"
 tmux new-session -d -s "$STATUS_STABLE" -n stable "$DIR/codex stable"
 tmux new-session -d -s "$STATUS_CHURN" -n churn "$DIR/codex churn"
 tmux new-session -d -s "$STATUS_GAP" -n gap "$DIR/codex gap"
@@ -156,6 +198,7 @@ TEST_RUNNER_PS_TEST_STATUS_STABLE="$STATUS_STABLE" \
 TEST_RUNNER_PS_TEST_STATUS_CHURN="$STATUS_CHURN" \
 TEST_RUNNER_PS_TEST_STATUS_GAP="$STATUS_GAP" \
 TEST_RUNNER_PS_TEST_FLICKER="$FLICKER_SESSION" \
+TEST_RUNNER_PS_TEST_ARROW_PROMPT="$DIR/arrow-prompt" \
 xcodebuild test \
   -scheme pocketshell \
   -destination "platform=iOS Simulator,name=$SIM" \

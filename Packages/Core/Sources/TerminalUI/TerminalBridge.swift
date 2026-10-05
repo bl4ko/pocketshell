@@ -31,6 +31,11 @@
         private var gate = FeedGate()
         private var flushTask: Task<Void, Never>?
         private var feedingView = false
+        private var arrowPrompt = ArrowPrompt()
+        private var promptTask: Task<Void, Never>?
+        private var automaticArrows = false
+        private var previousShortcutsActive = false
+        private var previousShortcutCategory = ShortcutCategory.favorites
 
         public init() {}
 
@@ -58,6 +63,7 @@
                 feedView(out)
             }
             suspendRendering(!live)
+            if live { schedulePromptCheck() }
         }
 
         // Layer-level, not view-level: hiding the view would resign first responder.
@@ -85,6 +91,44 @@
             if let theme, !SSHTerminalView.isApplied(theme, to: view) {
                 SSHTerminalView.apply(theme, to: view)
             }
+            schedulePromptCheck()
+        }
+
+        private func schedulePromptCheck() {
+            #if !targetEnvironment(macCatalyst)
+                guard gate.isLive, promptTask == nil else { return }
+                // Coalesce repaint chunks and inspect only the current footer, not scrollback.
+                promptTask = Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(150))
+                    guard !Task.isCancelled, let self else { return }
+                    self.promptTask = nil
+                    guard self.gate.isLive, let view = self.view,
+                        !view.canScroll || view.scrollPosition == 1
+                    else { return }
+                    let terminal = view.getTerminal()
+                    let lines = (max(0, terminal.rows - 6)..<terminal.rows).compactMap {
+                        terminal.getLine(row: $0)?.translateToString(trimRight: true)
+                            .replacingOccurrences(of: "\u{0}", with: " ")
+                    }
+                    let transition = self.arrowPrompt.update(lines: lines)
+                    if self.arrowPrompt.needsRecheck { self.schedulePromptCheck() }
+                    guard let visible = transition else { return }
+                    if visible {
+                        self.previousShortcutsActive = self.shortcutsActive
+                        self.previousShortcutCategory = self.shortcutCategory
+                        self.automaticArrows = true
+                        self.shortcutCategory = .arrows
+                        self.shortcutsActive = true
+                    } else if self.automaticArrows {
+                        self.automaticArrows = false
+                        self.shortcutCategory = self.previousShortcutCategory
+                        self.shortcutsActive = self.previousShortcutsActive
+                    } else {
+                        return
+                    }
+                    self.updateShortcutKeyboard?()
+                }
+            #endif
         }
 
         func setTheme(_ theme: TerminalTheme) {
@@ -228,6 +272,7 @@
         }
 
         public func toggleShortcuts(category: ShortcutCategory? = nil) {
+            automaticArrows = false
             if let category {
                 selectShortcutCategory(category)
                 shortcutsActive = true
@@ -239,11 +284,13 @@
         }
 
         func showTypingKeyboard() {
+            automaticArrows = false
             shortcutsActive = false
             updateShortcutKeyboard?()
         }
 
         func selectShortcutCategory(_ category: ShortcutCategory) {
+            automaticArrows = false
             shortcutCategory = category
             UserDefaults.standard.set(category.rawValue, forKey: "pocketshell.shortcuts.category")
         }

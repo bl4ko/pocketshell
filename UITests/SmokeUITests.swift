@@ -191,6 +191,38 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
     }
 
+    func testTerminalAutomaticallyShowsArrowsForSelectionPrompt() throws {
+        guard let fixture = ProcessInfo.processInfo.environment["PS_TEST_ARROW_PROMPT"] else {
+            throw XCTSkip("PS_TEST_ARROW_PROMPT not set; automatic arrow test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        terminal.typeText("\u{03}")
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+
+        terminal.typeText("'\(fixture)'\n")
+        let arrows = app.buttons["terminal.arrowShift"]
+        XCTAssertTrue(arrows.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
+        app.buttons["terminal.arrow.↓"].tap()
+        XCTAssertTrue(arrows.exists)
+        app.buttons["terminal.enter"].tap()
+        XCTAssertTrue(arrows.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+
+        terminal.typeText("'\(fixture)'\n")
+        XCTAssertTrue(arrows.waitForExistence(timeout: 10))
+        app.buttons["shortcuts.close"].tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        // The fixture keeps redrawing the same prompt. Manual close must last.
+        sleep(2)
+        XCTAssertFalse(arrows.exists)
+        app.buttons["terminal.enter"].tap()
+        XCTAssertTrue(app.keyboards.element.exists)
+    }
+
     func testTerminalAttachmentUploadsFileAndInsertsPath() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; file attachment test skipped")

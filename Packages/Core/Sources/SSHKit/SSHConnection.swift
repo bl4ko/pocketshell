@@ -38,6 +38,7 @@ public actor SSHConnection {
     private let hops: [SSHHop]
     private var channel: Channel?
     private var hopChannels: [Channel] = []
+    var setupFault: (@Sendable (Channel) throws -> Void)?
 
     public init(host: HostConfig, key: DeviceKeyMaterial, knownHosts: KnownHostsStore, hops: [SSHHop] = []) {
         self.host = host
@@ -228,6 +229,7 @@ public actor SSHConnection {
         }
 
         return try await closingOnFailure(childChannel) {
+            try setupFault?(childChannel)
             try await sendUTF8Locale(childChannel)
             let exec = SSHChannelRequestEvent.ExecRequest(command: command, wantReply: true)
             try await childChannel.triggerUserOutboundEvent(exec)
@@ -256,6 +258,7 @@ public actor SSHConnection {
             terminalModes: SSHTerminalModes([:])
         )
         try await closingOnFailure(childChannel) {
+            try setupFault?(childChannel)
             try await sendUTF8Locale(childChannel)
             try await childChannel.triggerUserOutboundEvent(pty)
             if let command {
@@ -287,6 +290,10 @@ public actor SSHConnection {
                 try? await childChannel.close()
             }
         )
+    }
+
+    func setSetupFault(_ fault: (@Sendable (Channel) throws -> Void)?) {
+        setupFault = fault
     }
 
     func closingOnFailure<T>(_ channel: Channel, _ body: () async throws -> T) async throws -> T {

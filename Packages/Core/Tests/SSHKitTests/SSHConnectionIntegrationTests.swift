@@ -3,6 +3,7 @@
     import Foundation
     import KeyKit
     import Models
+    import NIOCore
     import Testing
     @testable import SSHKit
 
@@ -289,6 +290,57 @@
             let output = try await connection.exec("echo still-works")
             #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == "still-works")
             await connection.disconnect()
+        }
+
+        private final class ChannelLog: @unchecked Sendable {
+            private let lock = NSLock()
+            private var items: [Channel] = []
+            func add(_ channel: Channel) {
+                lock.lock()
+                items.append(channel)
+                lock.unlock()
+            }
+            var all: [Channel] {
+                lock.lock()
+                defer { lock.unlock() }
+                return items
+            }
+        }
+
+        private func expectCallSiteClosesChannel(
+            _ call: @escaping @Sendable (SSHConnection) async throws -> Void
+        ) async throws {
+            struct SetupFailure: Error {}
+            let sshd = try TestSSHD()
+            defer { sshd.stop() }
+            let connection = makeConnection(sshd)
+            try await connection.connect()
+            let log = ChannelLog()
+            await connection.setSetupFault { channel in
+                log.add(channel)
+                throw SetupFailure()
+            }
+            for _ in 0..<12 {
+                await #expect(throws: SetupFailure.self) { try await call(connection) }
+            }
+            #expect(log.all.count == 12)
+            #expect(log.all.allSatisfy { !$0.isActive })
+            await connection.setSetupFault(nil)
+            let output = try await connection.exec("echo still-works")
+            #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == "still-works")
+            await connection.disconnect()
+        }
+
+        @Test func execClosesChildChannelWhenSetupFails() async throws {
+            try await expectCallSiteClosesChannel { _ = try await $0.exec("true") }
+        }
+
+        @Test func openShellClosesChildChannelWhenSetupFails() async throws {
+            try await expectCallSiteClosesChannel { _ = try await $0.openShell(cols: 80, rows: 24) }
+        }
+
+        @Test func openSFTPClosesChildChannelWhenSetupFails() async throws {
+            try await expectCallSiteClosesChannel { _ = try await $0.openSFTP() }
         }
 
         @Test func execWorksWhileShellChannelOpen() async throws {

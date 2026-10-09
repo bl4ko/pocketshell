@@ -213,6 +213,7 @@ extension SSHConnection {
             }
         }
         return try await closingOnFailure(childChannel) {
+            try setupFault?(childChannel)
             try await childChannel.triggerUserOutboundEvent(
                 SSHChannelRequestEvent.SubsystemRequest(subsystem: "sftp", wantReply: true)
             )

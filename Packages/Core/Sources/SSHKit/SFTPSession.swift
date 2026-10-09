@@ -69,20 +69,52 @@ public actor SFTPSession {
             throw try Self.unexpected(response)
         }
         defer { Task { try? await self.closeHandle(handle) } }
-        var data = Data()
-        while true {
-            let chunk = try await request {
-                SFTPPacket.read(id: $0, handle: handle, offset: UInt64(data.count), length: 32768)
+        let chunkSize: UInt32 = 32768
+        let window = 16
+        var received: [UInt64: Data] = [:]
+        var eofOffset: UInt64?
+        var nextOffset: UInt64 = 0
+        try await withThrowingTaskGroup(of: (UInt64, UInt32, Data?).self) { group in
+            var inFlight = 0
+            func issue(_ offset: UInt64, _ length: UInt32) {
+                inFlight += 1
+                group.addTask {
+                    let response = try await self.request {
+                        SFTPPacket.read(id: $0, handle: handle, offset: offset, length: length)
+                    }
+                    switch response {
+                    case .data(_, let payload): return (offset, length, payload)
+                    case .status(_, SFTPStatusCode.eof, _): return (offset, length, nil)
+                    default: throw try Self.unexpected(response)
+                    }
+                }
             }
-            switch chunk {
-            case .data(_, let payload):
-                data.append(payload)
-            case .status(_, SFTPStatusCode.eof, _):
-                return data
-            default:
-                throw try Self.unexpected(chunk)
+            while true {
+                while eofOffset == nil, inFlight < window {
+                    issue(nextOffset, chunkSize)
+                    nextOffset += UInt64(chunkSize)
+                }
+                guard inFlight > 0, let (offset, length, payload) = try await group.next() else { break }
+                inFlight -= 1
+                guard let payload, !payload.isEmpty else {
+                    eofOffset = min(eofOffset ?? offset, offset)
+                    continue
+                }
+                received[offset] = payload
+                let end = offset + UInt64(payload.count)
+                if payload.count < Int(length), end < (eofOffset ?? .max) {
+                    issue(end, length - UInt32(payload.count))
+                }
             }
         }
+        var data = Data()
+        for offset in received.keys.sorted() {
+            guard offset == UInt64(data.count) else {
+                throw SFTPError.protocolError("gap in download at offset \(data.count)")
+            }
+            data.append(received[offset]!)
+        }
+        return data
     }
 
     public func close() async {

@@ -37,5 +37,28 @@
             await sftp.close()
             await connection.disconnect()
         }
+
+        @Test func pipelinedDownloadMatchesBytesForVariousSizes() async throws {
+            let sshd = try TestSSHD()
+            defer { sshd.stop() }
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kh-\(UUID().uuidString).json")
+            let connection = SSHConnection(
+                host: sshd.hostConfig(),
+                key: sshd.clientKeyMaterial,
+                knownHosts: KnownHostsStore(fileURL: file)
+            )
+            try await connection.connect()
+            let sftp = try await connection.openSFTP()
+            for size in [0, 1, 100, 32768, 32769, 32768 * 16, 3_000_001] {
+                let payload = Data((0..<size).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ $0 / 251) })
+                let url = sshd.dir.appendingPathComponent("size-\(size).bin")
+                try payload.write(to: url)
+                let downloaded = try await sftp.download(url.path)
+                #expect(downloaded == payload, "size \(size)")
+            }
+            await sftp.close()
+            await connection.disconnect()
+        }
     }
 #endif

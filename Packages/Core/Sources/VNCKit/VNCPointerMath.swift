@@ -26,6 +26,15 @@ public enum VNCPointerMath {
         return CGPoint(x: x, y: y)
     }
 
+    public static func clampedOffset(_ offset: CGSize, viewSize: CGSize, zoom: CGFloat) -> CGSize {
+        let maxX = max(zoom - 1, 0) * viewSize.width / 2
+        let maxY = max(zoom - 1, 0) * viewSize.height / 2
+        return CGSize(
+            width: min(max(offset.width, -maxX), maxX),
+            height: min(max(offset.height, -maxY), maxY)
+        )
+    }
+
     public static func clampedPixel(_ point: CGPoint, imageSize: CGSize) -> (x: UInt16, y: UInt16) {
         let x = min(max(point.x, 0), imageSize.width - 1)
         let y = min(max(point.y, 0), imageSize.height - 1)

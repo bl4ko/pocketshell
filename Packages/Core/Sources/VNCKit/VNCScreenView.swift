@@ -312,9 +312,11 @@
                 MagnifyGesture()
                     .onChanged { value in
                         zoom = min(max(zoomAtGestureStart * value.magnification, 1), 8)
+                        offset = VNCPointerMath.clampedOffset(offset, viewSize: viewSize, zoom: zoom)
                     }
                     .onEnded { _ in
                         zoomAtGestureStart = zoom
+                        offsetAtGestureStart = offset
                         if zoom <= 1.01 {
                             resetZoom()
                         }
@@ -324,9 +326,13 @@
                 DragGesture(minimumDistance: 12)
                     .onChanged { value in
                         guard zoom > 1 else { return }
-                        offset = CGSize(
-                            width: offsetAtGestureStart.width + value.translation.width,
-                            height: offsetAtGestureStart.height + value.translation.height
+                        offset = VNCPointerMath.clampedOffset(
+                            CGSize(
+                                width: offsetAtGestureStart.width + value.translation.width,
+                                height: offsetAtGestureStart.height + value.translation.height
+                            ),
+                            viewSize: viewSize,
+                            zoom: zoom
                         )
                     }
                     .onEnded { _ in

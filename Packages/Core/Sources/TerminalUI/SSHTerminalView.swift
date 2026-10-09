@@ -16,7 +16,7 @@
         }
     }
 
-    private final class BottomAnchoredTerminalView: TerminalView {
+    final class BottomAnchoredTerminalView: TerminalView {
         private var previousSize = CGSize.zero
         private var resizeCount = 0
         var pasteImage: (() -> Bool)?
@@ -50,14 +50,15 @@
 
     }
 
-    private final class TerminalViewController: UIViewController {
+    final class TerminalViewController: UIViewController {
         let terminalView = BottomAnchoredTerminalView()
         var sendControl: ((Character) -> Void)?
         var sendEscape: (() -> Void)?
         var sendBytes: ((Data) -> Void)?
         #if !targetEnvironment(macCatalyst)
-            private var shortcutHost: UIHostingController<ShortcutPanel>?
-            private let shortcutInput = UIInputView(
+            private(set) var shortcutHost: UIHostingController<ShortcutPanel>?
+            private(set) var shortcutRenderCount = 0
+            let shortcutInput = UIInputView(
                 frame: CGRect(x: 0, y: 0, width: 0, height: 260), inputViewStyle: .keyboard)
 
             private struct ShortcutInputs: Equatable {
@@ -84,6 +85,7 @@
             }
 
             private func renderShortcuts(bridge: TerminalBridge, keys: [ToolbarKey], theme: TerminalTheme) {
+                shortcutRenderCount += 1
                 let panel = ShortcutPanel(
                     theme: theme,
                     userKeys: keys,
@@ -465,7 +467,7 @@
                 }
             }
 
-            @MainActor private func sendMouseClick(in view: TerminalView, at location: CGPoint) {
+            @MainActor func sendMouseClick(in view: TerminalView, at location: CGPoint) {
                 let terminal = view.getTerminal()
                 let (row, col) = cell(at: location, in: view)
                 if terminal.mouseMode == .off {
@@ -631,7 +633,7 @@
                 }
             }
 
-            @MainActor private func handleScrollPanOnMain(_ gesture: UIPanGestureRecognizer) {
+            @MainActor func handleScrollPanOnMain(_ gesture: UIPanGestureRecognizer) {
                 guard let view = gesture.view as? TerminalView else { return }
                 if gesture.state == .began {
                     noteUserPresence()

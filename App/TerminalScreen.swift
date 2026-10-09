@@ -278,7 +278,10 @@ struct TerminalScreen: View {
             .background(Color(hexRGB: TerminalTheme.named(themeName).background))
             .padding(.bottom, keyboardInset.layout)
             .onChange(of: KeyboardTarget(inset: keyboardHeight, active: isActive), initial: true) { old, new in
-                followKeyboard(new.active ? new.inset : 0, animated: old.active && new.active && old != new)
+                followKeyboard(
+                    new.active ? new.inset : 0,
+                    animated: KeyboardInset.animates(
+                        from: (old.inset, old.active), to: (new.inset, new.active)))
             }
         }
         .background(KeyboardLayoutProbe(observer: keyboard))

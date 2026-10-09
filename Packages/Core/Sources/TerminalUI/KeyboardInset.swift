@@ -20,4 +20,10 @@ public struct KeyboardInset: Equatable {
     public mutating func settle(_ inset: CGFloat) {
         if inset == target { layout = inset }
     }
+
+    public static func animates(
+        from old: (inset: CGFloat, active: Bool), to new: (inset: CGFloat, active: Bool)
+    ) -> Bool {
+        old.active && new.active && old.inset != new.inset
+    }
 }

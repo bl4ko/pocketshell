@@ -36,3 +36,15 @@ import Testing
     inset.settle(120)
     #expect(inset.layout == 120)
 }
+
+@Test func keyboardMoveOnActiveTabAnimates() {
+    #expect(KeyboardInset.animates(from: (0, true), to: (300, true)))
+    #expect(KeyboardInset.animates(from: (300, true), to: (0, true)))
+}
+
+@Test func tabSwitchAndInitialValueJump() {
+    #expect(!KeyboardInset.animates(from: (300, true), to: (300, true)))
+    #expect(!KeyboardInset.animates(from: (0, false), to: (300, true)))
+    #expect(!KeyboardInset.animates(from: (300, true), to: (300, false)))
+    #expect(!KeyboardInset.animates(from: (0, false), to: (300, false)))
+}

@@ -64,8 +64,18 @@ final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDe
     }
 }
 
+protocol MonitorConnection: Sendable {
+    var isConnected: Bool { get async }
+    func exec(_ command: String) async throws -> String
+    func disconnect() async
+}
+
+extension SSHConnection: MonitorConnection {}
+
 @MainActor
 final class SessionMonitor: ObservableObject {
+    typealias Connector = @MainActor (HostConfig) async -> (any MonitorConnection)?
+
     static let refreshTaskID = "com.bl4ko.pocketshell.refresh"
 
     @Published private(set) var snapshot: SessionSnapshot?
@@ -77,15 +87,28 @@ final class SessionMonitor: ObservableObject {
     private let store: AppStore
     private var tracker = AgentActivityTracker()
     private var pollTask: Task<Void, Never>?
-    private var connections: [UUID: SSHConnection] = [:]
+    private var connections: [UUID: any MonitorConnection] = [:]
+    private let connector: Connector
     private var notifiedAt: [String: Date] = [:]
     private var backoff = HostBackoff<UUID>()
     private var lastHerdrStatus: [String: HerdrAgentStatus] = [:]
     private var backgroundRefreshTask: BGAppRefreshTask?
     private var backgroundRefreshWork: Task<Void, Never>?
 
-    init(store: AppStore) {
+    init(store: AppStore, connector: Connector? = nil) {
         self.store = store
+        self.connector =
+            connector ?? { [store] host in
+                guard let key = try? store.key(for: host) else { return nil }
+                let connection = SSHConnection(
+                    host: host, key: key, knownHosts: store.knownHosts, hops: store.hops(for: host))
+                do {
+                    try await connection.connect()
+                } catch {
+                    return nil
+                }
+                return connection
+            }
         snapshot = SnapshotStore.shared.load()
     }
 
@@ -328,7 +351,7 @@ final class SessionMonitor: ObservableObject {
         return Herdr.parseSessions(output)
     }
 
-    private func syncWorkspace(for host: HostConfig, using connection: SSHConnection) async {
+    private func syncWorkspace(for host: HostConfig, using connection: any MonitorConnection) async {
         // The e2e sshd points at a real user home: a test app syncing its
         // throwaway tabs into ~/.config/pocketshell/workspace.json pollutes
         // every device attached to that host.
@@ -372,17 +395,11 @@ final class SessionMonitor: ObservableObject {
         }
     }
 
-    private func connection(for host: HostConfig) async -> SSHConnection? {
+    func connection(for host: HostConfig) async -> (any MonitorConnection)? {
         if let existing = connections[host.id], await existing.isConnected {
             return existing
         }
-        guard let key = try? store.key(for: host) else { return nil }
-        let connection = SSHConnection(host: host, key: key, knownHosts: store.knownHosts, hops: store.hops(for: host))
-        do {
-            try await connection.connect()
-        } catch {
-            return nil
-        }
+        guard let connection = await connector(host) else { return nil }
         if Task.isCancelled {
             await connection.disconnect()
             return nil

@@ -79,6 +79,7 @@ final class SessionMonitor: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var connections: [UUID: SSHConnection] = [:]
     private var notifiedAt: [String: Date] = [:]
+    private var backoff = HostBackoff<UUID>()
     private var lastHerdrStatus: [String: HerdrAgentStatus] = [:]
     private var backgroundRefreshTask: BGAppRefreshTask?
     private var backgroundRefreshWork: Task<Void, Never>?
@@ -145,103 +146,32 @@ final class SessionMonitor: ObservableObject {
     }
 
     func pollOnce() async {
+        let hosts = store.hosts
+        let tasks = hosts.map { host in Task { await self.pollHost(host) } }
+        let results = await withTaskCancellationHandler {
+            var polls: [HostPoll?] = []
+            for task in tasks { polls.append(await task.value) }
+            return polls
+        } onCancel: {
+            for task in tasks { task.cancel() }
+        }
+        guard !Task.isCancelled else { return }
         var samples: [AgentActivityTracker.Sample] = []
         var snapshots: [SessionSnapshot.Window] = []
-        var targets: [String: [String: Any]] = [:]
+        var targets: [String: WindowTarget] = [:]
         var herdrKeys: Set<String> = []
+        var unobservedPrefixes: [String] = []
         var complete = true
-        for host in store.hosts {
-            let requestedSessions = store.tmuxSessions(for: host)
-            guard let connection = await connection(for: host) else { continue }
-            if !requestedSessions.isEmpty {
-                let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
-                canonicalizeSavedTabs(
-                    for: host,
-                    using: Tmux.canonicalSessionMap(sessionsOutput, requested: requestedSessions)
-                )
-                let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
-                let records = store.savedTabs[host.id.uuidString] ?? []
-                for session in sessions {
-                    guard let windowsOutput = try? await connection.exec(Tmux.listWindowsCommand(session: session)),
-                        let capturesOutput = try? await connection.exec(Tmux.capturePanesCommand(session: session))
-                    else {
-                        complete = false
-                        continue
-                    }
-                    let captures = Tmux.parsePaneCaptures(capturesOutput)
-                    for window in Tmux.parseWindows(windowsOutput) {
-                        let text = captures[window.index] ?? ""
-                        let status = AgentStatus.classify(text)
-                        let key = "\(host.id):\(session):\(window.index)"
-                        let displayName = Tmux.windowDisplayName(window: window, session: session, records: records)
-                        if status == .busy { unseenFinished.remove(key) }
-                        targets[key] = [
-                            "hostID": host.id.uuidString, "session": session, "windowIndex": window.index,
-                        ]
-                        samples.append(
-                            .init(
-                                key: key,
-                                title: "\(host.name) \(session):\(window.index) \(displayName)",
-                                status: status
-                            ))
-                        snapshots.append(
-                            .init(
-                                host: host.name,
-                                session: session,
-                                index: window.index,
-                                name: "\(window.index): \(displayName)",
-                                status: status.label,
-                                lastLine: Tmux.previewLines(text, count: 12)
-                            ))
-                    }
-                }
-            }
-            let herdrOutput = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
-            let herdrSessions = Herdr.parseSessions(herdrOutput).filter(\.running)
-            if !requestedSessions.isEmpty || !herdrSessions.isEmpty {
-                await syncWorkspace(for: host, using: connection)
-            }
-            for session in herdrSessions {
-                guard let output = try? await connection.exec(Herdr.snapshotCommand(session: session.name)),
-                    let snapshot = Herdr.parseSnapshot(output)
-                else { continue }
-                let workspaces = Dictionary(uniqueKeysWithValues: snapshot.workspaces.map { ($0.id, $0) })
-                for agent in snapshot.agents {
-                    let key = Self.herdrAgentKey(hostID: host.id, session: session.name, paneID: agent.paneID)
-                    herdrKeys.insert(key)
-                    let workspace = workspaces[agent.workspaceID]
-                    let title = agent.displayAgent ?? agent.agent ?? "agent"
-                    let workspaceLabel = workspace?.label ?? agent.workspaceID
-                    let previous = lastHerdrStatus[key]
-                    if agent.status == .working || agent.status == .idle { unseenFinished.remove(key) }
-                    if previous != nil, previous != .done, agent.status == .done { unseenFinished.insert(key) }
-                    if let previous, previous != agent.status, agent.status == .blocked || agent.status == .done {
-                        notifyHerdr(
-                            host: host,
-                            session: session.name,
-                            workspaceID: agent.workspaceID,
-                            paneID: agent.paneID,
-                            title: "\(host.name) · \(workspaceLabel) · \(title)",
-                            status: agent.status
-                        )
-                    }
-                    lastHerdrStatus[key] = agent.status
-                    snapshots.append(
-                        .init(
-                            host: host.name,
-                            session: session.name,
-                            index: workspace?.number ?? 0,
-                            name: "\(workspaceLabel) · \(title)",
-                            status: agent.status.pocketShellLabel,
-                            lastLine: agent.title ?? agent.status.pocketShellLabel,
-                            backend: "herdr",
-                            workspaceID: agent.workspaceID,
-                            paneID: agent.paneID
-                        ))
-                }
-            }
+        for poll in results.compactMap({ $0 }) {
+            samples += poll.samples
+            snapshots += poll.snapshots
+            targets.merge(poll.targets) { $1 }
+            herdrKeys.formUnion(poll.herdrKeys)
+            unobservedPrefixes += poll.unobservedPrefixes
+            complete = complete && poll.complete
         }
-        lastHerdrStatus = lastHerdrStatus.filter { herdrKeys.contains($0.key) }
+        lastHerdrStatus = StatusCarryOver.pruned(
+            lastHerdrStatus, observed: herdrKeys, unobservedPrefixes: unobservedPrefixes)
         // An empty capture classifies as idle, so a failed exec would fake busy -> idle.
         let transitions = complete ? tracker.update(samples) : []
         for transition in transitions where transition.status == .idle {
@@ -253,8 +183,134 @@ final class SessionMonitor: ObservableObject {
         WidgetCenter.shared.reloadTimelines(ofKind: "pocketshell-sessions")
         WatchRelay.shared.push(snapshot)
         for transition in transitions {
-            notify(transition, userInfo: targets[transition.key])
+            notify(transition, userInfo: targets[transition.key]?.userInfo)
         }
+    }
+
+    private struct WindowTarget: Sendable {
+        let hostID: String
+        let session: String
+        let windowIndex: Int
+
+        var userInfo: [String: Any] { ["hostID": hostID, "session": session, "windowIndex": windowIndex] }
+    }
+
+    private struct HostPoll: Sendable {
+        var samples: [AgentActivityTracker.Sample] = []
+        var snapshots: [SessionSnapshot.Window] = []
+        var targets: [String: WindowTarget] = [:]
+        var herdrKeys: Set<String> = []
+        var unobservedPrefixes: [String]
+        var complete = true
+    }
+
+    private func pollHost(_ host: HostConfig) async -> HostPoll? {
+        let herdrPrefix = "\(host.id):herdr:"
+        var result = HostPoll(unobservedPrefixes: [herdrPrefix])
+        let requestedSessions = store.tmuxSessions(for: host)
+        guard backoff.shouldAttempt(host.id) else { return result }
+        let connected = await connection(for: host)
+        if Task.isCancelled { return nil }
+        guard let connection = connected else {
+            backoff.recordFailure(host.id)
+            return result
+        }
+        backoff.recordSuccess(host.id)
+        result.unobservedPrefixes = []
+        if !requestedSessions.isEmpty {
+            let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
+            canonicalizeSavedTabs(
+                for: host,
+                using: Tmux.canonicalSessionMap(sessionsOutput, requested: requestedSessions)
+            )
+            let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
+            let records = store.savedTabs[host.id.uuidString] ?? []
+            for session in sessions {
+                if Task.isCancelled { return nil }
+                guard let windowsOutput = try? await connection.exec(Tmux.listWindowsCommand(session: session)),
+                    let capturesOutput = try? await connection.exec(Tmux.capturePanesCommand(session: session))
+                else {
+                    result.complete = false
+                    continue
+                }
+                let captures = Tmux.parsePaneCaptures(capturesOutput)
+                for window in Tmux.parseWindows(windowsOutput) {
+                    let text = captures[window.index] ?? ""
+                    let status = AgentStatus.classify(text)
+                    let key = "\(host.id):\(session):\(window.index)"
+                    let displayName = Tmux.windowDisplayName(window: window, session: session, records: records)
+                    if status == .busy { unseenFinished.remove(key) }
+                    result.targets[key] = WindowTarget(
+                        hostID: host.id.uuidString, session: session, windowIndex: window.index)
+                    result.samples.append(
+                        .init(
+                            key: key,
+                            title: "\(host.name) \(session):\(window.index) \(displayName)",
+                            status: status
+                        ))
+                    result.snapshots.append(
+                        .init(
+                            host: host.name,
+                            session: session,
+                            index: window.index,
+                            name: "\(window.index): \(displayName)",
+                            status: status.label,
+                            lastLine: Tmux.previewLines(text, count: 12)
+                        ))
+                }
+            }
+        }
+        let herdrOutput = try? await connection.exec(Herdr.listSessionsCommand())
+        if Task.isCancelled { return nil }
+        let herdrSessions = herdrOutput.map { Herdr.parseSessions($0).filter(\.running) } ?? []
+        if herdrOutput == nil { result.unobservedPrefixes = [herdrPrefix] }
+        if !requestedSessions.isEmpty || !herdrSessions.isEmpty {
+            await syncWorkspace(for: host, using: connection)
+        }
+        for session in herdrSessions {
+            guard let output = try? await connection.exec(Herdr.snapshotCommand(session: session.name)),
+                let snapshot = Herdr.parseSnapshot(output)
+            else {
+                result.unobservedPrefixes.append("\(herdrPrefix)\(session.name):")
+                continue
+            }
+            if Task.isCancelled { return nil }
+            let workspaces = Dictionary(uniqueKeysWithValues: snapshot.workspaces.map { ($0.id, $0) })
+            for agent in snapshot.agents {
+                let key = Self.herdrAgentKey(hostID: host.id, session: session.name, paneID: agent.paneID)
+                result.herdrKeys.insert(key)
+                let workspace = workspaces[agent.workspaceID]
+                let title = agent.displayAgent ?? agent.agent ?? "agent"
+                let workspaceLabel = workspace?.label ?? agent.workspaceID
+                let previous = lastHerdrStatus[key]
+                if agent.status == .working || agent.status == .idle { unseenFinished.remove(key) }
+                if previous != nil, previous != .done, agent.status == .done { unseenFinished.insert(key) }
+                if let previous, previous != agent.status, agent.status == .blocked || agent.status == .done {
+                    notifyHerdr(
+                        host: host,
+                        session: session.name,
+                        workspaceID: agent.workspaceID,
+                        paneID: agent.paneID,
+                        title: "\(host.name) · \(workspaceLabel) · \(title)",
+                        status: agent.status
+                    )
+                }
+                lastHerdrStatus[key] = agent.status
+                result.snapshots.append(
+                    .init(
+                        host: host.name,
+                        session: session.name,
+                        index: workspace?.number ?? 0,
+                        name: "\(workspaceLabel) · \(title)",
+                        status: agent.status.pocketShellLabel,
+                        lastLine: agent.title ?? agent.status.pocketShellLabel,
+                        backend: "herdr",
+                        workspaceID: agent.workspaceID,
+                        paneID: agent.paneID
+                    ))
+            }
+        }
+        return result
     }
 
     func syncWorkspaceNow(for host: HostConfig) async {
@@ -325,6 +381,10 @@ final class SessionMonitor: ObservableObject {
         do {
             try await connection.connect()
         } catch {
+            return nil
+        }
+        if Task.isCancelled {
+            await connection.disconnect()
             return nil
         }
         connections[host.id] = connection

@@ -141,8 +141,20 @@ import Models
 
 @Test func attachCommandPrefersWindowIDOverIndex() {
     let command = Tmux.attachCommand(session: "claude", windowIndex: 3, windowID: "@17", clientTag: "ab12cd")
-    #expect(command.contains("select-window -t '@17'"))
-    #expect(!command.contains("select-window -t 'claude-psh-ab12cd':3"))
+    #expect(
+        command.contains(
+            "if-shell -F -t 'claude-psh-ab12cd' '#{W:#{?#{==:#{window_id},@17},1,}}' 'select-window -t @17'"))
+}
+
+@Test func attachCommandFallsBackToIndexWhenWindowIDIsGone() {
+    let command = Tmux.attachCommand(session: "claude", windowIndex: 3, windowID: "@17", clientTag: "ab12cd")
+    #expect(command.contains("'select-window -t @17' 'select-window -t '\\''claude-psh-ab12cd'\\'':3' \\; attach"))
+}
+
+@Test func attachCommandRejectsWindowIDThatIsNotNumeric() {
+    let command = Tmux.attachCommand(session: "claude", windowIndex: 3, windowID: "@1;kill-server", clientTag: "ab12cd")
+    #expect(!command.contains("kill-server"))
+    #expect(command.contains("select-window -t 'claude-psh-ab12cd':3"))
 }
 
 @Test func attachCommandIgnoresMalformedWindowID() {

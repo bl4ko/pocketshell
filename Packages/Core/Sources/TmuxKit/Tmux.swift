@@ -176,8 +176,12 @@ public enum Tmux {
     {
         let clone = shellQuote(cloneName(session: session, clientTag: clientTag))
         var parts = ["\(tmux) -u new-session -d -t \(shellQuote(session)) -s \(clone)"]
-        if let windowID, windowID.hasPrefix("@") {
-            parts.append("select-window -t \(shellQuote(windowID))")
+        if let windowID, windowID.count > 1, windowID.hasPrefix("@"), windowID.dropFirst().allSatisfy(\.isNumber) {
+            // A killed window's id would abort the whole chain, so fall back to the index.
+            let exists = shellQuote("#{W:#{?#{==:#{window_id},\(windowID)},1,}}")
+            let byIndex = windowIndex.map { " " + shellQuote("select-window -t \(clone):\($0)") } ?? ""
+            parts.append(
+                "if-shell -F -t \(clone) \(exists) \(shellQuote("select-window -t \(windowID)"))\(byIndex)")
         } else if let windowIndex {
             parts.append("select-window -t \(clone):\(windowIndex)")
         }
@@ -206,7 +210,7 @@ public enum Tmux {
     }
 
     public static func sendKeysCommand(target: String, text: String, pressEnter: Bool) -> String {
-        let send = text.isEmpty ? "" : "\(tmux) send-keys -t \(target) -l \(shellQuote(text))"
+        let send = text.isEmpty ? "" : "\(tmux) send-keys -t \(target) -l -- \(shellQuote(text))"
         guard pressEnter else { return send }
         let enter = "\(tmux) send-keys -t \(target) Enter"
         return send.isEmpty ? enter : "\(send) \\; send-keys -t \(target) Enter"

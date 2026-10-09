@@ -92,18 +92,11 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
             let connection = SSHConnection(
                 host: host, key: key, knownHosts: store.knownHosts, hops: store.hops(for: host))
             do {
-                try await connection.connect()
-                _ = try await connection.exec(
-                    Tmux.sendKeysCommand(
-                        session: session,
-                        windowIndex: windowIndex,
-                        text: text,
-                        pressEnter: pressEnter
-                    ))
-                await connection.disconnect()
+                let command = Tmux.sendKeysCommand(
+                    session: session, windowIndex: windowIndex, text: text, pressEnter: pressEnter)
+                _ = try await connection.runBounded(timeout: 15) { try await $0.exec(command) }
                 replyHandler(["ok": true])
             } catch {
-                await connection.disconnect()
                 replyHandler(["error": "\(error)"])
             }
         }

@@ -449,8 +449,7 @@
 
             @MainActor private func sendMouseClick(in view: TerminalView, at location: CGPoint) {
                 let terminal = view.getTerminal()
-                let row = clamp(
-                    Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                let (row, col) = cell(at: location, in: view)
                 if terminal.mouseMode == .off {
                     let lines = (0..<terminal.rows).map {
                         terminal.getLine(row: $0)?.translateToString(trimRight: true) ?? ""
@@ -495,10 +494,7 @@
 
             @MainActor fileprivate func openLink(in view: TerminalView, at location: CGPoint) -> Bool {
                 let terminal = view.getTerminal()
-                let row = clamp(
-                    Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
-                let col = clamp(
-                    Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
+                let (row, col) = cell(at: location, in: view)
                 let lines = (0..<terminal.rows).map {
                     terminal.getLine(row: $0)?.translateToString(trimRight: false) ?? ""
                 }
@@ -681,11 +677,7 @@
                         meta: false,
                         control: false
                     )
-                    let location = gesture.location(in: view)
-                    let col = clamp(
-                        Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
-                    let row = clamp(
-                        Int(location.y / view.bounds.height * CGFloat(terminal.rows)), max: terminal.rows - 1)
+                    let (row, col) = cell(at: gesture.location(in: view), in: view)
                     for _ in 0..<abs(lines) {
                         terminal.sendEvent(buttonFlags: flags, x: col, y: row)
                     }
@@ -694,8 +686,11 @@
                 }
             }
 
-            private func clamp(_ value: Int, max limit: Int) -> Int {
-                min(max(value, 0), max(limit, 0))
+            @MainActor private func cell(at location: CGPoint, in view: TerminalView) -> (row: Int, col: Int) {
+                let terminal = view.getTerminal()
+                return TerminalCell.at(
+                    location, contentOffset: view.contentOffset, viewport: view.bounds.size,
+                    rows: terminal.rows, cols: terminal.cols)
             }
 
             private func onMain(_ work: @escaping @MainActor @Sendable () -> Void) {

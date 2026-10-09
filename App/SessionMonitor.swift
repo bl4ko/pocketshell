@@ -399,7 +399,7 @@ final class SessionMonitor: ObservableObject {
             self.finishBackgroundRefresh(task, success: !Task.isCancelled)
         }
         backgroundRefreshWork = work
-        task.expirationHandler = {
+        task.expirationHandler = { [weak self, weak task] in
             Task { @MainActor [weak self, weak task] in
                 guard let self, let task else { return }
                 self.backgroundRefreshWork?.cancel()

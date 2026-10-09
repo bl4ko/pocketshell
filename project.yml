@@ -138,6 +138,20 @@ targets:
         MARKETING_VERSION: 0.3.0
         SWIFT_VERSION: "6.0"
         SKIP_INSTALL: YES
+  pocketshellTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - AppTests
+    dependencies:
+      - target: pocketshell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bl4ko.pocketshell.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/pocketshell.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/pocketshell
+        BUNDLE_LOADER: $(TEST_HOST)
   pocketshellUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -156,12 +170,14 @@ schemes:
     build:
       targets:
         pocketshell: all
+        pocketshellTests: [test]
         pocketshellUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
+        - pocketshellTests
         - pocketshellUITests
   pocketshellWatch:
     build:

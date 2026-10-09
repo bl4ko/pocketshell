@@ -14,6 +14,7 @@ swift test --package-path Packages/Core            # all unit + sshd integration
 swift test --package-path Packages/Core --filter TmuxKitTests            # one test target
 swift test --package-path Packages/Core --filter TabStatusResolverTests/holdsPreviousStatus  # one test
 swift build --package-path Packages/Core           # compile check without tests
+./Scripts/unittest-ios.sh                          # App unit tests (pocketshellTests) + Core package tests on the iOS simulator
 ./Scripts/uitest.sh                                # e2e UI tests: throwaway sshd + tmux session + simulator
 xcodebuild build -scheme pocketshell -destination "generic/platform=iOS Simulator"  # full app build
 pre-commit run --all-files                         # format + lint + Core tests (hooks: pre-commit install)
@@ -39,6 +40,7 @@ pre-commit run --all-files                         # format + lint + Core tests 
 - SSHKit integration tests are `#if os(macOS)`: they spawn a real `/usr/sbin/sshd` on a random localhost port (`TestSSHD` in `SSHConnectionIntegrationTests.swift`) and run as part of plain `swift test`.
 - `Scripts/uitest.sh` generates a client key (`Scripts/gen-test-key.swift`), starts a throwaway sshd plus a detached tmux fixture session, and passes `PS_TEST_KEY`/`PS_TEST_PORT`/`PS_TEST_USER`/`PS_TEST_TMUX` into the UI tests via `TEST_RUNNER_` env vars. Tests skip themselves if those are unset. Simulator defaults to iPhone 17; override with `PS_TEST_SIM`, falls back to first available iPhone.
 - UI tests in `UITests/SmokeUITests.swift` are order-dependent (XCTest runs alphabetically): `testAddHostAndRunExecSnippet` creates the `localbox` host that later tests reuse.
+- `Scripts/unittest-ios.sh` runs the app-hosted `pocketshellTests` target (`AppTests/`, `@testable import pocketshell`, swift-testing) and then `Core-Package` on the iOS simulator (`PS_TEST_SIM`, default iPhone 17 Pro; DerivedData under `/Volumes/Extreme SSD/mac-mini/build/pocketshell/`), so it also covers `#if os(iOS)` Core tests. The Core run reports 6 KeyKit Keychain failures (-34018) on the simulator. App logic tests go in `AppTests/`; the test target has no direct Core package deps (linking SSHKit twice breaks the link), so reach Core types through the host app.
 - UIKit-gated sources (`TerminalBridge`, `SSHTerminalView`, VNC views, `TerminalToolbar`) do not compile into macOS `swift test` — they are covered only by UI tests. Terminal screen content is not accessibility-visible (SwiftTerm draws directly), so e2e asserts toolbar presence and absence of error text, not screen text.
 - New tests: unit tests go next to the module in `Packages/Core/Tests/<Module>Tests/`; e2e flows go in `UITests/SmokeUITests.swift` with an accessibility identifier on any new tappable control.
 - Every feature and bug fix needs regression coverage at the narrowest viable layer. Do not commit an implementation without a test that fails when the behavior regresses.

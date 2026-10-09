@@ -15,7 +15,7 @@
             ShortcutCategory(rawValue: UserDefaults.standard.string(forKey: "pocketshell.shortcuts.category") ?? "")
             ?? .favorites
         var updateShortcutKeyboard: (() -> Void)?
-        @Published public private(set) var terminalTitle: String?
+        public private(set) var terminalTitle: String?
         public private(set) var inputEvents = 0
         public private(set) var inputBytes = 0
         public private(set) var lastInputAt: Date?

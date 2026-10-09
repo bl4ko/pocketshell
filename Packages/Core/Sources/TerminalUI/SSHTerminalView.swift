@@ -60,7 +60,30 @@
             private let shortcutInput = UIInputView(
                 frame: CGRect(x: 0, y: 0, width: 0, height: 260), inputViewStyle: .keyboard)
 
+            private struct ShortcutInputs: Equatable {
+                var keys: [ToolbarKey]
+                var theme: TerminalTheme
+                var multiplexer: Bool
+                var category: ShortcutCategory
+            }
+            private var shortcutInputs: ShortcutInputs?
+
             func updateShortcuts(bridge: TerminalBridge, keys: [ToolbarKey], theme: TerminalTheme) {
+                let inputs = ShortcutInputs(
+                    keys: keys, theme: theme, multiplexer: terminalView.multiplexerMode,
+                    category: bridge.shortcutCategory)
+                if inputs != shortcutInputs {
+                    shortcutInputs = inputs
+                    renderShortcuts(bridge: bridge, keys: keys, theme: theme)
+                }
+                let input: UIView? = bridge.shortcutsActive ? shortcutInput : nil
+                if terminalView.inputView !== input {
+                    terminalView.inputView = input
+                    terminalView.reloadInputViews()
+                }
+            }
+
+            private func renderShortcuts(bridge: TerminalBridge, keys: [ToolbarKey], theme: TerminalTheme) {
                 let panel = ShortcutPanel(
                     theme: theme,
                     userKeys: keys,
@@ -87,11 +110,6 @@
                         host.view.topAnchor.constraint(equalTo: shortcutInput.topAnchor),
                         host.view.bottomAnchor.constraint(equalTo: shortcutInput.safeAreaLayoutGuide.bottomAnchor),
                     ])
-                }
-                let input: UIView? = bridge.shortcutsActive ? shortcutInput : nil
-                if terminalView.inputView !== input {
-                    terminalView.inputView = input
-                    terminalView.reloadInputViews()
                 }
             }
         #endif
@@ -459,8 +477,6 @@
                     }
                     return
                 }
-                let col = clamp(
-                    Int(location.x / view.bounds.width * CGFloat(terminal.cols)), max: terminal.cols - 1)
                 terminal.sendEvent(
                     buttonFlags: terminal.encodeButton(
                         button: 0, release: false, shift: false, meta: false, control: false),

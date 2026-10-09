@@ -69,7 +69,9 @@ final class SessionMonitor: ObservableObject {
     static let refreshTaskID = "com.bl4ko.pocketshell.refresh"
 
     @Published private(set) var snapshot: SessionSnapshot?
-    @Published private(set) var unseenFinished: Set<String> = []
+    private(set) var unseenFinished: Set<String> = [] {
+        willSet { if newValue != unseenFinished { objectWillChange.send() } }
+    }
     var visibleWindowKey: String?
 
     private let store: AppStore

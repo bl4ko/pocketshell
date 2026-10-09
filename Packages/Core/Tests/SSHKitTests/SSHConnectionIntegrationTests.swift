@@ -251,6 +251,24 @@
             #expect(outcome == "authFailed")
         }
 
+        @Test func failedChannelSetupClosesChildChannel() async throws {
+            struct SetupFailure: Error {}
+            let sshd = try TestSSHD()
+            defer { sshd.stop() }
+            let connection = makeConnection(sshd)
+            try await connection.connect()
+            for _ in 0..<15 {
+                let child = try await connection.createChildChannel { $0.eventLoop.makeSucceededFuture(()) }
+                await #expect(throws: SetupFailure.self) {
+                    try await connection.closingOnFailure(child) { throw SetupFailure() }
+                }
+                #expect(!child.isActive)
+            }
+            let output = try await connection.exec("echo still-works")
+            #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == "still-works")
+            await connection.disconnect()
+        }
+
         @Test func execWorksWhileShellChannelOpen() async throws {
             let sshd = try TestSSHD()
             defer { sshd.stop() }

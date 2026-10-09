@@ -180,11 +180,13 @@ extension SSHConnection {
                 child.pipeline.addHandler(dataHandler)
             }
         }
-        try await childChannel.triggerUserOutboundEvent(
-            SSHChannelRequestEvent.SubsystemRequest(subsystem: "sftp", wantReply: true)
-        )
-        let session = SFTPSession(channel: childChannel)
-        try await session.start(chunks: chunks)
-        return session
+        return try await closingOnFailure(childChannel) {
+            try await childChannel.triggerUserOutboundEvent(
+                SSHChannelRequestEvent.SubsystemRequest(subsystem: "sftp", wantReply: true)
+            )
+            let session = SFTPSession(channel: childChannel)
+            try await session.start(chunks: chunks)
+            return session
+        }
     }
 }

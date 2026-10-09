@@ -227,10 +227,12 @@ public actor SSHConnection {
             }
         }
 
-        try await sendUTF8Locale(childChannel)
-        let exec = SSHChannelRequestEvent.ExecRequest(command: command, wantReply: true)
-        try await childChannel.triggerUserOutboundEvent(exec)
-        return try await collector.result()
+        return try await closingOnFailure(childChannel) {
+            try await sendUTF8Locale(childChannel)
+            let exec = SSHChannelRequestEvent.ExecRequest(command: command, wantReply: true)
+            try await childChannel.triggerUserOutboundEvent(exec)
+            return try await collector.result()
+        }
     }
 
     public func openShell(command: String? = nil, cols: Int, rows: Int) async throws -> ShellStream {
@@ -253,14 +255,16 @@ public actor SSHConnection {
             terminalPixelHeight: 0,
             terminalModes: SSHTerminalModes([:])
         )
-        try await sendUTF8Locale(childChannel)
-        try await childChannel.triggerUserOutboundEvent(pty)
-        if let command {
-            try await childChannel.triggerUserOutboundEvent(
-                SSHChannelRequestEvent.ExecRequest(command: command, wantReply: true)
-            )
-        } else {
-            try await childChannel.triggerUserOutboundEvent(SSHChannelRequestEvent.ShellRequest(wantReply: true))
+        try await closingOnFailure(childChannel) {
+            try await sendUTF8Locale(childChannel)
+            try await childChannel.triggerUserOutboundEvent(pty)
+            if let command {
+                try await childChannel.triggerUserOutboundEvent(
+                    SSHChannelRequestEvent.ExecRequest(command: command, wantReply: true)
+                )
+            } else {
+                try await childChannel.triggerUserOutboundEvent(SSHChannelRequestEvent.ShellRequest(wantReply: true))
+            }
         }
 
         return ShellStream(
@@ -283,6 +287,15 @@ public actor SSHConnection {
                 try? await childChannel.close()
             }
         )
+    }
+
+    func closingOnFailure<T>(_ channel: Channel, _ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch {
+            try? await channel.close()
+            throw error
+        }
     }
 
     private func sendUTF8Locale(_ childChannel: Channel) async throws {

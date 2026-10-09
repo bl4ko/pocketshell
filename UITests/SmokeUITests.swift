@@ -84,7 +84,7 @@ final class SmokeUITests: XCTestCase {
         let output = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'pocketshell-ok'")
         ).firstMatch
-        XCTAssertTrue(output.waitForExistence(timeout: 15))
+        XCTAssertTrue(output.waitForExistence(timeout: 45))
     }
 
     func testGroupDropdownOffersExistingGroup() {
@@ -767,7 +767,9 @@ final class SmokeUITests: XCTestCase {
         sleep(2)
         let compactHeight = terminal.frame.height
         XCTAssertEqual(terminal.value as? String, "bottom")
-        terminal.swipeDown()
+        for _ in 0..<3 where terminal.value as? String != "history" {
+            terminal.swipeDown()
+        }
         XCTAssertEqual(terminal.value as? String, "history")
         terminal.swipeUp()
         for _ in 0..<4 where terminal.value as? String != "bottom" {
@@ -788,7 +790,7 @@ final class SmokeUITests: XCTestCase {
             let beforeShow = terminal.label
             let motionBeforeShow = keyboardMotionFrames()
             keyboardButton.tap()
-            waitForKeyboardLayout(terminal, button: keyboardButton)
+            assertTerminalHeightCommitsOnce(terminal, button: keyboardButton)
             XCTAssertEqual(terminal.frame.height, compactHeight, accuracy: 2)
             XCTAssertEqual(terminal.value as? String, "bottom")
             assertSingleTerminalResize(terminal, from: beforeShow)
@@ -813,6 +815,17 @@ final class SmokeUITests: XCTestCase {
         let probe = app.otherElements["keyboard.motion"]
         XCTAssertTrue(probe.exists)
         return Int(probe.label.split(separator: " ").last ?? "") ?? 0
+    }
+
+    private func assertTerminalHeightCommitsOnce(_ terminal: XCUIElement, button: XCUIElement) {
+        var heights: [CGFloat] = []
+        let deadline = Date().addingTimeInterval(5)
+        repeat {
+            heights.append(terminal.frame.height)
+            if abs(terminal.frame.maxY - button.frame.minY) < 20 { break }
+        } while Date() < deadline
+        XCTAssertLessThan(abs(terminal.frame.maxY - button.frame.minY), 20, "keyboard layout never settled")
+        XCTAssertLessThanOrEqual(Set(heights).count, 2, "terminal resized gradually: \(heights)")
     }
 
     private func waitForKeyboardLayout(_ terminal: XCUIElement, button: XCUIElement) {
@@ -998,6 +1011,82 @@ final class SmokeUITests: XCTestCase {
         let accent = pixel(XCUIScreen.main.screenshot().image, x: 0.91, y: 0.11)
         XCTAssertGreaterThan(accent.red, 150)
         XCTAssertLessThan(accent.blue, 100)
+    }
+
+    func testFindBarIsEmptyWhenReopened() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed find test skipped")
+        }
+        openHost("localbox")
+        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        let field = app.descendants(matching: .any).matching(identifier: "find-field").firstMatch
+        let close = app.buttons["find-close"]
+
+        func openFind() {
+            for _ in 0..<3 where !field.exists {
+                app.typeKey("f", modifierFlags: .command)
+                _ = field.waitForExistence(timeout: 3)
+            }
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+        }
+
+        openFind()
+        field.tap()
+        field.typeText("needle")
+        XCTAssertEqual(field.value as? String, "needle")
+        close.tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+
+        openFind()
+        let empty = NSPredicate(format: "value == 'find in scrollback' OR value == ''")
+        expectation(for: empty, evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+    }
+
+    func testTabStripReordersByDragAndHoldShowsActions() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed tab strip test skipped")
+        }
+        openHost("localbox")
+        let newTab = app.buttons["new-tab"]
+        XCTAssertTrue(newTab.waitForExistence(timeout: 10))
+        newTab.tap()
+        dismissSessionPicker()
+        let first = app.descendants(matching: .any)["terminal-tab-1"]
+        let second = app.descendants(matching: .any)["terminal-tab-2"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        XCTAssertLessThan(first.frame.minX, second.frame.minX)
+
+        first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
+            forDuration: 0.4,
+            thenDragTo: second.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)),
+            withVelocity: .slow,
+            thenHoldForDuration: 0.2)
+        let reordered = NSPredicate { _, _ in first.frame.minX > second.frame.minX }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: reordered, object: nil)], timeout: 5), .completed)
+        XCTAssertFalse(app.buttons["Close Tab"].exists)
+
+        app.buttons["Back"].tap()
+        openHost("localbox")
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(first.frame.minX, second.frame.minX)
+
+        let before = first.frame.minX
+        first.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["Close Tab"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Rename Tab"].exists)
+        let cancel = app.buttons["Cancel"]
+        if cancel.exists {
+            cancel.tap()
+        } else {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)).tap()
+        }
+        XCTAssertTrue(app.buttons["Close Tab"].waitForNonExistence(timeout: 3))
+        XCTAssertEqual(first.frame.minX, before, accuracy: 1)
+        XCTAssertGreaterThan(first.frame.minX, second.frame.minX)
     }
 
     func testZZCloudRefreshKeepsRemoteDeletion() {

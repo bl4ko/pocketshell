@@ -11,6 +11,7 @@ STATUS_CHURN="$TMUX_SESSION-churn"
 STATUS_GAP="$TMUX_SESSION-gap"
 FLICKER_SESSION="$TMUX_SESSION-flicker"
 cleanup() {
+    kill "${WATCHDOG_PID:-}" 2>/dev/null || true
     kill "${SSHD_PID:-}" 2>/dev/null || true
     for session in "$TMUX_SESSION" "$STATUS_STABLE" "$STATUS_CHURN" "$STATUS_GAP" "$FLICKER_SESSION"; do
         tmux kill-session -t "$session" 2>/dev/null || true
@@ -42,6 +43,12 @@ EOF
 
 /usr/sbin/sshd -D -f "$DIR/sshd_config" &
 SSHD_PID=$!
+SCRIPT_PID=$$
+(
+    while kill -0 "$SCRIPT_PID" 2>/dev/null; do sleep 1; done
+    kill "$SSHD_PID" 2>/dev/null
+) >/dev/null 2>&1 &
+WATCHDOG_PID=$!
 for _ in $(seq 1 50); do
     nc -z 127.0.0.1 "$PORT" 2>/dev/null && break
     sleep 0.2

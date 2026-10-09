@@ -58,10 +58,22 @@
             try config.write(to: configURL, atomically: true, encoding: .utf8)
 
             process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/sbin/sshd")
-            process.arguments = ["-D", "-f", configURL.path]
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = Self.daemonArguments(config: configURL.path, owner: getpid())
             try process.run()
             Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        static let daemonScript = """
+            /usr/sbin/sshd -D -f "$1" &
+            S=$!
+            trap 'kill $S 2>/dev/null; exit 0' TERM INT
+            while kill -0 "$2" 2>/dev/null && kill -0 $S 2>/dev/null; do sleep 1 & wait $!; done
+            kill $S 2>/dev/null
+            """
+
+        static func daemonArguments(config: String, owner: pid_t) -> [String] {
+            ["-c", daemonScript, "sh", config, String(owner)]
         }
 
         private static func freePort() -> Int {
@@ -341,6 +353,55 @@
 
         @Test func openSFTPClosesChildChannelWhenSetupFails() async throws {
             try await expectCallSiteClosesChannel { _ = try await $0.openSFTP() }
+        }
+
+        @Test func daemonDiesWhenOwnerIsKilled() async throws {
+            let sshd = try TestSSHD()
+            defer { sshd.stop() }
+            let config = sshd.dir.appendingPathComponent("orphan_config")
+            let pidFile = sshd.dir.appendingPathComponent("orphan.pid")
+            let body = """
+                Port \(sshd.port + 1)
+                ListenAddress 127.0.0.1
+                HostKey \(sshd.dir.appendingPathComponent("host_ed25519").path)
+                PidFile \(pidFile.path)
+                UsePAM no
+                LogLevel QUIET
+                """
+            try body.write(to: config, atomically: true, encoding: .utf8)
+
+            let owner = Process()
+            owner.executableURL = URL(fileURLWithPath: "/bin/sh")
+            owner.arguments = ["-c", "/bin/sh -c \"$DAEMON_SCRIPT\" sh '\(config.path)' $$ & wait"]
+            owner.environment = ["DAEMON_SCRIPT": TestSSHD.daemonScript]
+            try owner.run()
+
+            var daemon: pid_t = 0
+            for _ in 0..<50 {
+                if let text = try? String(contentsOf: pidFile, encoding: .utf8),
+                    let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                {
+                    daemon = pid
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            #expect(daemon > 0)
+            #expect(kill(daemon, 0) == 0)
+
+            kill(owner.processIdentifier, SIGKILL)
+            owner.waitUntilExit()
+
+            var gone = false
+            for _ in 0..<50 {
+                if kill(daemon, 0) != 0 {
+                    gone = true
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            if !gone { kill(daemon, SIGKILL) }
+            #expect(gone)
         }
 
         @Test func execWorksWhileShellChannelOpen() async throws {

@@ -45,7 +45,7 @@ EOF
 SSHD_PID=$!
 SCRIPT_PID=$$
 (
-    while kill -0 "$SCRIPT_PID" 2>/dev/null; do sleep 1; done
+    while ps -o stat= -p "$SCRIPT_PID" 2>/dev/null | grep -qv '^Z'; do sleep 1; done
     kill "$SSHD_PID" 2>/dev/null
 ) >/dev/null 2>&1 &
 WATCHDOG_PID=$!

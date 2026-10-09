@@ -48,7 +48,7 @@ private let fixedKey = try! P256.Signing.PrivateKey(rawRepresentation: Data(repe
         let pipe = Pipe()
         process.standardOutput = pipe
         try process.run()
-        process.waitUntilExit()
+        while process.isRunning { usleep(10_000) }
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
         #expect(process.terminationStatus == 0)

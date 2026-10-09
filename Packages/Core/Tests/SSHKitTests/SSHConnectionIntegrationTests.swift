@@ -33,7 +33,8 @@
             keygen.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-keygen")
             keygen.arguments = ["-t", "ed25519", "-N", "", "-f", hostKey.path, "-q"]
             try keygen.run()
-            keygen.waitUntilExit()
+            // waitUntilExit can block forever on a Swift concurrency thread.
+            while keygen.isRunning { usleep(10_000) }
 
             let authorizedKeys = dir.appendingPathComponent("authorized_keys")
             let pubLine = clientKeyMaterial.openSSHPublicKeyLine(comment: "test")
@@ -68,7 +69,7 @@
             /usr/sbin/sshd -D -f "$1" &
             S=$!
             trap 'kill $S 2>/dev/null; exit 0' TERM INT
-            while kill -0 "$2" 2>/dev/null && kill -0 $S 2>/dev/null; do sleep 1 & wait $!; done
+            while ps -o stat= -p "$2" 2>/dev/null | grep -qv '^Z' && kill -0 $S 2>/dev/null; do sleep 1 & wait $!; done
             kill $S 2>/dev/null
             """
 
@@ -370,11 +371,13 @@
                 """
             try body.write(to: config, atomically: true, encoding: .utf8)
 
-            let owner = Process()
-            owner.executableURL = URL(fileURLWithPath: "/bin/sh")
-            owner.arguments = ["-c", "/bin/sh -c \"$DAEMON_SCRIPT\" sh '\(config.path)' $$ & wait"]
-            owner.environment = ["DAEMON_SCRIPT": TestSSHD.daemonScript]
-            try owner.run()
+            var owner: pid_t = 0
+            let argv = ["/bin/sh", "-c", "/bin/sh -c \"$DAEMON_SCRIPT\" sh '\(config.path)' $$ & wait"]
+            let envp = ["DAEMON_SCRIPT=\(TestSSHD.daemonScript)", "PATH=/usr/bin:/bin:/usr/sbin"]
+            let cArgv = argv.map { strdup($0) } + [nil]
+            let cEnvp = envp.map { strdup($0) } + [nil]
+            defer { (cArgv + cEnvp).forEach { free($0) } }
+            #expect(posix_spawn(&owner, "/bin/sh", nil, nil, cArgv, cEnvp) == 0)
 
             var daemon: pid_t = 0
             for _ in 0..<50 {
@@ -389,8 +392,8 @@
             #expect(daemon > 0)
             #expect(kill(daemon, 0) == 0)
 
-            kill(owner.processIdentifier, SIGKILL)
-            owner.waitUntilExit()
+            kill(owner, SIGKILL)
+            defer { waitpid(owner, nil, 0) }
 
             var gone = false
             for _ in 0..<50 {

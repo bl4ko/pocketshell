@@ -16,7 +16,7 @@
         if type == "ecdsa" { args += ["-b", "256"] }
         process.arguments = args
         try process.run()
-        process.waitUntilExit()
+        while process.isRunning { usleep(10_000) }
         let privateKey = try String(contentsOf: path, encoding: .utf8)
         let publicLine = try String(contentsOf: path.appendingPathExtension("pub"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)

@@ -2,6 +2,13 @@ import Foundation
 import Models
 
 public enum ToolbarKeyEncoder {
+    private static let shiftedNavigation = [
+        "\u{1b}[H": "\u{1b}[1;2H",
+        "\u{1b}[F": "\u{1b}[1;2F",
+        "\u{1b}[5~": "\u{1b}[5;2~",
+        "\u{1b}[6~": "\u{1b}[6;2~",
+    ]
+
     public static func data(
         for action: ToolbarKey.Action, shift: Bool = false, applicationCursor: Bool = false
     ) -> Data? {
@@ -14,7 +21,7 @@ public enum ToolbarKeyEncoder {
         case .arrowDown: Data("\(arrowPrefix)B".utf8)
         case .arrowLeft: Data("\(arrowPrefix)D".utf8)
         case .arrowRight: Data("\(arrowPrefix)C".utf8)
-        case .sequence(let value): Data(value.utf8)
+        case .sequence(let value): Data((shift ? shiftedNavigation[value] ?? value : value).utf8)
         }
     }
 

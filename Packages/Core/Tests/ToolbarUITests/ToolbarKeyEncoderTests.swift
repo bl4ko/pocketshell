@@ -59,3 +59,20 @@ import Testing
 @Test func ctrlAppliedToNonLetterPassesThrough() {
     #expect(ToolbarKeyEncoder.applyCtrl(to: "é") == nil)
 }
+
+@Test func shiftedNavigationKeysUseXtermModifiedForms() {
+    let cases: [(String, String)] = [
+        ("\u{1b}[H", "\u{1b}[1;2H"),
+        ("\u{1b}[F", "\u{1b}[1;2F"),
+        ("\u{1b}[5~", "\u{1b}[5;2~"),
+        ("\u{1b}[6~", "\u{1b}[6;2~"),
+    ]
+    for (plain, shifted) in cases {
+        #expect(ToolbarKeyEncoder.data(for: .sequence(plain), shift: true) == Data(shifted.utf8))
+        #expect(ToolbarKeyEncoder.data(for: .sequence(plain)) == Data(plain.utf8))
+    }
+}
+
+@Test func shiftLeavesOtherSequencesUnchanged() {
+    #expect(ToolbarKeyEncoder.data(for: .sequence("\u{03}"), shift: true) == Data([0x03]))
+}

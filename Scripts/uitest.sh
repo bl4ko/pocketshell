@@ -201,5 +201,6 @@ TEST_RUNNER_PS_TEST_FLICKER="$FLICKER_SESSION" \
 TEST_RUNNER_PS_TEST_ARROW_PROMPT="$DIR/arrow-prompt" \
 xcodebuild test \
   -scheme pocketshell \
+  -derivedDataPath "${PS_TEST_DERIVED:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-uitest}" \
   -destination "platform=iOS Simulator,name=$SIM" \
   "$@"

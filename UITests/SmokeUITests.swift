@@ -9,6 +9,7 @@ final class SmokeUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchEnvironment["PS_UI_TEST"] = "1"
+        app.launchEnvironment["PS_UI_TEST_RESET_TABS"] = "1"
         var environmentKeys = ["PS_TEST_KEY"]
         if name.contains("testTabStatuses") {
             environmentKeys += ["PS_TEST_STATUS_STABLE", "PS_TEST_STATUS_CHURN", "PS_TEST_STATUS_GAP"]
@@ -318,8 +319,9 @@ final class SmokeUITests: XCTestCase {
         XCTAssertGreaterThan(terminal.frame.height, typingHeight - 30)
         XCTAssertGreaterThan(shell.frame.minY, toggle.frame.maxY)
         app.buttons["shortcuts.favorites"].tap()
-        let keys = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'shortcuts.key.'"))
-            .allElementsBoundByIndex
+        let keyQuery = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'shortcuts.key.'"))
+        XCTAssertTrue(keyQuery.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        let keys = keyQuery.allElementsBoundByIndex
         XCTAssertGreaterThan(keys.count, 5)
         let keySize = try XCTUnwrap(keys.first?.frame.size)
         XCTAssertGreaterThanOrEqual(keySize.height, 44)
@@ -491,8 +493,8 @@ final class SmokeUITests: XCTestCase {
             )
         }
         waitForExpectations(timeout: 25)
-        for (tab, session) in zip(tabs, sessions) {
-            XCTAssertTrue(tab.label.contains(session), "tab omits tmux session: \(tab.label)")
+        for (tab, name) in zip(tabs, ["stable", "churn", "gap"]) {
+            XCTAssertTrue(tab.label.hasPrefix("\(name),"), "tab omits window name: \(tab.label)")
         }
 
         let firstGroup = app.buttons["tab-strip-group-\(sessions[0])"]
@@ -570,6 +572,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Close Tab"].waitForExistence(timeout: 2))
         app.buttons["Close Tab"].tap()
         app.buttons["new-tab"].tap()
+        dismissSessionPicker()
         app.buttons["tmux-sessions"].firstMatch.tap()
 
         let sessionRow = app.descendants(matching: .any)["tmux-session-\(session)"]
@@ -674,8 +677,12 @@ final class SmokeUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 10))
-        sessionRow.tap()
         let newWindow = app.buttons["new window in \(session)"]
+        if !newWindow.waitForExistence(timeout: 2) {
+            app.buttons.matching(
+                NSPredicate(format: "identifier == %@ AND label CONTAINS ' windows'", "tmux-session-\(session)")
+            ).firstMatch.tap()
+        }
         for _ in 0..<4 where !newWindow.exists {
             app.swipeUp()
         }
@@ -709,6 +716,8 @@ final class SmokeUITests: XCTestCase {
 
         addHost(named: "flickerbox", port: port, user: user)
         app.staticTexts["flickerbox"].firstMatch.tap()
+        let shellMode = app.buttons["Shells & tmux"].firstMatch
+        if shellMode.waitForExistence(timeout: 3) { shellMode.tap() }
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         let terminal = app.descendants(matching: .any)["terminal.view"].firstMatch
         XCTAssertTrue(terminal.waitForExistence(timeout: 5))
@@ -891,7 +900,7 @@ final class SmokeUITests: XCTestCase {
         // The draft belongs to the session, not to the screen: leaving and coming back
         // must not lose a half-written prompt.
         app.navigationBars.buttons.firstMatch.tap()
-        app.staticTexts["localbox"].firstMatch.tap()
+        openHost("localbox")
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         XCTAssertEqual(field.value as? String, "echo composed-ok")
 

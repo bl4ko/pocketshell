@@ -102,7 +102,9 @@ final class AppStore: ObservableObject {
         snippets = localFixture?.snippets ?? snippetsStore.load() ?? []
         toolbarKeys = localFixture?.toolbarKeys ?? toolbarStore.load() ?? ToolbarKey.defaults
         importedKeys = importedKeysStore.load() ?? []
-        savedTabs = savedTabsStore.load() ?? [:]
+        let resetTabs = ProcessInfo.processInfo.environment["PS_UI_TEST_RESET_TABS"] == "1"
+        savedTabs = resetTabs ? [:] : savedTabsStore.load() ?? [:]
+        if resetTabs { savedTabsStore.save([:]) }
         sessionOrder = sessionOrderStore.load() ?? [:]
         workspaceUpdatedAt = workspaceUpdatedAtStore.load() ?? [:]
         knownHosts = KnownHostsStore(fileURL: appDataURL("known-hosts.json"))

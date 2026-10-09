@@ -386,6 +386,7 @@ struct TerminalScreen: View {
     private func closeFind() {
         connection.bridge.clearFind()
         connection.findVisible = false
+        findTerm = ""
         findFailed = false
         connection.bridge.setTerminalFocused(true)
     }

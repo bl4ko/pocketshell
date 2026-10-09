@@ -156,7 +156,7 @@
             )
             try await connection.connect()
             await connection.disconnect()
-            #expect(store.entries().count == 2)
+            #expect(try store.entries().count == 2)
         }
 
         @Test func shellChannelEchoesInput() async throws {

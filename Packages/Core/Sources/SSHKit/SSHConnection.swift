@@ -340,7 +340,14 @@ final class TOFUServerAuthDelegate: NIOSSHClientServerAuthenticationDelegate, @u
 
     func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
         let line = String(openSSHPublicKey: hostKey)
-        switch store.check(host: host, port: port, publicKeyLine: line) {
+        let verdict: KnownHostsStore.Verdict
+        do {
+            verdict = try store.check(host: host, port: port, publicKeyLine: line)
+        } catch {
+            validationCompletePromise.fail(error)
+            return
+        }
+        switch verdict {
         case .match:
             validationCompletePromise.succeed(())
         case .firstUse:

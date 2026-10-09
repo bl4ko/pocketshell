@@ -8,31 +8,41 @@ public struct KnownHostsStore: Sendable {
         case mismatch(stored: String, presented: String)
     }
 
+    private static let lock = NSLock()
+
     private let fileURL: URL
 
     public init(fileURL: URL) {
         self.fileURL = fileURL
     }
 
-    public func check(host: String, port: Int, publicKeyLine: String) -> Verdict {
+    public func check(host: String, port: Int, publicKeyLine: String) throws -> Verdict {
         let presented = Self.fingerprint(publicKeyLine: publicKeyLine)
-        guard let stored = read()[key(host, port)] else { return .firstUse }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        guard let stored = try read()[key(host, port)] else { return .firstUse }
         return stored == presented ? .match : .mismatch(stored: stored, presented: presented)
     }
 
     public func trust(host: String, port: Int, publicKeyLine: String) throws {
-        var entries = read()
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var entries = try read()
         entries[key(host, port)] = Self.fingerprint(publicKeyLine: publicKeyLine)
         let data = try JSONEncoder().encode(entries)
         try data.write(to: fileURL, options: .atomic)
     }
 
-    public func entries() -> [String: String] {
-        read()
+    public func entries() throws -> [String: String] {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return try read()
     }
 
     public func merge(_ incoming: [String: String]) throws {
-        var entries = read()
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var entries = try read()
         for (key, value) in incoming where entries[key] == nil {
             entries[key] = value
         }
@@ -54,8 +64,13 @@ public struct KnownHostsStore: Sendable {
         "\(host):\(port)"
     }
 
-    private func read() -> [String: String] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [:] }
-        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    private func read() throws -> [String: String] {
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            return [:]
+        }
+        return try JSONDecoder().decode([String: String].self, from: data)
     }
 }

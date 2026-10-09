@@ -166,7 +166,7 @@ final class AppStore: ObservableObject {
             vncHosts: vncHosts,
             snippets: snippets,
             toolbarKeys: toolbarKeys,
-            knownHosts: knownHosts.entries(),
+            knownHosts: (try? knownHosts.entries()) ?? [:],
             workspace: localWorkspace
         )
     }

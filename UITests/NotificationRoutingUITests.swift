@@ -30,8 +30,19 @@ final class NotificationRoutingUITests: XCTestCase {
     ) -> XCUIApplication {
         continueAfterFailure = false
         let hostID = "00000000-0000-0000-0000-000000000007"
+        let toolbarKeysJSON =
+            "["
+            + [
+                ("tab", #"{"tab":{}}"#), ("^C", #"{"sequence":{"_0":"\u0003"}}"#),
+                ("^D", #"{"sequence":{"_0":"\u0004"}}"#),
+                ("^Z", #"{"sequence":{"_0":"\u001a"}}"#), ("/", #"{"sequence":{"_0":"/"}}"#),
+                ("-", #"{"sequence":{"_0":"-"}}"#),
+            ]
+            .enumerated().map { index, key in
+                #"{"id":"00000000-0000-0000-0000-00000000010\#(index)","label":"\#(key.0)","action":\#(key.1)}"#
+            }.joined(separator: ",") + "]"
         let config =
-            #"{"version":1,"hosts":[{"id":"\#(hostID)","name":"notification-host","hostname":"127.0.0.1","port":1,"username":"test","keyTag":"pocketshell-device-key"}],"vncHosts":[],"snippets":[],"toolbarKeys":[],"knownHosts":{}}"#
+            #"{"version":1,"hosts":[{"id":"\#(hostID)","name":"notification-host","hostname":"127.0.0.1","port":1,"username":"test","keyTag":"pocketshell-device-key"}],"vncHosts":[],"snippets":[],"toolbarKeys":\#(toolbarKeysJSON),"knownHosts":{}}"#
         var target: [String: Any] = ["hostID": hostID, "session": session]
         target["backend"] = backend
         target["workspaceID"] = workspaceID

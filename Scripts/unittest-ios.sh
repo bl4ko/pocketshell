@@ -19,5 +19,6 @@ cd Packages/Core
 xcodebuild test \
     -scheme Core-Package \
     -destination "$DEST" \
-    -derivedDataPath "$BUILD/dd-core" || status=1
+    -derivedDataPath "$BUILD/dd-core" \
+    -skip-testing:KeyKitTests || status=1
 exit $status

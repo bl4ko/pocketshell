@@ -16,6 +16,7 @@
         let onToggleSelect: (() -> Void)?
         let onCompose: (() -> Void)?
         let onAttach: (() -> Void)?
+        let onCamera: (() -> Void)?
         let uploadingFile: Bool
         let selectActive: Bool
         let composeActive: Bool
@@ -33,6 +34,7 @@
             onToggleSelect: (() -> Void)? = nil,
             onCompose: (() -> Void)? = nil,
             onAttach: (() -> Void)? = nil,
+            onCamera: (() -> Void)? = nil,
             uploadingFile: Bool = false,
             selectActive: Bool = false,
             composeActive: Bool = false,
@@ -49,6 +51,7 @@
             self.onToggleSelect = onToggleSelect
             self.onCompose = onCompose
             self.onAttach = onAttach
+            self.onCamera = onCamera
             self.uploadingFile = uploadingFile
             self.selectActive = selectActive
             self.composeActive = composeActive
@@ -77,7 +80,20 @@
                 slot(icon: "return") { onKey(.sequence("\r")) }
                     .accessibilityLabel("Enter")
                     .accessibilityIdentifier("terminal.enter")
-                if let onAttach {
+                if let onAttach, let onCamera {
+                    Menu {
+                        Button("Take Photo", systemImage: "camera") { onCamera() }
+                            .accessibilityIdentifier("terminal.camera")
+                        Button("Choose File", systemImage: "doc") { onAttach() }
+                            .accessibilityIdentifier("terminal.chooseFile")
+                    } label: {
+                        slotLabel(icon: "paperclip", busy: uploadingFile)
+                    }
+                    .disabled(uploadingFile)
+                    .accessibilityLabel("Attach")
+                    .accessibilityValue(uploadingFile ? "Uploading" : "Ready")
+                    .accessibilityIdentifier("terminal.attach")
+                } else if let onAttach {
                     slot(icon: "paperclip", busy: uploadingFile, action: onAttach)
                         .disabled(uploadingFile)
                         .accessibilityLabel("Attach file")

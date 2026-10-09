@@ -90,6 +90,7 @@ private final class KeyboardLayoutView: UIView {
 private enum UITestFlags {
     static let keyboardResize = ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1"
     static let resizeCount = ProcessInfo.processInfo.environment["PS_UI_TEST_RESIZE_COUNT"] == "1"
+    static let camera = ProcessInfo.processInfo.environment["PS_UI_TEST_CAMERA"] == "1"
 }
 
 // Approximates UIKit's private keyboard curve 7 so the toolbar stays glued to the keyboard.
@@ -176,6 +177,7 @@ struct TerminalScreen: View {
     @State private var findTerm = ""
     @State private var findFailed = false
     @State private var attachingFile = false
+    @State private var takingPhoto = false
     @State private var attachmentError: String?
     @FocusState private var findFocused: Bool
 
@@ -265,6 +267,7 @@ struct TerminalScreen: View {
                                 }
                                 attachingFile = true
                             },
+                            onCamera: cameraAction,
                             uploadingFile: connection.isUploadingFile,
                             selectActive: connection.bridge.selectMode,
                             composeActive: connection.composerVisible,
@@ -288,6 +291,10 @@ struct TerminalScreen: View {
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: windowPickerShown) {
             windowPicker
+        }
+        .fullScreenCover(isPresented: $takingPhoto) {
+            CameraPicker { connection.bridge.pastePhoto($0) }
+                .ignoresSafeArea()
         }
         .fileImporter(isPresented: $attachingFile, allowedContentTypes: [.item]) { result in
             Task {
@@ -430,6 +437,23 @@ struct TerminalScreen: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(color.opacity(0.15))
+    }
+
+    private var cameraAction: (() -> Void)? {
+        guard UITestFlags.camera || CameraPicker.isAvailable else { return nil }
+        return { takePhoto() }
+    }
+
+    private func takePhoto() {
+        guard UITestFlags.camera else {
+            takingPhoto = true
+            return
+        }
+        let fixture = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
+            UIColor.systemRed.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        }
+        connection.bridge.pastePhoto(fixture)
     }
 
     private func followKeyboard(_ inset: CGFloat, animated: Bool) {

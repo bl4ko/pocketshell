@@ -31,6 +31,9 @@ final class SmokeUITests: XCTestCase {
         if name.contains("testTerminalAttachment") {
             app.launchEnvironment["PS_UI_TEST_ATTACHMENT"] = "pocketshell-file-attachment\n"
         }
+        if name.contains("testTerminalCamera") {
+            app.launchEnvironment["PS_UI_TEST_CAMERA"] = "1"
+        }
         if name.contains("testHerdrHostChoice") {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
                 #"{"sessions":[{"name":"default","default":true,"running":true}]}"#
@@ -279,6 +282,48 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(URL(fileURLWithPath: path).lastPathComponent, "pocketshell-attachment-test.txt")
         XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), "pocketshell-file-attachment\n")
         try FileManager.default.removeItem(at: URL(fileURLWithPath: path).deletingLastPathComponent())
+    }
+
+    func testTerminalCameraPhotoUploadsAndInsertsPath() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; camera paste test skipped")
+        }
+        openHost("localbox")
+        let attach = app.buttons["terminal.attach"]
+        XCTAssertTrue(attach.waitForExistence(timeout: 10))
+        let capture = "/tmp/psh-camera-path-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: capture) }
+        let terminal = app.textViews["terminal.view"]
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText("printf '%s' ")
+        attach.tap()
+        let takePhoto = app.buttons["terminal.camera"]
+        XCTAssertTrue(takePhoto.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["terminal.chooseFile"].exists)
+        let before = Set((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? [])
+        takePhoto.tap()
+        let uploaded = NSPredicate { _, _ in
+            ((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? []).contains {
+                $0.hasPrefix("psh-") && $0.hasSuffix(".jpg") && !before.contains($0)
+            }
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: uploaded, object: nil)], timeout: 15), .completed)
+        terminal.tap()
+        terminal.typeText("> '\(capture)'\n")
+        let captured = NSPredicate { _, _ in
+            FileManager.default.contents(atPath: capture)?.isEmpty == false
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: captured, object: nil)], timeout: 10), .completed)
+        let path = try XCTUnwrap(
+            FileManager.default.contents(atPath: capture).flatMap { String(data: $0, encoding: .utf8) }
+        ).trimmingCharacters(in: .whitespaces)
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        XCTAssertTrue(path.hasPrefix("/tmp/psh-") && path.hasSuffix(".jpg"), path)
+        let jpeg = try Data(contentsOf: URL(fileURLWithPath: path))
+        XCTAssertTrue(jpeg.starts(with: [0xFF, 0xD8, 0xFF]))
     }
 
     func testTerminalShortcutsReplaceKeyboardAndRememberCategory() throws {

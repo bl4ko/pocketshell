@@ -50,6 +50,7 @@ targets:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: Connects to SSH hosts on your local network.
         NSFaceIDUsageDescription: Unlock pocketshell.
+        NSCameraUsageDescription: Take a photo and paste it into the terminal.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations:

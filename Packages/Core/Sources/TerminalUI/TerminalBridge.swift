@@ -192,7 +192,12 @@
             return true
         }
 
-        nonisolated private static func uploadableJPEG(_ image: UIImage) -> Data? {
+        public func pastePhoto(_ image: UIImage) {
+            guard let imagePaste, let data = Self.uploadableJPEG(image) else { return }
+            imagePaste(data)
+        }
+
+        nonisolated static func uploadableJPEG(_ image: UIImage) -> Data? {
             let longest = max(image.size.width, image.size.height)
             guard longest > 1568, longest.isFinite else {
                 return image.jpegData(compressionQuality: 0.85)

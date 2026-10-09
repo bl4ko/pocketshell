@@ -31,6 +31,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo and paste it into the terminal.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock pocketshell.</string>
 	<key>NSLocalNetworkUsageDescription</key>

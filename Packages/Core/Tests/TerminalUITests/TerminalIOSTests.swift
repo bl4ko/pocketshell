@@ -37,26 +37,28 @@
         token.cancel()
     }
 
-    @MainActor
-    @Test func cancelledSelectModePanEndsHandleDrag() {
-        for state in [UIGestureRecognizer.State.cancelled, .failed] {
-            let bridge = TerminalBridge()
-            bridge.selectMode = true
-            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
-            let view = makeTerminal()
-            view.feed(text: "hello world\r\n")
-            view.startPointerSelection(at: CGPoint(x: 1, y: 1))
-            view.extendPointerSelection(to: CGPoint(x: 60, y: 1))
-            #expect(view.grabSelectionHandle(at: CGPoint(x: 1, y: 1), slop: 10_000))
-            #expect(view.selectionHandleDragActive)
-            let pan = StatefulPan()
-            view.addGestureRecognizer(pan)
-            pan.deliver(state)
-            #expect(pan.state == state)
-            coordinator.handleScrollPanOnMain(pan)
-            #expect(!view.selectionHandleDragActive)
+    #if !targetEnvironment(macCatalyst)
+        @MainActor
+        @Test func cancelledSelectModePanEndsHandleDrag() {
+            for state in [UIGestureRecognizer.State.cancelled, .failed] {
+                let bridge = TerminalBridge()
+                bridge.selectMode = true
+                let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
+                let view = makeTerminal()
+                view.feed(text: "hello world\r\n")
+                view.startPointerSelection(at: CGPoint(x: 1, y: 1))
+                view.extendPointerSelection(to: CGPoint(x: 60, y: 1))
+                #expect(view.grabSelectionHandle(at: CGPoint(x: 1, y: 1), slop: 10_000))
+                #expect(view.selectionHandleDragActive)
+                let pan = StatefulPan()
+                view.addGestureRecognizer(pan)
+                pan.deliver(state)
+                #expect(pan.state == state)
+                coordinator.handleScrollPanOnMain(pan)
+                #expect(!view.selectionHandleDragActive)
+            }
         }
-    }
+    #endif
 
     @MainActor
     @Test func scrolledTapMapsToVisibleRowNotLastRow() {
@@ -133,6 +135,48 @@
             controller.updateShortcuts(bridge: bridge, keys: keys, theme: theme)
             #expect(controller.terminalView.inputView == nil)
             #expect(controller.shortcutRenderCount == 1)
+        }
+    #endif
+
+    #if targetEnvironment(macCatalyst)
+        private final class PointerPan: UIPanGestureRecognizer {
+            var forced = UIGestureRecognizer.State.possible
+            var point = CGPoint.zero
+            override var state: UIGestureRecognizer.State {
+                get { forced }
+                set { forced = newValue }
+            }
+            override var buttonMask: UIEvent.ButtonMask { .primary }
+            override func location(in view: UIView?) -> CGPoint { point }
+            override func translation(in view: UIView?) -> CGPoint { .zero }
+        }
+
+        @MainActor
+        @Test func cancelledCatalystSelectionPanEndsHandleDragAndNextPanStartsFresh() {
+            for state in [UIGestureRecognizer.State.cancelled, .failed] {
+                let coordinator = SSHTerminalView.Coordinator(bridge: TerminalBridge())
+                let view = makeTerminal()
+                view.feed(text: "hello world\r\n")
+                view.startPointerSelection(at: CGPoint(x: 1, y: 1))
+                view.extendPointerSelection(to: CGPoint(x: 60, y: 1))
+                #expect(view.grabSelectionHandle(at: CGPoint(x: 1, y: 1), slop: 10_000))
+                let pan = PointerPan()
+                view.addGestureRecognizer(pan)
+                pan.point = CGPoint(x: 1, y: 1)
+                pan.forced = .began
+                coordinator.handleSelectionPan(pan)
+                #expect(view.selectionHandleDragActive)
+                #expect(coordinator.selectionStart != nil)
+                pan.forced = state
+                coordinator.handleSelectionPan(pan)
+                #expect(!view.selectionHandleDragActive)
+                #expect(coordinator.selectionStart == nil)
+                pan.point = CGPoint(x: 300, y: 200)
+                pan.forced = .began
+                coordinator.handleSelectionPan(pan)
+                #expect(!view.selectionHandleDragActive)
+                #expect(coordinator.selectionStart == CGPoint(x: 300, y: 200))
+            }
         }
     #endif
 #endif

@@ -553,7 +553,7 @@
             }
 
             #if targetEnvironment(macCatalyst)
-                private var selectionStart: CGPoint?
+                var selectionStart: CGPoint?
 
                 @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
                     MainActor.assumeIsolated {

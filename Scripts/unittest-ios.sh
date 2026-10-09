@@ -21,4 +21,9 @@ xcodebuild test \
     -destination "$DEST" \
     -derivedDataPath "$BUILD/dd-core" \
     -skip-testing:KeyKitTests || status=1
+xcodebuild test \
+    -scheme Core-Package \
+    -destination 'platform=macOS,variant=Mac Catalyst' \
+    -derivedDataPath "$BUILD/dd-core-catalyst" \
+    -skip-testing:KeyKitTests || status=1
 exit $status

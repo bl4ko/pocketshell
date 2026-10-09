@@ -546,9 +546,13 @@
 
                 @objc func handleSelectionPan(_ gesture: UIPanGestureRecognizer) {
                     MainActor.assumeIsolated {
-                        guard gesture.buttonMask.contains(.primary),
-                            let view = gesture.view as? TerminalView
-                        else { return }
+                        guard let view = gesture.view as? TerminalView else { return }
+                        if gesture.state == .cancelled || gesture.state == .failed {
+                            view.endSelectionHandleDrag()
+                            selectionStart = nil
+                            return
+                        }
+                        guard gesture.buttonMask.contains(.primary) else { return }
                         let point = gesture.location(in: view)
                         switch gesture.state {
                         case .began:
@@ -642,6 +646,8 @@
                             } else {
                                 view.extendPointerSelection(to: gesture.location(in: view))
                             }
+                        case .cancelled, .failed:
+                            view.endSelectionHandleDrag()
                         default:
                             break
                         }

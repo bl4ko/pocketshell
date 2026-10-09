@@ -130,7 +130,7 @@ private struct KeyboardToolbarSlide: AnimatableModifier {
         content.offset(y: layout - animatableData)
             .overlay(alignment: .topLeading) {
                 if UITestFlags.resizeCount {
-                    KeyboardMotionProbe(offset: layout - animatableData).frame(width: 1, height: 1)
+                    KeyboardMotionProbe(offset: layout - animatableData, layout: layout).frame(width: 1, height: 1)
                 }
             }
     }
@@ -144,20 +144,48 @@ private struct KeyboardTarget: Equatable {
 // UI tests observe actual intermediate display offsets, not a timer or animation flag.
 private struct KeyboardMotionProbe: UIViewRepresentable {
     let offset: CGFloat
+    let layout: CGFloat
+
+    final class Tally {
+        var layout: CGFloat?
+        var offset: String?
+        var frames = 0
+        var commits = 0
+        var motionBeforeCommit = 0
+        var motionAfterCommit = 0
+    }
+
+    func makeCoordinator() -> Tally { Tally() }
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
         view.isAccessibilityElement = true
         view.accessibilityIdentifier = "keyboard.motion"
-        view.accessibilityLabel = "Keyboard motion frames: 0"
+        view.accessibilityLabel = "Keyboard layout commits: 0, motion before: 0, motion after: 0, frames: 0"
         return view
     }
 
     func updateUIView(_ view: UIView, context: Context) {
-        if view.accessibilityValue != String(Double(offset)) {
-            let count = Int(view.accessibilityLabel?.split(separator: " ").last ?? "") ?? 0
-            view.accessibilityLabel = "Keyboard motion frames: \(count + 1)"
-            view.accessibilityValue = String(Double(offset))
+        let tally = context.coordinator
+        var changed = false
+        if let previous = tally.layout, previous != layout {
+            tally.commits += 1
+            tally.motionBeforeCommit = tally.motionAfterCommit
+            tally.motionAfterCommit = 0
+            changed = true
+        }
+        tally.layout = layout
+        if tally.offset != String(Double(offset)) {
+            tally.offset = String(Double(offset))
+            tally.frames += 1
+            if offset != 0 { tally.motionAfterCommit += 1 }
+            view.accessibilityValue = tally.offset
+            changed = true
+        }
+        if changed {
+            view.accessibilityLabel =
+                "Keyboard layout commits: \(tally.commits), motion before: \(tally.motionBeforeCommit), "
+                + "motion after: \(tally.motionAfterCommit), frames: \(tally.frames)"
         }
     }
 }

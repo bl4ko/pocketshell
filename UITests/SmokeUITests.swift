@@ -862,6 +862,13 @@ final class SmokeUITests: XCTestCase {
         return Int(probe.label.split(separator: " ").last ?? "") ?? 0
     }
 
+    private func keyboardLayoutCommits() -> (commits: Int, before: Int, after: Int) {
+        let label = app.otherElements["keyboard.motion"].label
+        let numbers = label.split { !$0.isNumber }.compactMap { Int($0) }
+        XCTAssertEqual(numbers.count, 4, "unexpected probe label: \(label)")
+        return numbers.count == 4 ? (numbers[0], numbers[1], numbers[2]) : (-1, -1, -1)
+    }
+
     private func assertTerminalHeightCommitsOnce(_ terminal: XCUIElement, button: XCUIElement) {
         var heights: [CGFloat] = []
         let deadline = Date().addingTimeInterval(5)
@@ -877,6 +884,40 @@ final class SmokeUITests: XCTestCase {
         let settled = NSPredicate { _, _ in abs(terminal.frame.maxY - button.frame.minY) < 20 }
         let wait = XCTNSPredicateExpectation(predicate: settled, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [wait], timeout: 5), .completed)
+    }
+
+    func testKeyboardLayoutCommitsOnlyOutsideShowMotion() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed keyboard test skipped")
+        }
+        openHost("localbox")
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 5))
+        terminal.tap()
+        terminal.typeText(" ")
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        sleep(1)
+        for _ in 0..<3 {
+            let beforeHide = keyboardLayoutCommits()
+            keyboardButton.tap()
+            waitForKeyboardLayout(terminal, button: keyboardButton)
+            let afterHide = keyboardLayoutCommits()
+            XCTAssertEqual(afterHide.commits - beforeHide.commits, 1, "hide: \(afterHide)")
+            XCTAssertEqual(afterHide.before, 0, "hide: \(beforeHide) \(afterHide)")
+            XCTAssertGreaterThan(afterHide.after, 3, "hide must animate after the layout grew")
+
+            keyboardButton.tap()
+            let shown = NSPredicate { _, _ in self.keyboardLayoutCommits().commits > afterHide.commits }
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: shown, object: nil)], timeout: 5),
+                .completed)
+            let afterShow = keyboardLayoutCommits()
+            XCTAssertEqual(afterShow.commits - afterHide.commits, 1, "show: \(afterShow)")
+            XCTAssertGreaterThan(afterShow.before, 3, "show must commit the layout only after the motion frames")
+            XCTAssertEqual(afterShow.after, 0, "show must not animate after the layout shrank")
+        }
     }
 
     func testKeyboardTracksSoftwareKeyboard() throws {

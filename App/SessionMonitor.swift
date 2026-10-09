@@ -149,6 +149,7 @@ final class SessionMonitor: ObservableObject {
         var snapshots: [SessionSnapshot.Window] = []
         var targets: [String: [String: Any]] = [:]
         var herdrKeys: Set<String> = []
+        var complete = true
         for host in store.hosts {
             let requestedSessions = store.tmuxSessions(for: host)
             guard let connection = await connection(for: host) else { continue }
@@ -161,8 +162,12 @@ final class SessionMonitor: ObservableObject {
                 let sessions = Tmux.canonicalSessionNames(sessionsOutput, requested: requestedSessions)
                 let records = store.savedTabs[host.id.uuidString] ?? []
                 for session in sessions {
-                    let windowsOutput = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""
-                    let capturesOutput = (try? await connection.exec(Tmux.capturePanesCommand(session: session))) ?? ""
+                    guard let windowsOutput = try? await connection.exec(Tmux.listWindowsCommand(session: session)),
+                        let capturesOutput = try? await connection.exec(Tmux.capturePanesCommand(session: session))
+                    else {
+                        complete = false
+                        continue
+                    }
                     let captures = Tmux.parsePaneCaptures(capturesOutput)
                     for window in Tmux.parseWindows(windowsOutput) {
                         let text = captures[window.index] ?? ""
@@ -237,7 +242,8 @@ final class SessionMonitor: ObservableObject {
             }
         }
         lastHerdrStatus = lastHerdrStatus.filter { herdrKeys.contains($0.key) }
-        let transitions = tracker.update(samples)
+        // An empty capture classifies as idle, so a failed exec would fake busy -> idle.
+        let transitions = complete ? tracker.update(samples) : []
         for transition in transitions where transition.status == .idle {
             unseenFinished.insert(transition.key)
         }

@@ -18,6 +18,7 @@ ship() {
     out=$(mktemp -d)
     xcodebuild archive -scheme pocketshell -destination "$1" \
         -archivePath "$out/pocketshell.xcarchive" \
+        -derivedDataPath "${PS_BUILD_DIR:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-ship}/dd-ship" \
         -allowProvisioningUpdates -quiet \
         -authenticationKeyPath "$key" \
         -authenticationKeyID "$ASC_KEY_ID" \

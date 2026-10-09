@@ -326,6 +326,37 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(jpeg.starts(with: [0xFF, 0xD8, 0xFF]))
     }
 
+    func testTopBarButtonsHaveNoAdaptiveGlass() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; top bar test skipped")
+        }
+        openHost("localbox")
+        let tmux = app.buttons["tmux-sessions"]
+        let more = app.buttons["terminal.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10))
+        XCTAssertTrue(tmux.exists)
+        let y = more.frame.midY
+        let between = luminance(at: CGPoint(x: (tmux.frame.maxX + more.frame.minX) / 2, y: y))
+        let bar = luminance(at: CGPoint(x: tmux.frame.minX - 20, y: y))
+        XCTAssertEqual(between, bar, accuracy: 6, "trailing buttons sit on a glass capsule")
+    }
+
+    private func luminance(at point: CGPoint) -> Double {
+        let image = XCUIScreen.main.screenshot().image
+        guard let cg = image.cgImage else { return -1 }
+        let scale = CGFloat(cg.width) / app.frame.width
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        context?.draw(
+            cg,
+            in: CGRect(
+                x: -point.x * scale, y: -(CGFloat(cg.height) - point.y * scale), width: CGFloat(cg.width),
+                height: CGFloat(cg.height)))
+        return 0.2126 * Double(pixel[0]) + 0.7152 * Double(pixel[1]) + 0.0722 * Double(pixel[2])
+    }
+
     func testTerminalShortcutsReplaceKeyboardAndRememberCategory() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; shortcut keyboard test skipped")

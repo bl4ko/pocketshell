@@ -110,7 +110,7 @@ struct HostTabsScreen: View {
             #if targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .principal) {
                     hostSwitcher
-                }
+                }.withoutGlass()
             #else
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -119,11 +119,11 @@ struct HostTabsScreen: View {
                         Image(systemName: "chevron.left")
                     }
                     .accessibilityLabel("Back")
-                }
+                }.withoutGlass()
                 ToolbarItem(placement: .principal) {
                     hostSwitcher
                         .frame(width: 150)
-                }
+                }.withoutGlass()
             #endif
             if !herdrOnly {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -136,7 +136,7 @@ struct HostTabsScreen: View {
                         .keyboardShortcut("k", modifiers: .command)
                     #endif
                     .accessibilityIdentifier("tmux-sessions")
-                }
+                }.withoutGlass()
             }
             // Exactly three trailing items: a fourth lands in the system
             // overflow menu, which iOS 26 renders but does not open reliably.
@@ -185,7 +185,7 @@ struct HostTabsScreen: View {
                     Image(systemName: "ellipsis.circle")
                 }
                 .accessibilityIdentifier("terminal.more")
-            }
+            }.withoutGlass()
             if !herdrOnly {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -196,7 +196,7 @@ struct HostTabsScreen: View {
                     }
                     .keyboardShortcut("t", modifiers: .command)
                     .accessibilityIdentifier("new-tab")
-                }
+                }.withoutGlass()
             }
         }
         .sheet(isPresented: $showDiff) {
@@ -1596,5 +1596,17 @@ struct TmuxJumpSheet: View {
             }
         }
         loaded = true
+    }
+}
+
+// Liquid Glass re-tints against the terminal behind it and flashed grey while content slid with the keyboard.
+private extension ToolbarContent {
+    @ToolbarContentBuilder
+    func withoutGlass() -> some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
     }
 }

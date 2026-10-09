@@ -3,7 +3,7 @@ set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 SIM=${PS_TEST_SIM:-iPhone 17 Pro}
-BUILD=${PS_BUILD_DIR:-/Volumes/Extreme SSD/mac-mini/build/pocketshell}
+BUILD=${PS_BUILD_DIR:-$REPO/DerivedData}
 DEST="platform=iOS Simulator,name=$SIM"
 cd "$REPO"
 

@@ -87,42 +87,57 @@ private final class KeyboardLayoutView: UIView {
     }
 }
 
+private enum UITestFlags {
+    static let keyboardResize = ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1"
+    static let resizeCount = ProcessInfo.processInfo.environment["PS_UI_TEST_RESIZE_COUNT"] == "1"
+}
+
+// Approximates UIKit's private keyboard curve 7 so the toolbar stays glued to the keyboard.
+private func keyboardMotion(duration: Double) -> Animation {
+    .timingCurve(0.38, 0.7, 0.125, 1, duration: duration)
+}
+
 // Animate only the visible clip and toolbar position. Terminal layout changes once,
 // so keyboard motion does not reflow scrollback or send a PTY resize on every frame.
 private struct KeyboardReveal: AnimatableModifier {
-    let inset: CGFloat
+    let layout: CGFloat
     var animatableData: CGFloat
 
-    init(inset: CGFloat) {
-        self.inset = inset
-        animatableData = inset
+    init(layout: CGFloat, shown: CGFloat) {
+        self.layout = layout
+        animatableData = shown
     }
 
     func body(content: Content) -> some View {
-        content.offset(y: min(0, inset - animatableData))
+        content.offset(y: min(0, layout - animatableData))
             .mask {
-                Rectangle().padding(.bottom, max(0, animatableData - inset))
+                Rectangle().padding(.bottom, max(0, animatableData - layout))
             }
     }
 }
 
 private struct KeyboardToolbarSlide: AnimatableModifier {
-    let inset: CGFloat
+    let layout: CGFloat
     var animatableData: CGFloat
 
-    init(inset: CGFloat) {
-        self.inset = inset
-        animatableData = inset
+    init(layout: CGFloat, shown: CGFloat) {
+        self.layout = layout
+        animatableData = shown
     }
 
     func body(content: Content) -> some View {
-        content.offset(y: inset - animatableData)
+        content.offset(y: layout - animatableData)
             .overlay(alignment: .topLeading) {
-                if ProcessInfo.processInfo.environment["PS_UI_TEST_RESIZE_COUNT"] == "1" {
-                    KeyboardMotionProbe(offset: inset - animatableData).frame(width: 1, height: 1)
+                if UITestFlags.resizeCount {
+                    KeyboardMotionProbe(offset: layout - animatableData).frame(width: 1, height: 1)
                 }
             }
     }
+}
+
+private struct KeyboardTarget: Equatable {
+    var inset: CGFloat
+    var active: Bool
 }
 
 // UI tests observe actual intermediate display offsets, not a timer or animation flag.
@@ -153,8 +168,9 @@ struct TerminalScreen: View {
     @ObservedObject var connection: ConnectionController
     @ObservedObject private var bridge: TerminalBridge
     @StateObject private var keyboard = KeyboardObserver()
-    @State private var testKeyboardHeight: CGFloat =
-        ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" ? 300 : 0
+    @State private var testKeyboardHeight: CGFloat = UITestFlags.keyboardResize ? 300 : 0
+    @State private var keyboardInset = KeyboardInset()
+    @State private var shownInset: CGFloat = 0
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
     @AppStorage(AppSettings.uiScaleKey) private var uiScale = 1.0
     @State private var findTerm = ""
@@ -185,12 +201,9 @@ struct TerminalScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let testKeyboardResize = ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1"
-            let keyboardInset =
-                testKeyboardResize ? testKeyboardHeight : max(0, keyboard.height - proxy.safeAreaInsets.bottom)
-            let inset = isActive ? keyboardInset : 0
-            let motion: Animation? =
-                reduceMotion ? nil : .easeOut(duration: testKeyboardResize ? 0.25 : keyboard.duration)
+            let keyboardHeight =
+                UITestFlags.keyboardResize
+                ? testKeyboardHeight : max(0, keyboard.height - proxy.safeAreaInsets.bottom)
             VStack(spacing: 0) {
                 statusBanner
                 if connection.findVisible {
@@ -205,8 +218,7 @@ struct TerminalScreen: View {
                 )
                 .focusEffectDisabled()
                 .transaction { $0.animation = nil }
-                .modifier(KeyboardReveal(inset: inset))
-                .animation(motion, value: inset)
+                .modifier(KeyboardReveal(layout: keyboardInset.layout, shown: shownInset))
                 VStack(spacing: 0) {
                     if connection.composerVisible {
                         ComposerBar(
@@ -230,7 +242,7 @@ struct TerminalScreen: View {
                             onKey: { connection.bridge.handleToolbar($0) },
                             onHideKeyboard: {
                                 connection.bridge.toggleKeyboard()
-                                if ProcessInfo.processInfo.environment["PS_UI_TEST_KEYBOARD_RESIZE"] == "1" {
+                                if UITestFlags.keyboardResize {
                                     testKeyboardHeight = testKeyboardHeight == 0 ? 300 : 0
                                 }
                             },
@@ -261,11 +273,13 @@ struct TerminalScreen: View {
                         )
                     #endif
                 }
-                .modifier(KeyboardToolbarSlide(inset: inset))
-                .animation(motion, value: inset)
+                .modifier(KeyboardToolbarSlide(layout: keyboardInset.layout, shown: shownInset))
             }
             .background(Color(hexRGB: TerminalTheme.named(themeName).background))
-            .padding(.bottom, inset)
+            .padding(.bottom, keyboardInset.layout)
+            .onChange(of: KeyboardTarget(inset: keyboardHeight, active: isActive), initial: true) { old, new in
+                followKeyboard(new.active ? new.inset : 0, animated: old.active && new.active && old != new)
+            }
         }
         .background(KeyboardLayoutProbe(observer: keyboard))
         .ignoresSafeArea(.keyboard)
@@ -412,6 +426,20 @@ struct TerminalScreen: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(color.opacity(0.15))
+    }
+
+    private func followKeyboard(_ inset: CGFloat, animated: Bool) {
+        guard animated, !reduceMotion else {
+            if keyboardInset != KeyboardInset(inset) { keyboardInset = KeyboardInset(inset) }
+            if shownInset != inset { shownInset = inset }
+            return
+        }
+        keyboardInset.move(to: inset)
+        withAnimation(keyboardMotion(duration: UITestFlags.keyboardResize ? 0.25 : keyboard.duration)) {
+            shownInset = inset
+        } completion: {
+            keyboardInset.settle(inset)
+        }
     }
 
     private var windowPickerShown: Binding<Bool> {

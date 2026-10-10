@@ -179,4 +179,65 @@
             }
         }
     #endif
+    #if !targetEnvironment(macCatalyst)
+        private final class EndedTap: UITapGestureRecognizer {
+            override var state: UIGestureRecognizer.State {
+                get { .ended }
+                set {}
+            }
+        }
+
+        @MainActor
+        private func windowedTerminal() -> (BottomAnchoredTerminalView, UIWindow) {
+            let view = BottomAnchoredTerminalView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+            view.getTerminal().resize(cols: 40, rows: 10)
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+            window.addSubview(view)
+            window.makeKeyAndVisible()
+            return (view, window)
+        }
+
+        @MainActor
+        @Test func mouseReportingTapSendsClickWithoutRaisingKeyboard() async throws {
+            let bridge = TerminalBridge()
+            var sent: [Data] = []
+            bridge.sendToHost = { sent.append($0) }
+            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
+            let (view, window) = windowedTerminal()
+            view.terminalDelegate = coordinator
+            view.feed(text: "\u{1b}[?1000h\u{1b}[?1006h")
+            #expect(!view.isFirstResponder)
+            #expect(!view.tapRaisesKeyboard)
+            let tap = EndedTap()
+            view.addGestureRecognizer(tap)
+            coordinator.handleMouseTap(tap)
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(!view.isFirstResponder)
+            #expect(!sent.isEmpty)
+            withExtendedLifetime(window) {}
+        }
+
+        @MainActor
+        @Test func plainShellTapRaisesKeyboard() {
+            let bridge = TerminalBridge()
+            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
+            let (view, window) = windowedTerminal()
+            view.terminalDelegate = coordinator
+            #expect(view.tapRaisesKeyboard)
+            let tap = EndedTap()
+            view.addGestureRecognizer(tap)
+            coordinator.handleMouseTap(tap)
+            #expect(view.isFirstResponder)
+            withExtendedLifetime(window) {}
+        }
+
+        @MainActor
+        @Test func mouseReportingTapKeepsKeyboardWhenAlreadyUp() {
+            let (view, window) = windowedTerminal()
+            view.feed(text: "\u{1b}[?1000h")
+            #expect(view.becomeFirstResponder())
+            #expect(view.tapRaisesKeyboard)
+            withExtendedLifetime(window) {}
+        }
+    #endif
 #endif

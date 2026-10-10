@@ -146,6 +146,27 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(app.keyboards.element.exists)
     }
 
+    func testTerminalTapInMouseReportingAppKeepsKeyboardHidden() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; mouse tap test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText("printf '\\033[?1000h'; sleep 12; printf '\\033[?1000l'\n")
+        sleep(1)
+        app.buttons["terminal.keyboard"].tap()
+        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
+        terminal.tap()
+        sleep(2)
+        XCTAssertFalse(app.keyboards.element.exists)
+        sleep(12)
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+    }
+
     func testTerminalOpensShellWithToolbar() throws {
         let env = ProcessInfo.processInfo.environment
         guard env["PS_TEST_PORT"] != nil else {

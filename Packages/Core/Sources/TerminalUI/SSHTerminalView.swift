@@ -21,6 +21,14 @@
         private var resizeCount = 0
         var pasteImage: (() -> Bool)?
 
+        var tapRaisesKeyboard: Bool {
+            #if targetEnvironment(macCatalyst)
+                return true
+            #else
+                return isFirstResponder || getTerminal().mouseMode == .off
+            #endif
+        }
+
         override func paste(_ sender: Any?) {
             if pasteImage?() != true {
                 super.paste(sender)
@@ -315,6 +323,15 @@
             tap.cancelsTouchesInView = false
             tap.delegate = gestureDelegate
             view.addGestureRecognizer(tap)
+            let nativeTapGate = NativeTapGate()
+            context.coordinator.nativeTapGate = nativeTapGate
+            for recognizer in view.gestureRecognizers ?? [] {
+                if let native = recognizer as? UITapGestureRecognizer, native !== tap,
+                    native.numberOfTapsRequired == 1
+                {
+                    native.delegate = nativeTapGate
+                }
+            }
             #if targetEnvironment(macCatalyst)
                 let selectionPan = UIPanGestureRecognizer(
                     target: context.coordinator,
@@ -416,6 +433,12 @@
             Coordinator(bridge: bridge)
         }
 
+        final class NativeTapGate: NSObject, UIGestureRecognizerDelegate {
+            func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+                (gestureRecognizer.view as? BottomAnchoredTerminalView)?.tapRaisesKeyboard ?? true
+            }
+        }
+
         final class SimultaneousGestureDelegate: NSObject, UIGestureRecognizerDelegate {
             func gestureRecognizer(
                 _ gestureRecognizer: UIGestureRecognizer,
@@ -429,6 +452,7 @@
             private let bridge: TerminalBridge
             private var scrollTracker = PanScrollTracker(step: 1)
             var gestureDelegate: SimultaneousGestureDelegate?
+            var nativeTapGate: NativeTapGate?
             #if !targetEnvironment(macCatalyst)
                 var cursorGesture: CursorGestureController?
             #endif
@@ -457,7 +481,9 @@
                 MainActor.assumeIsolated {
                     guard gesture.state == .ended, let view = gesture.view as? TerminalView else { return }
                     noteUserPresence()
-                    _ = view.becomeFirstResponder()
+                    if (view as? BottomAnchoredTerminalView)?.tapRaisesKeyboard ?? true {
+                        _ = view.becomeFirstResponder()
+                    }
                     #if targetEnvironment(macCatalyst)
                         if view.selectionActive {
                             view.clearSelection()

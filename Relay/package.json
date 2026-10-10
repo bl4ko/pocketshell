@@ -4,6 +4,7 @@
     "type": "module",
     "scripts": {
         "test": "node --test",
-        "deploy": "npx wrangler deploy"
-    }
+        "deploy": "pnpm dlx wrangler deploy"
+    },
+    "packageManager": "pnpm@12.10.1"
 }

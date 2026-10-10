@@ -38,6 +38,10 @@ final class SmokeUITests: XCTestCase {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
                 #"{"sessions":[{"name":"default","default":true,"running":true}]}"#
         }
+        if name.contains("testHerdrSessionSwitch") {
+            app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
+                #"{"sessions":[{"name":"pskbdtest","default":false,"running":true}]}"#
+        }
         if name.contains("testZZCloudRefresh") {
             app.launchEnvironment["PS_UI_TEST_LOCAL_CONFIG"] = configFixture(
                 hosts: [
@@ -121,6 +125,25 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["host-switcher"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["new-tab"].exists)
         XCTAssertFalse(app.buttons["tmux-sessions"].exists)
+    }
+
+    func testHerdrSessionSwitchKeepsKeyboardHidden() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; Herdr keyboard test skipped")
+        }
+        let host = app.staticTexts["localbox"].firstMatch
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        let shellMode = app.buttons["Shells & tmux"].firstMatch
+        XCTAssertTrue(shellMode.waitForExistence(timeout: 5))
+        shellMode.tap()
+        let session = app.buttons["pskbdtest"].firstMatch
+        XCTAssertTrue(session.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.keyboards.element.exists)
+        session.tap()
+        XCTAssertTrue(app.buttons["terminal.shortcutsToggle"].waitForExistence(timeout: 20))
+        sleep(4)
+        XCTAssertFalse(app.keyboards.element.exists)
     }
 
     func testTerminalOpensShellWithToolbar() throws {

@@ -447,8 +447,11 @@ final class ConnectionController: ObservableObject {
     }
 
     private func listInitialSessions(connection: SSHConnection) async {
-        let herdrOutput = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
-        let herdrSessions = Herdr.parseSessions(herdrOutput)
+        var herdrOutput = ProcessInfo.processInfo.environment["PS_UI_TEST_HERDR_SESSIONS"]
+        if herdrOutput == nil {
+            herdrOutput = (try? await connection.exec(Herdr.listSessionsCommand())) ?? ""
+        }
+        let herdrSessions = Herdr.parseSessions(herdrOutput ?? "")
         var tmuxWindows: [TmuxWindow] = []
         if let session = host.tmuxSession,
             let output = try? await connection.exec(Tmux.listWindowsCommand(session: session))

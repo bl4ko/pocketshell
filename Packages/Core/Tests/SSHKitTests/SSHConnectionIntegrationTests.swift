@@ -337,6 +337,9 @@
                 await #expect(throws: SetupFailure.self) { try await call(connection) }
             }
             #expect(log.all.count == 12)
+            for _ in 0..<30 where log.all.contains(where: \.isActive) {
+                try await Task.sleep(for: .milliseconds(100))
+            }
             #expect(log.all.allSatisfy { !$0.isActive })
             await connection.setSetupFault(nil)
             let output = try await connection.exec("echo still-works")

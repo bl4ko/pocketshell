@@ -104,6 +104,9 @@ struct HostsListView: View {
         .onChange(of: router.pending) { _, target in
             openPendingTarget(target)
         }
+        .onChange(of: router.hostsListRequest) { _, _ in
+            path = NavigationPath()
+        }
         .onAppear {
             if ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1",
                 let fixture = ProcessInfo.processInfo.environment["PS_UI_TEST_NOTIFICATION_TARGET"],

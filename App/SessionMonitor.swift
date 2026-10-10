@@ -13,15 +13,45 @@ struct SessionTarget: Equatable, Decodable {
     var hostID: UUID
     var session: String?
     var windowIndex: Int?
+    var windowID: String?
     var backend: String?
     var workspaceID: String?
     var paneID: String?
+
+    init(hostID: UUID, route: PushRoute) {
+        self.hostID = hostID
+        session = route.session
+        windowIndex = route.windowIndex
+        windowID = route.windowID
+        backend = route.backend
+        workspaceID = route.workspaceID
+        paneID = route.paneID
+    }
 }
 
 @MainActor
 final class NotificationRouter: ObservableObject {
     static let shared = NotificationRouter()
     @Published var pending: SessionTarget?
+    @Published var hostsListRequest = 0
+    var visibleWindowKey: String?
+
+    func open(_ route: PushRoute) {
+        if let host = route.host {
+            pending = SessionTarget(hostID: host.id, route: route)
+        } else {
+            hostsListRequest += 1
+        }
+    }
+
+    static func presentationOptions(
+        _ info: [AnyHashable: Any],
+        hosts: [HostConfig],
+        visibleKey: String?
+    ) -> UNNotificationPresentationOptions {
+        if let visibleKey, PushRoute.resolve(info, hosts: hosts).visibleWindowKey == visibleKey { return [] }
+        return [.banner, .sound, .list]
+    }
 }
 
 final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Sendable {
@@ -32,7 +62,16 @@ final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDe
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound, .list])
+        nonisolated(unsafe) let info = notification.request.content.userInfo
+        nonisolated(unsafe) let completion = completionHandler
+        Task { @MainActor in
+            completion(
+                NotificationRouter.presentationOptions(
+                    info,
+                    hosts: ApprovalService.shared.store?.hosts ?? [],
+                    visibleKey: NotificationRouter.shared.visibleWindowKey
+                ))
+        }
     }
 
     func userNotificationCenter(
@@ -40,24 +79,14 @@ final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDe
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let info = response.notification.request.content.userInfo
-        if let idString = info["hostID"] as? String, let hostID = UUID(uuidString: idString) {
-            let target = SessionTarget(
-                hostID: hostID,
-                session: info["session"] as? String,
-                windowIndex: info["windowIndex"] as? Int,
-                backend: info["backend"] as? String,
-                workspaceID: info["workspaceID"] as? String,
-                paneID: info["paneID"] as? String
-            )
-            if let choice = AgentApproval.Choice(rawValue: response.actionIdentifier) {
-                Task { @MainActor in
-                    await ApprovalService.shared.respond(to: target, choice: choice)
-                }
+        nonisolated(unsafe) let info = response.notification.request.content.userInfo
+        let action = response.actionIdentifier
+        Task { @MainActor in
+            let route = PushRoute.resolve(info, hosts: ApprovalService.shared.store?.hosts ?? [])
+            if let host = route.host, let choice = AgentApproval.Choice(rawValue: action) {
+                await ApprovalService.shared.respond(to: SessionTarget(hostID: host.id, route: route), choice: choice)
             } else {
-                Task { @MainActor in
-                    NotificationRouter.shared.pending = target
-                }
+                NotificationRouter.shared.open(route)
             }
         }
         completionHandler()
@@ -82,13 +111,16 @@ final class SessionMonitor: ObservableObject {
     private(set) var unseenFinished: Set<String> = [] {
         willSet { if newValue != unseenFinished { objectWillChange.send() } }
     }
-    var visibleWindowKey: String?
+    var visibleWindowKey: String? {
+        didSet { NotificationRouter.shared.visibleWindowKey = visibleWindowKey }
+    }
 
     private let store: AppStore
     private var tracker = AgentActivityTracker()
     private var pollTask: Task<Void, Never>?
     private var connections: [UUID: any MonitorConnection] = [:]
     private let connector: Connector
+    private var hookPush = HookPushCache()
     private var notifiedAt: [String: Date] = [:]
     private var backoff = HostBackoff<UUID>()
     private var lastHerdrStatus: [String: HerdrAgentStatus] = [:]
@@ -240,6 +272,7 @@ final class SessionMonitor: ObservableObject {
         }
         backoff.recordSuccess(host.id)
         result.unobservedPrefixes = []
+        await refreshHookPush(host, using: connection)
         if !requestedSessions.isEmpty {
             let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
             canonicalizeSavedTabs(
@@ -395,6 +428,23 @@ final class SessionMonitor: ObservableObject {
         }
     }
 
+    func shouldPostLocal(userInfo: [String: Any]?) -> Bool {
+        guard let id = userInfo?["hostID"] as? String, let hostID = UUID(uuidString: id) else { return true }
+        return !hasHookPush(hostID: hostID)
+    }
+
+    func hasHookPush(hostID: UUID) -> Bool {
+        hookPush.isInstalled(hostID)
+    }
+
+    private func refreshHookPush(_ host: HostConfig, using connection: any MonitorConnection) async {
+        guard hookPush.needsRefresh(host.id) else { return }
+        guard let output = try? await connection.exec(HookPushCache.detectCommand),
+            let installed = HookPushCache.parse(output)
+        else { return }
+        hookPush.record(installed, for: host.id)
+    }
+
     func connection(for host: HostConfig) async -> (any MonitorConnection)? {
         if let existing = connections[host.id], await existing.isConnected {
             return existing
@@ -410,6 +460,7 @@ final class SessionMonitor: ObservableObject {
 
     private func notify(_ transition: AgentActivityTracker.Transition, userInfo: [String: Any]?) {
         if transition.key == visibleWindowKey { return }
+        if !shouldPostLocal(userInfo: userInfo) { return }
         if transition.status == .waiting, !shouldNotify(key: transition.key) { return }
         let content = UNMutableNotificationContent()
         content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"

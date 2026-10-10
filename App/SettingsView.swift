@@ -113,7 +113,7 @@ struct SettingsView: View {
                 Text("Reliable Herdr push")
             } footer: {
                 Text(
-                    "The pairing secret stays in this device's Keychain. Each host receives a separate credential over SSH."
+                    "The pairing secret stays in this device's Keychain. Each host receives a separate credential over SSH. Hosts provisioned by Ansible need no button here."
                 )
             }
             Section {

@@ -532,7 +532,7 @@ struct HostTabsScreen: View {
         if target.backend == "herdr" {
             openHerdrSessionInNewTab(session: session, workspaceID: target.workspaceID)
         } else {
-            openWindowInNewTab(session: session, windowIndex: target.windowIndex)
+            openWindowInNewTab(session: session, windowIndex: target.windowIndex, windowID: target.windowID)
         }
     }
 
@@ -689,6 +689,11 @@ struct HostTabsScreen: View {
         guard UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey) else { return }
         for transition in transitions {
             if let selectedTab, transition.key == "tab-\(selectedTab.uuidString)" { continue }
+            if monitor.hasHookPush(hostID: host.id),
+                tabs.contains(where: { "tab-\($0.id.uuidString)" == transition.key && $0.controller.tmuxTarget != nil })
+            {
+                continue
+            }
             let content = UNMutableNotificationContent()
             content.title = transition.status == .waiting ? "Agent needs input" : "Agent finished"
             content.body = transition.title
@@ -772,7 +777,7 @@ struct HostTabsScreen: View {
     }
 
     private func notifyNeedsInput(_ tab: TerminalTab) {
-        guard let target = tab.controller.tmuxTarget else { return }
+        guard let target = tab.controller.tmuxTarget, !monitor.hasHookPush(hostID: host.id) else { return }
         let content = UNMutableNotificationContent()
         content.title = "Agent needs input"
         content.body = "\(host.name) \(tabLabel(tab))"

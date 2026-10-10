@@ -46,3 +46,36 @@ import Testing
     #expect(TerminalTheme.named("Dracula").name == "Dracula")
     #expect(TerminalTheme.named("nonexistent") == TerminalTheme.defaultTheme)
 }
+
+private let tokyoNight: [(name: String, background: String, foreground: String, light: Bool)] = [
+    ("Tokyo Night", "1a1b26", "c0caf5", false),
+    ("Tokyo Night Storm", "24283b", "c0caf5", false),
+    ("Tokyo Night Moon", "222436", "c8d3f5", false),
+    ("Tokyo Night Day", "e1e2e7", "3760bf", true),
+]
+
+@Test func tokyoNightVariantsAreRegisteredAndPinned() {
+    for expected in tokyoNight {
+        let matches = TerminalTheme.all.filter { $0.name == expected.name }
+        #expect(matches.count == 1)
+        let theme = TerminalTheme.named(expected.name)
+        #expect(theme.name == expected.name)
+        #expect(theme.background == expected.background)
+        #expect(theme.foreground == expected.foreground)
+        #expect(theme.cursor == expected.foreground)
+        #expect(theme.lightChrome == expected.light)
+        #expect(theme.ansi.count == 16)
+        for color in theme.ansi + [theme.background, theme.foreground, theme.cursor] {
+            #expect(color.count == 6)
+            #expect(RGBColor(hex: color) != nil)
+        }
+    }
+}
+
+@Test func tokyoNightAnsiPalettesArePinned() {
+    #expect(TerminalTheme.named("Tokyo Night").ansi[1] == "f7768e")
+    #expect(TerminalTheme.named("Tokyo Night").accentHex == "7aa2f7")
+    #expect(TerminalTheme.named("Tokyo Night Storm").ansi[0] == "1d202f")
+    #expect(TerminalTheme.named("Tokyo Night Moon").ansi[2] == "c3e88d")
+    #expect(TerminalTheme.named("Tokyo Night Day").ansi[15] == "3760bf")
+}

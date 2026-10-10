@@ -126,5 +126,46 @@ public struct TerminalTheme: Equatable, Sendable, Identifiable {
                 "002b36", "cb4b16", "586e75", "657b83", "839496", "6c71c4", "93a1a1", "fdf6e3",
             ]
         ),
+        TerminalTheme(
+            name: "Tokyo Night",
+            background: "1a1b26",
+            foreground: "c0caf5",
+            cursor: "c0caf5",
+            ansi: [
+                "15161e", "f7768e", "9ece6a", "e0af68", "7aa2f7", "bb9af7", "7dcfff", "a9b1d6",
+                "414868", "ff899d", "9fe044", "faba4a", "8db0ff", "c7a9ff", "a4daff", "c0caf5",
+            ]
+        ),
+        TerminalTheme(
+            name: "Tokyo Night Storm",
+            background: "24283b",
+            foreground: "c0caf5",
+            cursor: "c0caf5",
+            ansi: [
+                "1d202f", "f7768e", "9ece6a", "e0af68", "7aa2f7", "bb9af7", "7dcfff", "a9b1d6",
+                "414868", "ff899d", "9fe044", "faba4a", "8db0ff", "c7a9ff", "a4daff", "c0caf5",
+            ]
+        ),
+        TerminalTheme(
+            name: "Tokyo Night Moon",
+            background: "222436",
+            foreground: "c8d3f5",
+            cursor: "c8d3f5",
+            ansi: [
+                "1b1d2b", "ff757f", "c3e88d", "ffc777", "82aaff", "c099ff", "86e1fc", "828bb8",
+                "444a73", "ff8d94", "c7fb6d", "ffd8ab", "9ab8ff", "caabff", "b2ebff", "c8d3f5",
+            ]
+        ),
+        TerminalTheme(
+            name: "Tokyo Night Day",
+            background: "e1e2e7",
+            foreground: "3760bf",
+            cursor: "3760bf",
+            ansi: [
+                "b4b5b9", "f52a65", "587539", "8c6c3e", "2e7de9", "9854f1", "007197", "6172b0",
+                "a1a6c5", "ff4774", "5c8524", "a27629", "358aff", "a463ff", "007ea8", "3760bf",
+            ],
+            lightChrome: true
+        ),
     ]
 }

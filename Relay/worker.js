@@ -56,11 +56,13 @@ export async function route(request, env) {
             return json({ error: "unauthorized" }, 401);
         }
         const event = await readJSON(request);
-        if (!isPushEvent(event)) return json({ ignored: true }, 202);
+        const hook = isHookEvent(event);
+        if (!hook && !isPushEvent(event)) return json({ ignored: true }, 202);
         const session = validHeader(request.headers.get("x-herdr-session")) || "default";
         const dedupe = await sha256(`${hostID}\n${session}\n${JSON.stringify(event)}`);
         if (await env.PUSH_STATE.get(`event:${dedupe}`)) return json({ duplicate: true }, 202);
-        const payload = { ...pushPayload(hostID, saved.name, session, event), eventID: dedupe.slice(0, 64) };
+        const built = hook ? hookPayload(hostID, saved.name, event) : pushPayload(hostID, saved.name, session, event);
+        const payload = { ...built, eventID: dedupe.slice(0, 64) };
         const result = await fanOut(env, payload);
         if (result.failed) return json(result, 502);
         await env.PUSH_STATE.put(`event:${dedupe}`, "1", { expirationTtl: 300 });
@@ -149,10 +151,57 @@ export function pushPayload(hostID, hostName, session, event) {
             sound: "default",
         },
         hostID,
+        hostName,
         backend: "herdr",
         session,
         workspaceID: event.workspace_id,
         paneID: event.pane_id,
+    };
+}
+
+const FIELD_CAP = 200;
+
+function capped(value) {
+    return typeof value === "string" && value.length > 0 ? value.slice(0, FIELD_CAP) : undefined;
+}
+
+export function isHookEvent(value) {
+    return Boolean(
+        value
+        && value.type === "agent.status"
+        && (value.agent_status === "blocked" || value.agent_status === "done")
+        && capped(value.agent)
+    );
+}
+
+export function hookPayload(hostID, hostName, event) {
+    const blocked = event.agent_status === "blocked";
+    const agent = capped(event.agent);
+    const session = capped(event.tmux_session);
+    const windowIndex = Number.isSafeInteger(event.tmux_window_index) && event.tmux_window_index >= 0
+        ? event.tmux_window_index
+        : undefined;
+    const windowID = typeof event.tmux_window_id === "string" && /^@\d+$/.test(event.tmux_window_id)
+        ? event.tmux_window_id
+        : undefined;
+    const windowName = capped(event.window_name);
+    const location = session
+        ? [windowIndex === undefined ? session : `${session}:${windowIndex}`, windowName].filter(Boolean).join(" ")
+        : undefined;
+    return {
+        aps: {
+            alert: {
+                title: blocked ? "Agent needs input" : "Agent finished",
+                body: [hostName, location, agent].filter(Boolean).join(" · ").slice(0, 180),
+            },
+            sound: "default",
+        },
+        hostID,
+        hostName,
+        backend: "tmux",
+        session,
+        windowIndex,
+        windowID,
     };
 }
 

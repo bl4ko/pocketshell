@@ -14,6 +14,12 @@ build=$(( ($(date +%s) - 1577836800) / 60 ))
 
 xcodegen generate
 
+signing=""
+if [ -n "${PS_BUILD_KEYCHAIN:-}" ] && [ -n "${PS_BUILD_KEYCHAIN_PASSWORD:-}" ]; then
+    security unlock-keychain -p "$PS_BUILD_KEYCHAIN_PASSWORD" "$PS_BUILD_KEYCHAIN"
+    signing="OTHER_CODE_SIGN_FLAGS=--keychain $PS_BUILD_KEYCHAIN"
+fi
+
 ship() {
     out=$(mktemp -d)
     xcodebuild archive -scheme pocketshell -destination "$1" \
@@ -23,7 +29,7 @@ ship() {
         -authenticationKeyPath "$key" \
         -authenticationKeyID "$ASC_KEY_ID" \
         -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-        CURRENT_PROJECT_VERSION="$build"
+        CURRENT_PROJECT_VERSION="$build" ${signing:+"$signing"}
     xcodebuild -exportArchive -archivePath "$out/pocketshell.xcarchive" \
         -exportOptionsPlist Scripts/ExportOptions.plist -exportPath "$out/export" \
         -allowProvisioningUpdates \

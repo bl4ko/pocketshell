@@ -67,3 +67,33 @@ private let other = HostConfig(name: "other", hostname: "o", port: 22, username:
     #expect(!cache.needsRefresh(id, now: start.addingTimeInterval(599)))
     #expect(cache.needsRefresh(id, now: start.addingTimeInterval(600)))
 }
+
+private let validRelayJSON = #"{"url":"https://relay.example.com/","pairingSecret":"0123456789abcdef"}"#
+
+@Test func relayProvisionParsesAndNormalizesURL() {
+    let parsed = PushRelayProvision.parse(validRelayJSON + "\n")
+    #expect(parsed == PushRelayProvision(url: "https://relay.example.com", pairingSecret: "0123456789abcdef"))
+}
+
+@Test(arguments: [
+    "",
+    "not json",
+    #"{"url":"http://relay.example.com","pairingSecret":"0123456789abcdef"}"#,
+    #"{"url":"https://","pairingSecret":"0123456789abcdef"}"#,
+    #"{"url":"https://u:p@relay.example.com","pairingSecret":"0123456789abcdef"}"#,
+    #"{"url":"https://relay.example.com?x=1","pairingSecret":"0123456789abcdef"}"#,
+    #"{"url":"https://relay.example.com","pairingSecret":"short"}"#,
+    #"{"url":"https://relay.example.com"}"#,
+])
+func relayProvisionRejectsInvalidInput(_ output: String) {
+    #expect(PushRelayProvision.parse(output) == nil)
+}
+
+@Test func relayProvisionDecision() throws {
+    let provision = try #require(PushRelayProvision.parse(validRelayJSON))
+    #expect(provision.shouldConfigure(currentURL: nil, isConfigured: false, attempted: []))
+    #expect(provision.shouldConfigure(currentURL: "https://relay.example.com", isConfigured: false, attempted: []))
+    #expect(provision.shouldConfigure(currentURL: "https://other.example.com", isConfigured: true, attempted: []))
+    #expect(!provision.shouldConfigure(currentURL: "https://relay.example.com/", isConfigured: true, attempted: []))
+    #expect(!provision.shouldConfigure(currentURL: nil, isConfigured: false, attempted: [provision.url]))
+}

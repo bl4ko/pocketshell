@@ -7,7 +7,14 @@ import SSHKit
 import UIKit
 
 @MainActor
-final class PushRelayClient: ObservableObject {
+protocol RelayAutoPairing: AnyObject {
+    var isConfigured: Bool { get }
+    var configuredURL: String? { get }
+    func configure(from provision: PushRelayProvision, hostName: String) async
+}
+
+@MainActor
+final class PushRelayClient: ObservableObject, RelayAutoPairing {
     static let shared = PushRelayClient()
 
     @Published private(set) var status: String?
@@ -22,6 +29,20 @@ final class PushRelayClient: ObservableObject {
             && PasswordVault.get(account: Self.pairingAccount) != nil
     }
 
+    var configuredURL: String? {
+        UserDefaults.standard.string(forKey: AppSettings.pushRelayURLKey)
+    }
+
+    func configure(from provision: PushRelayProvision, hostName: String) async {
+        do {
+            try await configure(
+                urlString: provision.url, pairingSecret: provision.pairingSecret,
+                status: "Push relay configured from \(hostName).")
+        } catch {
+            status = error.localizedDescription
+        }
+    }
+
     func hasInstalledPlugin(hostID: UUID) -> Bool {
         PasswordVault.get(account: Self.hostAccountPrefix + hostID.uuidString.lowercased()) != nil
     }
@@ -31,7 +52,9 @@ final class PushRelayClient: ObservableObject {
         registerWithAPNs()
     }
 
-    func configure(urlString: String, pairingSecret newSecret: String) async throws {
+    func configure(urlString: String, pairingSecret newSecret: String, status savedStatus: String = "Push relay saved.")
+        async throws
+    {
         let url = try Self.validatedURL(urlString)
         let secret = newSecret.isEmpty ? PasswordVault.get(account: Self.pairingAccount) : newSecret
         guard let secret, secret.count >= 16 else { throw PushRelayError.invalidPairingSecret }
@@ -41,7 +64,7 @@ final class PushRelayClient: ObservableObject {
         if deviceToken != nil {
             try await updateDevice(enabled: UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey))
         }
-        status = "Push relay saved."
+        status = savedStatus
     }
 
     func notificationSettingChanged(_ enabled: Bool) async {

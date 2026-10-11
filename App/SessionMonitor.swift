@@ -121,14 +121,18 @@ final class SessionMonitor: ObservableObject {
     private var connections: [UUID: any MonitorConnection] = [:]
     private let connector: Connector
     private var hookPush = HookPushCache()
+    private var relayProbe = HookPushCache()
+    private var relayAttempted: Set<String> = []
+    private let relayPairing: any RelayAutoPairing
     private var notifiedAt: [String: Date] = [:]
     private var backoff = HostBackoff<UUID>()
     private var lastHerdrStatus: [String: HerdrAgentStatus] = [:]
     private var backgroundRefreshTask: BGAppRefreshTask?
     private var backgroundRefreshWork: Task<Void, Never>?
 
-    init(store: AppStore, connector: Connector? = nil) {
+    init(store: AppStore, connector: Connector? = nil, relayPairing: (any RelayAutoPairing)? = nil) {
         self.store = store
+        self.relayPairing = relayPairing ?? PushRelayClient.shared
         self.connector =
             connector ?? { [store] host in
                 guard let key = try? store.key(for: host) else { return nil }
@@ -273,6 +277,7 @@ final class SessionMonitor: ObservableObject {
         backoff.recordSuccess(host.id)
         result.unobservedPrefixes = []
         await refreshHookPush(host, using: connection)
+        await autoPairRelay(host, using: connection)
         if !requestedSessions.isEmpty {
             let sessionsOutput = (try? await connection.exec(Tmux.listSessionsCommand())) ?? ""
             canonicalizeSavedTabs(
@@ -443,6 +448,20 @@ final class SessionMonitor: ObservableObject {
             let installed = HookPushCache.parse(output)
         else { return }
         hookPush.record(installed, for: host.id)
+    }
+
+    private func autoPairRelay(_ host: HostConfig, using connection: any MonitorConnection) async {
+        guard relayProbe.needsRefresh(host.id) else { return }
+        guard let output = try? await connection.exec(PushRelayProvision.readCommand) else { return }
+        relayProbe.record(true, for: host.id)
+        guard let provision = PushRelayProvision.parse(output),
+            provision.shouldConfigure(
+                currentURL: relayPairing.configuredURL, isConfigured: relayPairing.isConfigured,
+                attempted: relayAttempted)
+        else { return }
+
+        relayAttempted.insert(provision.url)
+        await relayPairing.configure(from: provision, hostName: host.name)
     }
 
     func connection(for host: HostConfig) async -> (any MonitorConnection)? {

@@ -181,10 +181,12 @@
     #endif
     #if !targetEnvironment(macCatalyst)
         private final class EndedTap: UITapGestureRecognizer {
+            var point = CGPoint.zero
             override var state: UIGestureRecognizer.State {
                 get { .ended }
                 set {}
             }
+            override func location(in view: UIView?) -> CGPoint { point }
         }
 
         @MainActor
@@ -207,8 +209,9 @@
             view.terminalDelegate = coordinator
             view.feed(text: "\u{1b}[?1000h\u{1b}[?1006h")
             #expect(!view.isFirstResponder)
-            #expect(!view.tapRaisesKeyboard)
             let tap = EndedTap()
+            tap.point = CGPoint(x: 10, y: 285)
+            #expect(!view.tapRaisesKeyboard(at: tap.point))
             view.addGestureRecognizer(tap)
             coordinator.handleMouseTap(tap)
             try await Task.sleep(for: .milliseconds(200))
@@ -223,7 +226,7 @@
             let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
             let (view, window) = windowedTerminal()
             view.terminalDelegate = coordinator
-            #expect(view.tapRaisesKeyboard)
+            #expect(view.tapRaisesKeyboard(at: .zero))
             let tap = EndedTap()
             view.addGestureRecognizer(tap)
             coordinator.handleMouseTap(tap)
@@ -236,7 +239,28 @@
             let (view, window) = windowedTerminal()
             view.feed(text: "\u{1b}[?1000h")
             #expect(view.becomeFirstResponder())
-            #expect(view.tapRaisesKeyboard)
+            #expect(view.tapRaisesKeyboard(at: CGPoint(x: 10, y: 285)))
+            withExtendedLifetime(window) {}
+        }
+
+        @MainActor
+        @Test func mouseReportingTapOnInputLineRaisesKeyboard() async throws {
+            let bridge = TerminalBridge()
+            var sent: [Data] = []
+            bridge.sendToHost = { sent.append($0) }
+            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
+            let (view, window) = windowedTerminal()
+            view.terminalDelegate = coordinator
+            view.feed(text: "\u{1b}[?1000h\u{1b}[?1006h\u{1b}[9;3H")
+            let tap = EndedTap()
+            tap.point = CGPoint(x: 10, y: 285)
+            #expect(view.tapRaisesKeyboard(at: tap.point))
+            #expect(!view.tapRaisesKeyboard(at: CGPoint(x: 10, y: 15)))
+            view.addGestureRecognizer(tap)
+            coordinator.handleMouseTap(tap)
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(view.isFirstResponder)
+            #expect(!sent.isEmpty)
             withExtendedLifetime(window) {}
         }
     #endif

@@ -21,11 +21,17 @@
         private var resizeCount = 0
         var pasteImage: (() -> Bool)?
 
-        var tapRaisesKeyboard: Bool {
+        func tapRaisesKeyboard(at point: CGPoint) -> Bool {
             #if targetEnvironment(macCatalyst)
                 return true
             #else
-                return isFirstResponder || getTerminal().mouseMode == .off
+                let terminal = getTerminal()
+                guard !isFirstResponder, terminal.mouseMode != .off else { return true }
+                let row = TerminalCell.at(
+                    point, contentOffset: contentOffset, viewport: bounds.size, rows: terminal.rows,
+                    cols: terminal.cols
+                ).row
+                return abs(row - terminal.getCursorLocation().y) <= 2
             #endif
         }
 
@@ -435,7 +441,8 @@
 
         final class NativeTapGate: NSObject, UIGestureRecognizerDelegate {
             func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-                (gestureRecognizer.view as? BottomAnchoredTerminalView)?.tapRaisesKeyboard ?? true
+                guard let view = gestureRecognizer.view as? BottomAnchoredTerminalView else { return true }
+                return view.tapRaisesKeyboard(at: gestureRecognizer.location(in: view))
             }
         }
 
@@ -481,7 +488,8 @@
                 MainActor.assumeIsolated {
                     guard gesture.state == .ended, let view = gesture.view as? TerminalView else { return }
                     noteUserPresence()
-                    if (view as? BottomAnchoredTerminalView)?.tapRaisesKeyboard ?? true {
+                    if (view as? BottomAnchoredTerminalView)?.tapRaisesKeyboard(at: gesture.location(in: view)) ?? true
+                    {
                         _ = view.becomeFirstResponder()
                     }
                     #if targetEnvironment(macCatalyst)

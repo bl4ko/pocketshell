@@ -19,6 +19,7 @@ final class PushRelayClient: ObservableObject, RelayAutoPairing {
 
     @Published private(set) var status: String?
     @Published private(set) var isWorking = false
+    @Published private(set) var configuredURL = UserDefaults.standard.string(forKey: AppSettings.pushRelayURLKey)
 
     private static let pairingAccount = "push-relay-pairing"
     private static let hostAccountPrefix = "push-relay-host-"
@@ -27,10 +28,6 @@ final class PushRelayClient: ObservableObject, RelayAutoPairing {
     var isConfigured: Bool {
         UserDefaults.standard.string(forKey: AppSettings.pushRelayURLKey) != nil
             && PasswordVault.get(account: Self.pairingAccount) != nil
-    }
-
-    var configuredURL: String? {
-        UserDefaults.standard.string(forKey: AppSettings.pushRelayURLKey)
     }
 
     func configure(from provision: PushRelayProvision, hostName: String) async {
@@ -59,6 +56,7 @@ final class PushRelayClient: ObservableObject, RelayAutoPairing {
         let secret = newSecret.isEmpty ? PasswordVault.get(account: Self.pairingAccount) : newSecret
         guard let secret, secret.count >= 16 else { throw PushRelayError.invalidPairingSecret }
         UserDefaults.standard.set(url.absoluteString, forKey: AppSettings.pushRelayURLKey)
+        configuredURL = url.absoluteString
         PasswordVault.set(secret, account: Self.pairingAccount)
         registerWithAPNs()
         if deviceToken != nil {
@@ -83,7 +81,7 @@ final class PushRelayClient: ObservableObject, RelayAutoPairing {
             do {
                 let enabled = UserDefaults.standard.bool(forKey: AppSettings.agentNotifyKey)
                 try await updateDevice(enabled: enabled)
-                status = enabled ? "This iPhone is registered for Herdr alerts." : status
+                status = enabled ? "This iPhone is registered for agent alerts." : status
                 if !enabled { UIApplication.shared.unregisterForRemoteNotifications() }
             } catch {
                 status = error.localizedDescription

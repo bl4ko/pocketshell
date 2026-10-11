@@ -98,6 +98,7 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(pushRelayURL.isEmpty || pushRelay.isWorking)
+                .onChange(of: pushRelay.configuredURL) { _, url in pushRelayURL = url ?? "" }
                 if pushRelay.isConfigured {
                     ForEach(store.hosts) { host in
                         Button("Install Herdr push on \(host.name)") {
@@ -110,7 +111,7 @@ struct SettingsView: View {
                     Text(status)
                 }
             } header: {
-                Text("Reliable Herdr push")
+                Text("Push notifications")
             } footer: {
                 Text(
                     "The pairing secret stays in this device's Keychain. Each host receives a separate credential over SSH. Hosts provisioned by Ansible need no button here."

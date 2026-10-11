@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Models
 import Testing
@@ -93,5 +94,21 @@ struct RelayAutoPairTests {
         }
         await monitor.pollOnce()
         #expect(relay.configured.isEmpty)
+    }
+}
+
+@MainActor
+struct PushRelayClientTests {
+    @Test func configurePublishesNormalizedURL() async throws {
+        let key = AppSettings.pushRelayURLKey
+        let previous = UserDefaults.standard.string(forKey: key)
+        defer { UserDefaults.standard.set(previous, forKey: key) }
+        let client = PushRelayClient()
+        var published: [String?] = []
+        let subscription = client.$configuredURL.dropFirst().sink { published.append($0) }
+        defer { subscription.cancel() }
+        try await client.configure(urlString: "https://relay.example.com/", pairingSecret: "0123456789abcdef")
+        #expect(client.configuredURL == "https://relay.example.com")
+        #expect(published == ["https://relay.example.com"])
     }
 }

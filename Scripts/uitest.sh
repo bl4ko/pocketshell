@@ -10,7 +10,14 @@ STATUS_STABLE="$TMUX_SESSION-stable"
 STATUS_CHURN="$TMUX_SESSION-churn"
 STATUS_GAP="$TMUX_SESSION-gap"
 FLICKER_SESSION="$TMUX_SESSION-flicker"
+HERDR_SELECT=""
+unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID
+herdr_select() { herdr --session "psh-uitest-sel-$$" "$@"; }
 cleanup() {
+    if [ -n "$HERDR_SELECT" ]; then
+        herdr session stop "$HERDR_SELECT" >/dev/null 2>&1 || true
+        herdr session delete "$HERDR_SELECT" >/dev/null 2>&1 || true
+    fi
     kill "${WATCHDOG_PID:-}" 2>/dev/null || true
     kill "${SSHD_PID:-}" 2>/dev/null || true
     for session in "$TMUX_SESSION" "$STATUS_STABLE" "$STATUS_CHURN" "$STATUS_GAP" "$FLICKER_SESSION"; do
@@ -182,6 +189,20 @@ tmux select-layout -t "$FLICKER_SESSION":0 tiled
 tmux select-pane -t "$FLICKER_SESSION":0.0
 tmux set-option -t "$FLICKER_SESSION" automatic-rename off
 
+if command -v herdr >/dev/null; then
+    HERDR_SELECT="psh-uitest-sel-$$"
+    herdr_select server >/dev/null 2>&1 &
+    for _ in $(seq 1 50); do
+        herdr_select status server --json 2>/dev/null | grep -q '"running":true' && break
+        sleep 0.2
+    done
+    herdr_select workspace create --label sel >/dev/null
+    herdr_select pane split w1:p1 --direction right --no-focus >/dev/null
+    herdr_select tab create --label second --no-focus >/dev/null
+    herdr_select pane run w1:p1 'clear; for i in $(seq 1 40); do echo LEFTPANE$i; done' >/dev/null
+    herdr_select pane run w1:p2 'clear; for i in $(seq 1 40); do echo RIGHTPANE$i; done' >/dev/null
+fi
+
 cd "$REPO"
 if ! xcrun simctl list devices available | grep -q "$SIM ("; then
     SIM=$(xcrun simctl list devices available | sed -n 's/^ *\(iPhone[^(]*[^ (]\) *(.*/\1/p' | head -1)
@@ -206,6 +227,7 @@ TEST_RUNNER_PS_TEST_STATUS_CHURN="$STATUS_CHURN" \
 TEST_RUNNER_PS_TEST_STATUS_GAP="$STATUS_GAP" \
 TEST_RUNNER_PS_TEST_FLICKER="$FLICKER_SESSION" \
 TEST_RUNNER_PS_TEST_ARROW_PROMPT="$DIR/arrow-prompt" \
+TEST_RUNNER_PS_TEST_HERDR_SELECT="$HERDR_SELECT" \
 xcodebuild test \
   -scheme pocketshell \
   -derivedDataPath "${PS_TEST_DERIVED:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-uitest}" \

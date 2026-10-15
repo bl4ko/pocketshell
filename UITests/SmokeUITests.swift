@@ -42,6 +42,12 @@ final class SmokeUITests: XCTestCase {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
                 #"{"sessions":[{"name":"pskbdtest","default":false,"running":true}]}"#
         }
+        if name.contains("testHerdrSelectDrag"),
+            let session = ProcessInfo.processInfo.environment["PS_TEST_HERDR_SELECT"]
+        {
+            app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
+                #"{"sessions":[{"name":"\#(session)","default":false,"running":true}]}"#
+        }
         if name.contains("testZZCloudRefresh") {
             app.launchEnvironment["PS_UI_TEST_LOCAL_CONFIG"] = configFixture(
                 hosts: [
@@ -144,6 +150,40 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["terminal.shortcutsToggle"].waitForExistence(timeout: 20))
         sleep(4)
         XCTAssertFalse(app.keyboards.element.exists)
+    }
+
+    func testHerdrSelectDragCopiesOnlyThePane() throws {
+        guard let session = ProcessInfo.processInfo.environment["PS_TEST_HERDR_SELECT"], !session.isEmpty else {
+            throw XCTSkip("PS_TEST_HERDR_SELECT not set; Herdr select test skipped")
+        }
+        let host = app.staticTexts["localbox"].firstMatch
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        let shellMode = app.buttons["Shells & tmux"].firstMatch
+        XCTAssertTrue(shellMode.waitForExistence(timeout: 5))
+        shellMode.tap()
+        let row = app.buttons[session].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 20))
+        sleep(3)
+        UIPasteboard.general.string = ""
+        let clipboard = app.buttons["terminal.clipboard"]
+        XCTAssertTrue(clipboard.waitForExistence(timeout: 5))
+        clipboard.press(forDuration: 1)
+        app.buttons["Select text"].firstMatch.tap()
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.3))
+            .press(
+                forDuration: 0.05, thenDragTo: terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.4)))
+        sleep(2)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "herdr-select-drag"
+        shot.lifetime = .keepAlways
+        add(shot)
+        let copied = readPasteboardAllowingPaste()
+        XCTAssertTrue(copied.contains("LEFTPANE"), copied)
+        XCTAssertFalse(copied.contains("RIGHTPANE"), copied)
     }
 
     func testTerminalTapInMouseReportingAppKeepsKeyboardHidden() throws {
@@ -1276,6 +1316,20 @@ final class SmokeUITests: XCTestCase {
         let shellMode = app.buttons["Shells & tmux"].firstMatch
         if shellMode.waitForExistence(timeout: 3) { shellMode.tap() }
         dismissSessionPicker()
+    }
+
+    // Reading another app's paste blocks on the system "Allow Paste" prompt.
+    private func readPasteboardAllowingPaste() -> String {
+        nonisolated(unsafe) var text = ""
+        let read = expectation(description: "pasteboard read")
+        DispatchQueue.global().async {
+            text = UIPasteboard.general.string ?? ""
+            read.fulfill()
+        }
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow Paste"]
+        if allow.waitForExistence(timeout: 5) { allow.tap() }
+        wait(for: [read], timeout: 10)
+        return text
     }
 
     private func dismissSessionPicker() {

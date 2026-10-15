@@ -531,7 +531,9 @@
             /// prefix bytes, so it only fires while attached to a multiplexer.
             @objc func handleWindowSwipe(_ gesture: UISwipeGestureRecognizer) {
                 MainActor.assumeIsolated {
-                    guard let view = gesture.view as? TerminalView, view.multiplexerMode else { return }
+                    guard let view = gesture.view as? TerminalView, view.multiplexerMode,
+                        !bridge.selectMode, !view.selectionActive
+                    else { return }
                     noteUserPresence()
                     bridge.processOutgoing(Data("\u{02}\(gesture.direction == .left ? "n" : "p")".utf8))
                 }
@@ -675,6 +677,12 @@
                 #if targetEnvironment(macCatalyst)
                     guard !gesture.buttonMask.contains(.primary) else { return }
                 #else
+                    if bridge.selectMode, view.multiplexerMode,
+                        [.buttonEventTracking, .anyEvent].contains(view.getTerminal().mouseMode)
+                    {
+                        forwardSelectionDrag(gesture, in: view)
+                        return
+                    }
                     if bridge.selectMode {
                         switch gesture.state {
                         case .began:
@@ -739,6 +747,32 @@
                     for _ in 0..<abs(lines) {
                         terminal.sendEvent(buttonFlags: flags, x: col, y: row)
                     }
+                default:
+                    break
+                }
+            }
+
+            // A native selection spans every pane on a row; the multiplexer selects
+            // inside one pane and copies it over OSC 52.
+            @MainActor private func forwardSelectionDrag(_ gesture: UIPanGestureRecognizer, in view: TerminalView) {
+                let terminal = view.getTerminal()
+                let point = gesture.location(in: view)
+                let (row, col) = cell(at: point, in: view)
+                let press = terminal.encodeButton(button: 0, release: false, shift: false, meta: false, control: false)
+                switch gesture.state {
+                case .began:
+                    let translation = gesture.translation(in: view)
+                    let start = cell(at: CGPoint(x: point.x - translation.x, y: point.y - translation.y), in: view)
+                    terminal.sendEvent(buttonFlags: press, x: start.col, y: start.row)
+                    terminal.sendEvent(buttonFlags: press + 32, x: col, y: row)
+                case .changed:
+                    terminal.sendEvent(buttonFlags: press + 32, x: col, y: row)
+                case .ended, .cancelled, .failed:
+                    terminal.sendEvent(
+                        buttonFlags: terminal.encodeButton(
+                            button: 0, release: true, shift: false, meta: false, control: false),
+                        x: col, y: row)
+                    bridge.selectMode = false
                 default:
                     break
                 }

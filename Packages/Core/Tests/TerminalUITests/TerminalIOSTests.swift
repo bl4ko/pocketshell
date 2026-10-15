@@ -243,6 +243,81 @@
             withExtendedLifetime(window) {}
         }
 
+        private final class ScriptedPan: UIPanGestureRecognizer {
+            var forced = UIGestureRecognizer.State.possible
+            var point = CGPoint.zero
+            var moved = CGPoint.zero
+            override var state: UIGestureRecognizer.State {
+                get { forced }
+                set { forced = newValue }
+            }
+            override func location(in view: UIView?) -> CGPoint { point }
+            override func translation(in view: UIView?) -> CGPoint { moved }
+        }
+
+        @MainActor
+        @Test func multiplexerSelectDragIsForwardedAsMouseDrag() {
+            let bridge = TerminalBridge()
+            bridge.selectMode = true
+            var sent = ""
+            bridge.sendToHost = { sent += String(decoding: $0, as: UTF8.self) }
+            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
+            let view = makeTerminal()
+            view.terminalDelegate = coordinator
+            view.multiplexerMode = true
+            view.feed(text: "\u{1b}[?1002h\u{1b}[?1006h")
+            let pan = ScriptedPan()
+            view.addGestureRecognizer(pan)
+            pan.point = CGPoint(x: 55, y: 45)
+            pan.moved = CGPoint(x: 20, y: 0)
+            pan.forced = .began
+            coordinator.handleScrollPanOnMain(pan)
+            pan.point = CGPoint(x: 205, y: 105)
+            pan.forced = .changed
+            coordinator.handleScrollPanOnMain(pan)
+            pan.forced = .ended
+            coordinator.handleScrollPanOnMain(pan)
+            let terminal = view.getTerminal()
+            func sgr(_ x: CGFloat, _ y: CGFloat) -> String {
+                let cell = TerminalCell.at(
+                    CGPoint(x: x, y: y), contentOffset: view.contentOffset, viewport: view.bounds.size,
+                    rows: terminal.rows, cols: terminal.cols)
+                return "\(cell.col + 1);\(cell.row + 1)"
+            }
+            #expect(sgr(35, 45) != sgr(205, 105))
+            #expect(
+                sent
+                    == "\u{1b}[<0;\(sgr(35, 45))M\u{1b}[<32;\(sgr(55, 45))M"
+                    + "\u{1b}[<32;\(sgr(205, 105))M\u{1b}[<0;\(sgr(205, 105))m")
+            #expect(!view.selectionActive)
+            #expect(!bridge.selectMode)
+        }
+
+        @MainActor
+        @Test func swipeDuringSelectionDoesNotSwitchWindows() {
+            let bridge = TerminalBridge()
+            var sent: [Data] = []
+            bridge.sendToHost = { sent.append($0) }
+            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
+            let view = makeTerminal()
+            view.multiplexerMode = true
+            let swipe = UISwipeGestureRecognizer()
+            swipe.direction = .left
+            view.addGestureRecognizer(swipe)
+            bridge.selectMode = true
+            coordinator.handleWindowSwipe(swipe)
+            #expect(sent.isEmpty)
+            bridge.selectMode = false
+            view.feed(text: "hello world\r\n")
+            view.selectWord(at: CGPoint(x: 1, y: 1))
+            #expect(view.selectionActive)
+            coordinator.handleWindowSwipe(swipe)
+            #expect(sent.isEmpty)
+            view.clearSelection()
+            coordinator.handleWindowSwipe(swipe)
+            #expect(sent == [Data("\u{02}n".utf8)])
+        }
+
         @MainActor
         @Test func mouseReportingTapOnInputLineRaisesKeyboard() async throws {
             let bridge = TerminalBridge()

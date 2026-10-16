@@ -66,7 +66,8 @@
                 }
                 bar
             }
-            .background(Palette.bar(theme))
+            // Keyboard glass tints from what is behind it; this keeps that constant while the layout settles.
+            .background(alignment: .top) { Palette.pinned(theme).frame(height: 1000) }
         }
 
         private var bar: some View {

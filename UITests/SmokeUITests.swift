@@ -963,6 +963,21 @@ final class SmokeUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testKeyboardToggleKeepsToolbarColorBehindKeyboard() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed keyboard test skipped")
+        }
+        openHost("localbox")
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 5))
+        waitForKeyboardLayout(terminal, button: keyboardButton)
+        let bar = luminance(at: CGPoint(x: keyboardButton.frame.maxX + 3, y: keyboardButton.frame.midY))
+        let behindKeyboard = luminance(at: CGPoint(x: keyboardButton.frame.midX, y: keyboardButton.frame.maxY + 60))
+        XCTAssertEqual(behindKeyboard, bar, accuracy: 3, "keyboard glass re-tints when the layout settles")
+    }
+
     private func assertSingleTerminalResize(_ terminal: XCUIElement, from previousLabel: String) {
         let previous = Int(previousLabel.split(separator: " ").last ?? "")
         let current = Int(terminal.label.split(separator: " ").last ?? "")

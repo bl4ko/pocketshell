@@ -27,7 +27,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
         .package(
             url: "https://github.com/bl4ko/SwiftTerm.git",
-            revision: "8864784df3f5df8f48be4af9bf7c11a69a013615"),
+            revision: "33900c04f88d7a7bfe4d9d3332f379c34949e1c4"),
         .package(
             url: "https://github.com/bl4ko/royalvnc.git",
             revision: "7cd41cff27e175c12b552dce2812ff78b35eb541"),

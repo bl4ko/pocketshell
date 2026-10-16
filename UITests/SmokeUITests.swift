@@ -978,6 +978,34 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(behindKeyboard, bar, accuracy: 3, "keyboard glass re-tints when the layout settles")
     }
 
+    func testKeyboardToggleKeepsFullScreenAppStill() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed keyboard test skipped")
+        }
+        openHost("localbox")
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 5))
+        let contentMotion = app.otherElements["keyboard.content"]
+        terminal.tap()
+        terminal.typeText("tput smcup; clear; echo FULLSCREEN; read x; tput rmcup\n")
+        sleep(1)
+        for _ in 0..<2 {
+            keyboardButton.tap()
+            waitForKeyboardLayout(terminal, button: keyboardButton)
+        }
+        XCTAssertEqual(contentMotion.label, "0", "full-screen app content moved with the keyboard")
+
+        terminal.typeText("\n")
+        sleep(1)
+        for _ in 0..<2 {
+            keyboardButton.tap()
+            waitForKeyboardLayout(terminal, button: keyboardButton)
+        }
+        XCTAssertGreaterThan(Int(contentMotion.label) ?? 0, 100, "shell content must still slide with the keyboard")
+    }
+
     private func assertSingleTerminalResize(_ terminal: XCUIElement, from previousLabel: String) {
         let previous = Int(previousLabel.split(separator: " ").last ?? "")
         let current = Int(terminal.label.split(separator: " ").last ?? "")

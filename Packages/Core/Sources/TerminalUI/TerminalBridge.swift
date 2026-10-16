@@ -137,6 +137,10 @@
             SSHTerminalView.apply(theme, to: view)
         }
 
+        public var isFullScreenApp: Bool {
+            view?.getTerminal().isCurrentBufferAlternate ?? false
+        }
+
         public func visibleText() -> String {
             flushTask?.cancel()
             flushPending()

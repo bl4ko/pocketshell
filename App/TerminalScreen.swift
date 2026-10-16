@@ -100,20 +100,52 @@ private func keyboardMotion(duration: Double) -> Animation {
 
 // Animate only the visible clip and toolbar position. Terminal layout changes once,
 // so keyboard motion does not reflow scrollback or send a PTY resize on every frame.
+// Full-screen apps redraw for the new size anyway, so their content stays still under the keyboard.
 private struct KeyboardReveal: AnimatableModifier {
     let layout: CGFloat
+    let slides: Bool
     var animatableData: CGFloat
 
-    init(layout: CGFloat, shown: CGFloat) {
+    init(layout: CGFloat, shown: CGFloat, slides: Bool) {
         self.layout = layout
+        self.slides = slides
         animatableData = shown
     }
 
     func body(content: Content) -> some View {
-        content.offset(y: min(0, layout - animatableData))
+        let offset = slides ? min(0, layout - animatableData) : 0
+        content.offset(y: offset)
             .mask {
                 Rectangle().padding(.bottom, max(0, animatableData - layout))
             }
+            .overlay(alignment: .topLeading) {
+                if UITestFlags.resizeCount {
+                    ContentMotionProbe(offset: offset).frame(width: 1, height: 1)
+                }
+            }
+    }
+}
+
+private struct ContentMotionProbe: UIViewRepresentable {
+    let offset: CGFloat
+
+    final class Tally { var largest: CGFloat = 0 }
+
+    func makeCoordinator() -> Tally { Tally() }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isAccessibilityElement = true
+        view.accessibilityIdentifier = "keyboard.content"
+        view.accessibilityLabel = "0"
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        let tally = context.coordinator
+        guard abs(offset) > tally.largest else { return }
+        tally.largest = abs(offset)
+        view.accessibilityLabel = String(Int(tally.largest))
     }
 }
 
@@ -200,6 +232,7 @@ struct TerminalScreen: View {
     @State private var testKeyboardHeight: CGFloat = UITestFlags.keyboardResize ? 300 : 0
     @State private var keyboardInset = KeyboardInset()
     @State private var shownInset: CGFloat = 0
+    @State private var keyboardSlides = true
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
     @AppStorage(AppSettings.uiScaleKey) private var uiScale = 1.0
     @State private var findTerm = ""
@@ -248,7 +281,7 @@ struct TerminalScreen: View {
                 )
                 .focusEffectDisabled()
                 .transaction { $0.animation = nil }
-                .modifier(KeyboardReveal(layout: keyboardInset.layout, shown: shownInset))
+                .modifier(KeyboardReveal(layout: keyboardInset.layout, shown: shownInset, slides: keyboardSlides))
                 VStack(spacing: 0) {
                     if connection.composerVisible {
                         ComposerBar(
@@ -490,6 +523,7 @@ struct TerminalScreen: View {
             if shownInset != inset { shownInset = inset }
             return
         }
+        keyboardSlides = !connection.bridge.isFullScreenApp
         keyboardInset.move(to: inset)
         withAnimation(keyboardMotion(duration: UITestFlags.keyboardResize ? 0.25 : keyboard.duration)) {
             shownInset = inset

@@ -7,12 +7,11 @@ struct ArrowPrompt {
 
     // Emit transitions only, so closing the panel manually lasts until the next prompt.
     mutating func update(lines: [String], at now: ContinuousClock.Instant = .now) -> Bool? {
-        let footer = lines.suffix(6).joined(separator: " ").lowercased()
-        // ponytail: Match explicit footer hints; add phrases when other TUIs need support.
+        // The panel grows the terminal, which can leave a pinned footer above the bottom rows.
         let next =
-            ["enter to select", "enter to confirm", "enter to submit"].contains { footer.contains($0) }
-            && ["↑/↓", "↑↓", "←/→", "up/down", "arrow keys"].contains { footer.contains($0) }
-            && (footer.contains("navigate") || footer.contains("to select"))
+            visible
+            ? lines.indices.contains { Self.isFooter(lines[$0...].prefix(6)) }
+            : Self.isFooter(lines.suffix(6))
         // Resizing the keyboard or repainting a TUI can briefly erase the footer.
         if !next, visible {
             if let missingSince {
@@ -26,5 +25,13 @@ struct ArrowPrompt {
         guard next != visible else { return nil }
         visible = next
         return next
+    }
+
+    private static func isFooter(_ lines: ArraySlice<String>) -> Bool {
+        let footer = lines.joined(separator: " ").lowercased()
+        // ponytail: Match explicit footer hints; add phrases when other TUIs need support.
+        return ["enter to select", "enter to confirm", "enter to submit"].contains { footer.contains($0) }
+            && ["↑/↓", "↑↓", "←/→", "up/down", "arrow keys"].contains { footer.contains($0) }
+            && (footer.contains("navigate") || footer.contains("to select"))
     }
 }

@@ -91,18 +91,21 @@ cat > "$DIR/arrow-prompt.c" << 'EOF'
 #include <termios.h>
 #include <unistd.h>
 
-int main(void) {
+int main(int argc, char **argv) {
     struct termios original, raw;
     tcgetattr(STDIN_FILENO, &original);
     raw = original;
     cfmakeraw(&raw);
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
     printf("\033[?1049h");
+    int pinned = 0;
     for (;;) {
         struct winsize size;
         ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
+        if (argc > 1 && !pinned) pinned = size.ws_row - 3;
+        int rows = pinned ? pinned : size.ws_row;
         printf("\033[2J\033[HSelect an option\033[%d;1HEnter to select\033[%d;1H↑/↓ to navigate · Esc to cancel",
-               size.ws_row - 2, size.ws_row - 1);
+               rows - 2, rows - 1);
         fflush(stdout);
         fd_set input;
         FD_ZERO(&input);

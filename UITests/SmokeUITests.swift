@@ -311,6 +311,30 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.element.exists)
     }
 
+    func testTerminalArrowsStayWhenThePanelGrowsTheTerminal() throws {
+        guard let fixture = ProcessInfo.processInfo.environment["PS_TEST_ARROW_PROMPT"] else {
+            throw XCTSkip("PS_TEST_ARROW_PROMPT not set; automatic arrow test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        terminal.typeText("\u{03}")
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+
+        terminal.typeText("'\(fixture)' pinned\n")
+        let arrows = app.buttons["terminal.arrowShift"]
+        XCTAssertTrue(arrows.waitForExistence(timeout: 10))
+        for _ in 0..<20 {
+            XCTAssertTrue(arrows.exists)
+            XCTAssertFalse(app.keyboards.element.exists)
+            usleep(150_000)
+        }
+        app.buttons["terminal.enter"].tap()
+        XCTAssertTrue(arrows.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+    }
+
     func testTerminalAttachmentUploadsFileAndInsertsPath() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; file attachment test skipped")

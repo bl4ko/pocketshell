@@ -51,6 +51,27 @@ struct ArrowPromptTests {
         #expect(prompt.update(lines: lines) == true)
     }
 
+    @Test func keepsPromptWhenThePanelGrowsTheTerminalBelowIt() {
+        var prompt = ArrowPrompt()
+        let now = ContinuousClock.now
+        let screen = [
+            "github │ 4. we have migrated to bgo fully these legacy",
+            "slo    │    gatl",
+            "       │ 5. Chat about this",
+            "       │",
+            "       │ Enter to select · Tab/Arrow keys to navigate ·",
+            "       │ ctrl+g to edit in Nvim · Esc to cancel",
+        ]
+        #expect(prompt.update(lines: screen, at: now) == true)
+        let grown = screen + ["slo · 1", "preudarna-wobbly-qui…", "github · travel", "", ""]
+        #expect(prompt.update(lines: grown, at: now.advanced(by: .milliseconds(150))) == nil)
+        #expect(prompt.update(lines: grown, at: now.advanced(by: .seconds(1))) == nil)
+        #expect(!prompt.needsRecheck)
+        #expect(
+            prompt.update(lines: ["$ "] + Array(repeating: "", count: 10), at: now.advanced(by: .seconds(2))) == nil)
+        #expect(prompt.update(lines: [], at: now.advanced(by: .seconds(3))) == false)
+    }
+
     @Test func ignoresFooterGapsDuringResizeAndRepaint() {
         var prompt = ArrowPrompt()
         let now = ContinuousClock.now

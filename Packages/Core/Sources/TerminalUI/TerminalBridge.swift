@@ -97,7 +97,7 @@
         private func schedulePromptCheck() {
             #if !targetEnvironment(macCatalyst)
                 guard gate.isLive, promptTask == nil else { return }
-                // Coalesce repaint chunks and inspect only the current footer, not scrollback.
+                // Coalesce repaint chunks and inspect only the screen, not scrollback.
                 promptTask = Task { [weak self] in
                     try? await Task.sleep(for: .milliseconds(150))
                     guard !Task.isCancelled, let self else { return }
@@ -106,7 +106,7 @@
                         !view.canScroll || view.scrollPosition == 1
                     else { return }
                     let terminal = view.getTerminal()
-                    let lines = (max(0, terminal.rows - 6)..<terminal.rows).compactMap {
+                    let lines = (0..<terminal.rows).compactMap {
                         terminal.getLine(row: $0)?.translateToString(trimRight: true)
                             .replacingOccurrences(of: "\u{0}", with: " ")
                     }

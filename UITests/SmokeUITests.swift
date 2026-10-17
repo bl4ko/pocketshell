@@ -244,6 +244,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["terminal.dpad"].exists)
         let terminal = app.textViews["terminal.view"]
+        let fullHeight = terminal.frame.height
         terminal.tap()
         terminal.typeText(" ")
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
@@ -255,7 +256,7 @@ final class SmokeUITests: XCTestCase {
         arrows.tap()
         XCTAssertTrue(shift.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
-        XCTAssertGreaterThan(terminal.frame.height, typingHeight - 30)
+        XCTAssertEqual(terminal.frame.height, typingHeight, accuracy: 0.5)
         XCTAssertGreaterThan(shift.frame.minY, toggle.frame.maxY)
         XCTAssertEqual(shift.value as? String, "off")
         shift.tap()
@@ -277,6 +278,12 @@ final class SmokeUITests: XCTestCase {
         app.buttons["shortcuts.close"].tap()
         XCTAssertTrue(shift.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        XCTAssertEqual(terminal.frame.height, typingHeight, accuracy: 0.5)
+        app.buttons["terminal.keyboard"].tap()
+        XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
+        let restored = NSPredicate { _, _ in abs(terminal.frame.height - fullHeight) < 0.5 }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: restored, object: nil)], timeout: 5), .completed)
     }
 
     func testTerminalAutomaticallyShowsArrowsForSelectionPrompt() throws {
@@ -500,7 +507,7 @@ final class SmokeUITests: XCTestCase {
         add(opened)
         XCTAssertTrue(shell.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
-        XCTAssertGreaterThan(terminal.frame.height, typingHeight - 30)
+        XCTAssertEqual(terminal.frame.height, typingHeight, accuracy: 0.5)
         XCTAssertGreaterThan(shell.frame.minY, toggle.frame.maxY)
         app.buttons["shortcuts.favorites"].tap()
         let keyQuery = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'shortcuts.key.'"))

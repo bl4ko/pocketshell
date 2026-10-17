@@ -11,6 +11,7 @@
         @Published public var ctrlActive = false
         @Published public var selectMode = false
         @Published public private(set) var shortcutsActive = false
+        @Published public internal(set) var keyboardHold: CGFloat?
         @Published var shortcutCategory =
             ShortcutCategory(rawValue: UserDefaults.standard.string(forKey: "pocketshell.shortcuts.category") ?? "")
             ?? .favorites

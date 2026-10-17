@@ -264,9 +264,11 @@ struct TerminalScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let measured = max(0, keyboard.height - proxy.safeAreaInsets.bottom)
+            let held = bridge.keyboardHold.map { max(0, $0 - proxy.safeAreaInsets.bottom) }
             let keyboardHeight =
                 UITestFlags.keyboardResize
-                ? testKeyboardHeight : max(0, keyboard.height - proxy.safeAreaInsets.bottom)
+                ? testKeyboardHeight : measured > 1 ? measured : held ?? measured
             VStack(spacing: 0) {
                 statusBanner
                 if connection.findVisible {

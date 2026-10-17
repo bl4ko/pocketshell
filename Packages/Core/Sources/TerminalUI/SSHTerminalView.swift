@@ -20,6 +20,13 @@
         private var previousSize = CGSize.zero
         private var resizeCount = 0
         var pasteImage: (() -> Bool)?
+        var onResign: (() -> Void)?
+
+        override func resignFirstResponder() -> Bool {
+            let resigned = super.resignFirstResponder()
+            if resigned { onResign?() }
+            return resigned
+        }
 
         func tapRaisesKeyboard(at point: CGPoint) -> Bool {
             #if targetEnvironment(macCatalyst)
@@ -82,6 +89,23 @@
                 var category: ShortcutCategory
             }
             private var shortcutInputs: ShortcutInputs?
+            private static var typingKeyboardHeight: CGFloat = 260
+
+            override func viewDidLoad() {
+                super.viewDidLoad()
+                NotificationCenter.default.addObserver(
+                    self, selector: #selector(keyboardDidChangeFrame(_:)),
+                    name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+            }
+
+            @objc private func keyboardDidChangeFrame(_ note: Notification) {
+                guard terminalView.inputView == nil, terminalView.isFirstResponder,
+                    let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+                    let screen = view.window?.windowScene?.screen, frame.minY < screen.bounds.maxY,
+                    frame.height > 150  // ponytail: skips the hardware-keyboard bar
+                else { return }
+                Self.typingKeyboardHeight = frame.height
+            }
 
             func updateShortcuts(bridge: TerminalBridge, keys: [ToolbarKey], theme: TerminalTheme) {
                 let inputs = ShortcutInputs(
@@ -93,6 +117,10 @@
                 }
                 let input: UIView? = bridge.shortcutsActive ? shortcutInput : nil
                 if terminalView.inputView !== input {
+                    // UIKit posts no show for the keyboard replacing a same-height panel, only the panel's hide.
+                    let hold = input == nil && terminalView.isFirstResponder ? Self.typingKeyboardHeight : nil
+                    if bridge.keyboardHold != hold { bridge.keyboardHold = hold }
+                    shortcutInput.frame.size.height = Self.typingKeyboardHeight
                     terminalView.inputView = input
                     terminalView.reloadInputViews()
                 }
@@ -400,6 +428,7 @@
                 ofSize: CGFloat(FontZoom.size(base: base, scale: scale)), weight: .regular)
             context.coordinator.scale = scale
             bridge.view = view
+            view.onResign = { [weak bridge] in bridge?.keyboardHold = nil }
             bridge.setTheme(theme)
             #if !targetEnvironment(macCatalyst)
                 bridge.updateShortcutKeyboard = { [weak controller, weak bridge] in

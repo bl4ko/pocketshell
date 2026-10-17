@@ -189,9 +189,18 @@
             guard
                 let provider = pasteboard.itemProviders.first(where: { $0.canLoadObject(ofClass: UIImage.self) })
             else { return false }
-            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
-                guard let image = object as? UIImage, let data = Self.uploadableJPEG(image) else { return }
-                Task { @MainActor in self?.imagePaste?(data) }
+            return pasteImage(from: provider)
+        }
+
+        func pasteImage(from provider: NSItemProvider) -> Bool {
+            guard let imagePaste else { return false }
+            Task { @MainActor in
+                let data = await withCheckedContinuation { continuation in
+                    provider.loadObject(ofClass: UIImage.self) { object, _ in
+                        continuation.resume(returning: (object as? UIImage).flatMap(Self.uploadableJPEG))
+                    }
+                }
+                if let data { imagePaste(data) }
             }
             return true
         }

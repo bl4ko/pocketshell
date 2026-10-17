@@ -505,7 +505,7 @@ final class ConnectionController: ObservableObject {
                 Task { try? await shell.resize(cols, rows) }
             }
             bridge.imagePaste = { [weak self] data in
-                Task { await self?.uploadPastedImage(data) }
+                Task { await self?.uploadPastedImage(data, connection: connection, generation: generation) }
             }
             bridge.userInteracted = { [weak self] in
                 self?.nudgeTmuxSizing()
@@ -577,19 +577,22 @@ final class ConnectionController: ObservableObject {
         }
     }
 
-    private func uploadPastedImage(_ data: Data) async {
-        guard let connection else { return }
-        let path = RemoteFileUpload.remotePath()
-        for command in RemoteFileUpload.commands(base64: data.base64EncodedString(), remotePath: path) {
-            do {
-                _ = try await connection.exec(command)
-            } catch {
-                bridge.feed(Data("\r\n[image paste failed: \(error)]\r\n".utf8))
-                return
-            }
-        }
-        bridge.sendPasted(path)
-        bridge.sendToHost?(Data(" ".utf8))
+    private func isCurrentShell(_ connection: SSHConnection, generation: Int) -> Bool {
+        !stopped && generation == shellGeneration && self.connection === connection && phase == .attached
+    }
+
+    private func uploadPastedImage(_ data: Data, connection: SSHConnection, generation: Int) async {
+        let bridge = bridge
+        await PastedImageUpload.run(
+            data,
+            exec: { _ = try await connection.exec($0) },
+            isCurrent: { [weak self] in self?.isCurrentShell(connection, generation: generation) == true },
+            paste: { path in
+                bridge.sendPasted(path)
+                bridge.sendToHost?(Data(" ".utf8))
+            },
+            fail: { error in bridge.feed(Data("\r\n[image paste failed: \(error)]\r\n".utf8)) }
+        )
     }
 
     func attachFile(_ url: URL) async throws {
@@ -600,9 +603,7 @@ final class ConnectionController: ObservableObject {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         let path = try await connection.uploadFile(at: url)
-        guard !stopped, generation == shellGeneration, self.connection === connection, phase == .attached else {
-            throw SSHError.connectionClosed
-        }
+        guard isCurrentShell(connection, generation: generation) else { throw SSHError.connectionClosed }
         bridge.sendPasted(RemoteFileUpload.quotedPath(path) + " ")
     }
 

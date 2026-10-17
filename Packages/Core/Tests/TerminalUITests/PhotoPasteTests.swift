@@ -40,4 +40,24 @@
     @Test func photoWithoutSessionIsDropped() {
         TerminalBridge().pastePhoto(photo(CGSize(width: 8, height: 8)))
     }
+
+    @MainActor
+    @Test func delayedProviderImageGoesToInitiatingSession() async throws {
+        let bridge = TerminalBridge()
+        var initiating: [Data] = []
+        var replacement: [Data] = []
+        bridge.imagePaste = { initiating.append($0) }
+        #expect(bridge.pasteImage(from: NSItemProvider(object: photo(CGSize(width: 16, height: 16)))))
+        bridge.imagePaste = { replacement.append($0) }
+        for _ in 0..<500 where initiating.isEmpty && replacement.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(initiating.count == 1)
+        #expect(replacement.isEmpty)
+    }
+
+    @MainActor
+    @Test func providerWithoutSessionIsIgnored() {
+        #expect(!TerminalBridge().pasteImage(from: NSItemProvider(object: photo(CGSize(width: 8, height: 8)))))
+    }
 #endif

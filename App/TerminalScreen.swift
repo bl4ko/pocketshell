@@ -520,17 +520,20 @@ struct TerminalScreen: View {
     }
 
     private func followKeyboard(_ inset: CGFloat, animated: Bool) {
+        // A resize makes Claude Code inside Herdr or tmux reprint its answer, so multiplexers keep their size.
+        let multiplexer = connection.isMultiplexerAttached
+        let layout = multiplexer ? 0 : inset
+        keyboardSlides = multiplexer || !connection.bridge.isFullScreenApp
         guard animated, !reduceMotion else {
-            if keyboardInset != KeyboardInset(inset) { keyboardInset = KeyboardInset(inset) }
+            if keyboardInset != KeyboardInset(layout) { keyboardInset = KeyboardInset(layout) }
             if shownInset != inset { shownInset = inset }
             return
         }
-        keyboardSlides = !connection.bridge.isFullScreenApp
-        keyboardInset.move(to: inset)
+        keyboardInset.move(to: layout)
         withAnimation(keyboardMotion(duration: UITestFlags.keyboardResize ? 0.25 : keyboard.duration)) {
             shownInset = inset
         } completion: {
-            keyboardInset.settle(inset)
+            keyboardInset.settle(layout)
         }
     }
 

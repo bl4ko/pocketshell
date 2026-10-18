@@ -42,7 +42,7 @@ final class SmokeUITests: XCTestCase {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
                 #"{"sessions":[{"name":"pskbdtest","default":false,"running":true}]}"#
         }
-        if name.contains("testHerdrSelectDrag"),
+        if name.contains("testHerdrSelectDrag") || name.contains("testKeyboardKeepsHerdr"),
             let session = ProcessInfo.processInfo.environment["PS_TEST_HERDR_SELECT"]
         {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
@@ -184,6 +184,58 @@ final class SmokeUITests: XCTestCase {
         let copied = readPasteboardAllowingPaste()
         XCTAssertTrue(copied.contains("LEFTPANE"), copied)
         XCTAssertFalse(copied.contains("RIGHTPANE"), copied)
+    }
+
+    func testKeyboardKeepsHerdrTerminalSize() throws {
+        guard let session = ProcessInfo.processInfo.environment["PS_TEST_HERDR_SELECT"], !session.isEmpty else {
+            throw XCTSkip("PS_TEST_HERDR_SELECT not set; Herdr keyboard test skipped")
+        }
+        let host = app.staticTexts["localbox"].firstMatch
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        let shellMode = app.buttons["Shells & tmux"].firstMatch
+        XCTAssertTrue(shellMode.waitForExistence(timeout: 5))
+        shellMode.tap()
+        let row = app.buttons[session].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 20))
+        sleep(3)
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        let keyboard = app.keyboards.element
+        let contentMotion = app.otherElements["keyboard.content"]
+        let resizes = terminal.label
+        keyboardButton.tap()
+        terminal.typeText(" ")
+        for cycle in 0..<3 {
+            if cycle > 0 { keyboardButton.tap() }
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+            sleep(1)
+            XCTAssertGreaterThan(keyboard.frame.height, 200, "the software keyboard is not on screen")
+            XCTAssertEqual(terminal.label, resizes, "the keyboard resized the Herdr terminal")
+            keyboardButton.tap()
+            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+            sleep(1)
+        }
+        XCTAssertEqual(terminal.label, resizes, "the keyboard resized the Herdr terminal")
+        XCTAssertGreaterThan(Int(contentMotion.label) ?? 0, 100, "Herdr content must slide above the keyboard")
+
+        app.buttons["new-tab"].tap()
+        dismissSessionPicker()
+        let first = app.descendants(matching: .any)["terminal-tab-1"]
+        let second = app.descendants(matching: .any)["terminal-tab-2"]
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        first.tap()
+        XCTAssertTrue(first.isSelected)
+        if !keyboard.exists {
+            app.buttons.matching(identifier: "terminal.keyboard").allElementsBoundByIndex.first { $0.isHittable }?.tap()
+        }
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertGreaterThan(keyboard.frame.height, 200, "the software keyboard is not on screen")
+        second.tap()
+        XCTAssertTrue(second.isSelected, "the slid terminal took the tab strip tap")
     }
 
     func testTerminalTapInMouseReportingAppKeepsKeyboardHidden() throws {

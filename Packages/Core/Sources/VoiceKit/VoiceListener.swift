@@ -14,6 +14,8 @@
 
         @Published public private(set) var state: State = .off
         @Published public private(set) var partial = ""
+        @Published public private(set) var problem: String?
+        @Published public private(set) var hearingSound = false
         public var contextualStrings: [String] = []
         public var onPhrase: ((String) -> Void)?
 
@@ -25,11 +27,23 @@
         private var phraseID: ObjectIdentifier?
         private var pending: Task<Void, Never>?
         private var muteObserver: NSObjectProtocol?
+        private var routeObserver: NSObjectProtocol?
+        private var fallback = SpeechFallback(onDeviceAvailable: false)
 
         public init() {}
 
         public var isOn: Bool {
             state == .listening || state == .paused
+        }
+
+        public var status: String? {
+            switch state {
+            case .off: nil
+            case .listening:
+                !partial.isEmpty ? partial : problem ?? (hearingSound ? "hearing you…" : "listening…")
+            case .paused: "paused"
+            case .failed(let message): message
+            }
         }
 
         public func start() async {
@@ -45,16 +59,21 @@
                 fail("Speech recognition is not available")
                 return
             }
+            fallback = SpeechFallback(onDeviceAvailable: recognizer.supportsOnDeviceRecognition)
+            problem = nil
             do {
                 let session = AVAudioSession.sharedInstance()
                 try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP])
                 try session.setActive(true)
-                Self.installTap(on: engine.inputNode, feed: feed)
-                engine.prepare()
-                try engine.start()
+                try startEngine()
             } catch {
                 fail(error.localizedDescription)
                 return
+            }
+            routeObserver = NotificationCenter.default.addObserver(
+                forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.restartEngine() }
             }
             try? AVAudioApplication.shared.setInputMuted(false)
             muteObserver = NotificationCenter.default.addObserver(
@@ -83,12 +102,32 @@
             state = .failed(message)
         }
 
+        private func startEngine() throws {
+            Self.installTap(on: engine.inputNode, feed: feed) { [weak self] loud in self?.hearingSound = loud }
+            engine.prepare()
+            try engine.start()
+        }
+
+        private func restartEngine() {
+            guard isOn else { return }
+            engine.inputNode.removeTap(onBus: 0)
+            do {
+                try startEngine()
+            } catch {
+                fail(error.localizedDescription)
+            }
+        }
+
         private func teardown() {
             endPhrase()
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
-            if let muteObserver { NotificationCenter.default.removeObserver(muteObserver) }
+            hearingSound = false
+            for observer in [muteObserver, routeObserver].compactMap({ $0 }) {
+                NotificationCenter.default.removeObserver(observer)
+            }
             muteObserver = nil
+            routeObserver = nil
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
 
@@ -106,20 +145,27 @@
             guard let recognizer, state == .listening else { return }
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
-            request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+            request.requiresOnDeviceRecognition = fallback.onDevice
             request.contextualStrings = contextualStrings
             request.taskHint = .dictation
             let id = ObjectIdentifier(request)
             phraseID = id
             feed.request = request
-            task = Self.recognize(request, with: recognizer) { [weak self] text, done in
-                self?.heard(text, done: done, from: id)
+            task = Self.recognize(request, with: recognizer) { [weak self] text, final, failure in
+                self?.heard(text, final: final, failure: failure, from: id)
             }
         }
 
-        private func heard(_ text: String?, done: Bool, from id: ObjectIdentifier) {
+        private func heard(_ text: String?, final: Bool, failure: SpeechFailure?, from id: ObjectIdentifier) {
             guard id == phraseID else { return }
-            if let text { partial = text }
+            if let text {
+                partial = text
+                problem = nil
+            }
+            let done = final || failure != nil
+            if let failure, let message = fallback.phraseEnded(heardSpeech: !partial.isEmpty, failure: failure) {
+                problem = message
+            }
             pending?.cancel()
             let wait: Duration = done ? (partial.isEmpty ? .seconds(1) : .zero) : .seconds(1)
             pending = Task { [weak self] in
@@ -153,20 +199,27 @@
             }
         }
 
-        nonisolated private static func installTap(on node: AVAudioInputNode, feed: AudioFeed) {
+        nonisolated private static func installTap(
+            on node: AVAudioInputNode, feed: AudioFeed, loudness: @escaping @MainActor (Bool) -> Void
+        ) {
             node.installTap(onBus: 0, bufferSize: 1024, format: node.outputFormat(forBus: 0)) { buffer, _ in
-                feed.append(buffer)
+                if let loud = feed.append(buffer) {
+                    Task { @MainActor in loudness(loud) }
+                }
             }
         }
 
         nonisolated private static func recognize(
             _ request: SFSpeechAudioBufferRecognitionRequest, with recognizer: SFSpeechRecognizer,
-            update: @escaping @MainActor (String?, Bool) -> Void
+            update: @escaping @MainActor (String?, Bool, SpeechFailure?) -> Void
         ) -> SFSpeechRecognitionTask {
             recognizer.recognitionTask(with: request) { result, error in
                 let text = result?.bestTranscription.formattedString
-                let done = result?.isFinal == true || error != nil
-                Task { @MainActor in update(text, done) }
+                let final = result?.isFinal == true
+                let failure = (error as NSError?).map {
+                    SpeechFailure(domain: $0.domain, code: $0.code, message: $0.localizedDescription)
+                }
+                Task { @MainActor in update(text, final, failure) }
             }
         }
     }
@@ -174,14 +227,22 @@
     private final class AudioFeed: @unchecked Sendable {
         private let lock = NSLock()
         private var current: SFSpeechAudioBufferRecognitionRequest?
+        private var loud = false
 
         var request: SFSpeechAudioBufferRecognitionRequest? {
             get { lock.withLock { current } }
             set { lock.withLock { current = newValue } }
         }
 
-        func append(_ buffer: AVAudioPCMBuffer) {
+        func append(_ buffer: AVAudioPCMBuffer) -> Bool? {
             request?.append(buffer)
+            guard let samples = buffer.floatChannelData?[0] else { return nil }
+            let peak = (0..<Int(buffer.frameLength)).reduce(Float(0)) { max($0, abs(samples[$1])) }
+            return lock.withLock {
+                guard (peak > 0.05) != loud else { return nil }
+                loud.toggle()
+                return loud
+            }
         }
     }
 #endif

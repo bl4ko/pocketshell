@@ -11,8 +11,7 @@ struct ComposerBar: View {
     @Binding var text: String
     let theme: TerminalTheme
     var voiceState: VoiceListener.State = .off
-    var heard = ""
-    var voiceNotice: String?
+    var voiceStatus: String?
     var onVoice: (() -> Void)?
     let onSend: () -> Void
     let onClose: () -> Void
@@ -36,15 +35,6 @@ struct ComposerBar: View {
         .onAppear { focused = true }
         .onChange(of: voiceState) { _, state in
             if state == .listening { focused = false }
-        }
-    }
-
-    private var voiceStatus: String? {
-        switch voiceState {
-        case .off: voiceNotice
-        case .listening: heard.isEmpty ? voiceNotice ?? "listening…" : heard
-        case .paused: "paused"
-        case .failed(let message): message
         }
     }
 

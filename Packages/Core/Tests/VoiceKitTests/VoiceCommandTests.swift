@@ -57,3 +57,24 @@ import VoiceKit
     #expect(VoiceCommand.apply("clear", to: &draft) == nil)
     #expect(draft == "")
 }
+
+@Test func brokenOnDeviceRecognitionFallsBackToServerBeforeReporting() {
+    var fallback = SpeechFallback(onDeviceAvailable: true)
+    let broken = SpeechFailure(domain: "kLSRErrorDomain", code: 300, message: "Failed to initialize recognizer")
+
+    #expect(fallback.onDevice)
+    #expect(fallback.phraseEnded(heardSpeech: false, failure: broken) == nil)
+    #expect(!fallback.onDevice)
+    #expect(fallback.phraseEnded(heardSpeech: false, failure: broken) == "Failed to initialize recognizer")
+}
+
+@Test func silenceAndSpeechAreNotReported() {
+    var fallback = SpeechFallback(onDeviceAvailable: true)
+    let silence = SpeechFailure(domain: "kAFAssistantErrorDomain", code: 1110, message: "No speech detected")
+    let broken = SpeechFailure(domain: "kLSRErrorDomain", code: 300, message: "Failed to initialize recognizer")
+
+    #expect(fallback.phraseEnded(heardSpeech: false, failure: silence) == nil)
+    #expect(fallback.phraseEnded(heardSpeech: true, failure: broken) == nil)
+    #expect(fallback.phraseEnded(heardSpeech: false, failure: nil) == nil)
+    #expect(fallback.onDevice)
+}

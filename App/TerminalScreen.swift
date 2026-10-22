@@ -293,8 +293,8 @@ struct TerminalScreen: View {
                             text: $connection.composerDraft,
                             theme: TerminalTheme.named(themeName),
                             voiceState: voice.state,
-                            heard: voice.partial,
-                            voiceNotice: voiceNotice,
+                            voiceStatus: voice.isOn && voice.partial.isEmpty
+                                ? voiceNotice ?? voice.status : voice.status,
                             onVoice: voiceToggle,
                             onSend: { connection.bridge.sendComposed(connection.composerDraft) },
                             onClose: {

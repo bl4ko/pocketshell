@@ -1234,6 +1234,7 @@ final class SmokeUITests: XCTestCase {
         }
         // A vertical-axis SwiftUI TextField surfaces as a text view, not a text field.
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["composer.voice"].isHittable)
         field.tap()
         field.typeText("echo composed-ok")
 

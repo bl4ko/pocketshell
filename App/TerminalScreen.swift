@@ -7,6 +7,7 @@ import TmuxKit
 import ToolbarUI
 import UIKit
 import UniformTypeIdentifiers
+import VoiceKit
 
 @MainActor
 final class KeyboardObserver: ObservableObject {
@@ -229,6 +230,8 @@ struct TerminalScreen: View {
     @ObservedObject var connection: ConnectionController
     @ObservedObject private var bridge: TerminalBridge
     @StateObject private var keyboard = KeyboardObserver()
+    @StateObject private var voice = VoiceListener()
+    @State private var voiceNotice: String?
     @State private var testKeyboardHeight: CGFloat = UITestFlags.keyboardResize ? 300 : 0
     @State private var keyboardInset = KeyboardInset()
     @State private var shownInset: CGFloat = 0
@@ -289,6 +292,10 @@ struct TerminalScreen: View {
                         ComposerBar(
                             text: $connection.composerDraft,
                             theme: TerminalTheme.named(themeName),
+                            voiceState: voice.state,
+                            heard: voice.partial,
+                            voiceNotice: voiceNotice,
+                            onVoice: voiceToggle,
                             onSend: { connection.bridge.sendComposed(connection.composerDraft) },
                             onClose: {
                                 connection.composerVisible = false
@@ -387,7 +394,61 @@ struct TerminalScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 connection.appForegrounded()
+            } else if phase == .background {
+                voice.stop()
             }
+        }
+        .onChange(of: isActive) { _, active in
+            if !active { voice.stop() }
+        }
+        .onChange(of: connection.composerVisible) { _, visible in
+            if !visible { voice.stop() }
+        }
+        .onChange(of: voice.isOn) { _, on in
+            UIApplication.shared.isIdleTimerDisabled = on
+        }
+        .onDisappear {
+            if voice.isOn { UIApplication.shared.isIdleTimerDisabled = false }
+            voice.stop()
+        }
+    }
+
+    private var voiceToggle: (() -> Void)? {
+        #if targetEnvironment(macCatalyst)
+            nil
+        #else
+            { toggleVoice() }
+        #endif
+    }
+
+    private func toggleVoice() {
+        guard !voice.isOn else {
+            voice.stop()
+            return
+        }
+        voiceNotice = nil
+        voice.onPhrase = { handleVoice($0) }
+        Task {
+            voice.contextualStrings = await connection.herdrTabNames()
+            await voice.start()
+        }
+    }
+
+    private func handleVoice(_ phrase: String) {
+        voiceNotice = nil
+        switch VoiceCommand.apply(phrase, to: &connection.composerDraft) {
+        case .submit(let message):
+            connection.bridge.sendComposed(message)
+        case .keys(let keys):
+            connection.bridge.processOutgoing(Data(keys.utf8))
+        case .jump(let name):
+            Task {
+                if !(await connection.focusHerdrTab(named: name)) {
+                    voiceNotice = "no tab: \(name)"
+                }
+            }
+        case nil:
+            break
         }
     }
 

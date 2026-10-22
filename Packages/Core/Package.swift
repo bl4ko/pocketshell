@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "MonitorKit", targets: ["MonitorKit"]),
         .library(name: "SFTPKit", targets: ["SFTPKit"]),
         .library(name: "GitKit", targets: ["GitKit"]),
+        .library(name: "VoiceKit", targets: ["VoiceKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
@@ -38,6 +39,7 @@ let package = Package(
         .target(name: "MonitorKit", dependencies: ["TmuxKit"], swiftSettings: strict),
         .target(name: "SFTPKit", swiftSettings: strict),
         .target(name: "GitKit", swiftSettings: strict),
+        .target(name: "VoiceKit", swiftSettings: strict),
         .target(
             name: "KeyKit",
             dependencies: [
@@ -77,6 +79,7 @@ let package = Package(
         .testTarget(name: "MonitorKitTests", dependencies: ["MonitorKit"], swiftSettings: strict),
         .testTarget(name: "SFTPKitTests", dependencies: ["SFTPKit"], swiftSettings: strict),
         .testTarget(name: "GitKitTests", dependencies: ["GitKit"], swiftSettings: strict),
+        .testTarget(name: "VoiceKitTests", dependencies: ["VoiceKit"], swiftSettings: strict),
         .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"], swiftSettings: strict),
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"], swiftSettings: strict),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"], swiftSettings: strict),

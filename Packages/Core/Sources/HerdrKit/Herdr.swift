@@ -68,15 +68,35 @@ public struct HerdrAgent: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+public struct HerdrTab: Codable, Equatable, Sendable, Identifiable {
+    public var id: String { tabID }
+    public var tabID: String
+    public var workspaceID: String
+    public var label: String
+
+    enum CodingKeys: String, CodingKey {
+        case tabID = "tab_id"
+        case workspaceID = "workspace_id"
+        case label
+    }
+
+    public init(tabID: String, workspaceID: String, label: String) {
+        self.tabID = tabID
+        self.workspaceID = workspaceID
+        self.label = label
+    }
+}
+
 public struct HerdrSnapshot: Codable, Equatable, Sendable {
     public var version: String
     public var protocolVersion: Int
     public var focusedWorkspaceID: String?
     public var workspaces: [HerdrWorkspace]
     public var agents: [HerdrAgent]
+    public var tabs: [HerdrTab]?
 
     enum CodingKeys: String, CodingKey {
-        case version, workspaces, agents
+        case version, workspaces, agents, tabs
         case protocolVersion = "protocol"
         case focusedWorkspaceID = "focused_workspace_id"
     }
@@ -138,6 +158,26 @@ public enum Herdr {
         "\(commandPrefix(session: session)) workspace focus \(shellQuote(workspaceID))"
     }
 
+    public static func focusTabCommand(session: String, tabID: String) -> String {
+        "\(commandPrefix(session: session)) tab focus \(shellQuote(tabID))"
+    }
+
+    public static func tab(matching spoken: String, in tabs: [HerdrTab]) -> HerdrTab? {
+        let key = matchKey(spoken)
+        guard !key.isEmpty else { return nil }
+        let keyed = tabs.map { (tab: $0, key: matchKey($0.label)) }
+        if let exact = keyed.first(where: { $0.key == key }) { return exact.tab }
+        guard key.count >= 3 else { return nil }
+        if let part = keyed.filter({ $0.key.contains(key) }).min(by: { $0.key.count < $1.key.count }) {
+            return part.tab
+        }
+        return
+            keyed
+            .map { (tab: $0.tab, distance: editDistance($0.key, key), limit: max(1, $0.key.count / 4)) }
+            .filter { $0.distance <= $0.limit }
+            .min { $0.distance < $1.distance }?.tab
+    }
+
     public static func parseSessions(_ output: String) -> [HerdrSession] {
         guard let data = output.data(using: .utf8),
             let envelope = try? JSONDecoder().decode(SessionEnvelope.self, from: data)
@@ -156,6 +196,23 @@ public enum Herdr {
 
     private static func shellQuote(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private static func matchKey(_ text: String) -> String {
+        String(text.lowercased().filter { $0.isLetter || $0.isNumber })
+    }
+
+    private static func editDistance(_ a: String, _ b: String) -> Int {
+        let b = Array(b)
+        var row = Array(0...b.count)
+        for (i, ca) in a.enumerated() {
+            var next = [i + 1]
+            for (j, cb) in b.enumerated() {
+                next.append(min(row[j + 1] + 1, next[j] + 1, row[j] + (ca == cb ? 0 : 1)))
+            }
+            row = next
+        }
+        return row[b.count]
     }
 
     private static func restartCommand(session: String) -> String {

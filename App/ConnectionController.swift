@@ -276,6 +276,20 @@ final class ConnectionController: ObservableObject {
         pendingShell = .herdr(session: session, workspaceID: workspaceID)
     }
 
+    func herdrTabNames() async -> [String] {
+        guard isHerdrAttached else { return [] }
+        return await currentHerdrSnapshot()?.tabs?.map(\.label) ?? []
+    }
+
+    func focusHerdrTab(named spoken: String) async -> Bool {
+        guard let connection, case .herdr(let session, _) = pendingShell,
+            let tab = Herdr.tab(matching: spoken, in: await currentHerdrSnapshot()?.tabs ?? []),
+            (try? await connection.exec(Herdr.focusTabCommand(session: session, tabID: tab.tabID))) != nil
+        else { return false }
+        pendingShell = .herdr(session: session, workspaceID: tab.workspaceID)
+        return true
+    }
+
     func tmuxWindows(session: String) async -> [TmuxWindow] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""

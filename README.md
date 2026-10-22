@@ -12,6 +12,7 @@ Built for one workflow: agents run in a persistent multiplexer on a machine at h
 - Optional private Cloudflare/APNs relay for reliable Herdr alerts while PocketShell is suspended
 - Notification taps reconnect to the named Herdr session and focus the exact workspace
 - Special-keys toolbar (esc, ctrl, tab, arrows, custom sequences), editable via `toolbar.json`
+- Hands-free voice mode on iPhone: dictate into the message bar, say "send", "escape", "enter" or a digit, and "go to <tab>" to jump between Herdr tabs; an AirPods stem press pauses listening
 - Snippets: type into the terminal or exec-and-show-output
 - Paste images from the clipboard — uploaded to the remote host, path inserted at the cursor
 - Font zoom, themes, auto-reconnect with backoff on network change or foregrounding

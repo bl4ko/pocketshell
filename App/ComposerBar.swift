@@ -1,5 +1,6 @@
 import Models
 import SwiftUI
+import VoiceKit
 
 /// Writes a prompt outside the TUI, then sends it into the live session as one block.
 ///
@@ -9,11 +10,45 @@ import SwiftUI
 struct ComposerBar: View {
     @Binding var text: String
     let theme: TerminalTheme
+    var voiceState: VoiceListener.State = .off
+    var heard = ""
+    var voiceNotice: String?
+    var onVoice: (() -> Void)?
     let onSend: () -> Void
     let onClose: () -> Void
     @FocusState private var focused: Bool
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let voiceStatus {
+                Text(voiceStatus)
+                    .font(.callout)
+                    .foregroundStyle(PocketshellTheme.secondary)
+                    .lineLimit(3)
+                    .padding(.horizontal, 10)
+                    .accessibilityIdentifier("composer.voiceStatus")
+            }
+            field
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(PocketshellTheme.surface)
+        .onAppear { focused = true }
+        .onChange(of: voiceState) { _, state in
+            if state == .listening { focused = false }
+        }
+    }
+
+    private var voiceStatus: String? {
+        switch voiceState {
+        case .off: voiceNotice
+        case .listening: heard.isEmpty ? voiceNotice ?? "listening…" : heard
+        case .paused: "paused"
+        case .failed(let message): message
+        }
+    }
+
+    private var field: some View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField("message…", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -28,6 +63,19 @@ struct ComposerBar: View {
                 .background(PocketshellTheme.paper)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(PocketshellTheme.chipBorder))
+            if let onVoice {
+                Button(action: onVoice) {
+                    Image(
+                        systemName: voiceState == .paused
+                            ? "mic.slash.fill" : voiceState == .listening ? "mic.fill" : "mic"
+                    )
+                    .font(.title2)
+                    .foregroundStyle(voiceState == .listening ? PocketshellTheme.accent : PocketshellTheme.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Voice input")
+                .accessibilityIdentifier("composer.voice")
+            }
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
@@ -45,10 +93,6 @@ struct ComposerBar: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("composer.close")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(PocketshellTheme.surface)
-        .onAppear { focused = true }
     }
 
     private func send() {

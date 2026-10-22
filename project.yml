@@ -36,6 +36,7 @@ targets:
           - MonitorKit
           - SFTPKit
           - GitKit
+          - VoiceKit
       - package: Core
         products:
           - VNCKit
@@ -51,6 +52,8 @@ targets:
         NSLocalNetworkUsageDescription: Connects to SSH hosts on your local network.
         NSFaceIDUsageDescription: Unlock pocketshell.
         NSCameraUsageDescription: Take a photo and paste it into the terminal.
+        NSMicrophoneUsageDescription: Listens while voice mode is on so you can speak to a session.
+        NSSpeechRecognitionUsageDescription: Turns your speech into text and commands for the session.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations:

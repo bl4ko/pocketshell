@@ -95,3 +95,41 @@ import Testing
         HerdrPushPlugin.linkCommand(session: "client's")
             .contains("herdr --session 'client'\\''s' plugin link"))
 }
+
+@Test func parsesSnapshotTabsAndToleratesServersWithoutThem() throws {
+    let output = """
+        {"result":{"snapshot":{"version":"0.9.3","protocol":21,"workspaces":[],"agents":[],"tabs":[
+          {"agent_status":"working","focused":false,"label":"security","number":35,"pane_count":1,"tab_id":"w1:t13","workspace_id":"w1"}
+        ]}}}
+        """
+
+    #expect(
+        try #require(Herdr.parseSnapshot(output)).tabs
+            == [HerdrTab(tabID: "w1:t13", workspaceID: "w1", label: "security")])
+    #expect(
+        try #require(
+            Herdr.parseSnapshot(
+                #"{"result":{"snapshot":{"version":"0.8.0","protocol":19,"workspaces":[],"agents":[]}}}"#)
+        ).tabs == nil)
+    #expect(
+        Herdr.focusTabCommand(session: "work", tabID: "w1:t13")
+            .hasSuffix("herdr --session 'work' tab focus 'w1:t13'"))
+}
+
+@Test func findsTheSpokenTabByNearestName() {
+    let tabs = ["security", "homeassistant", "infra", "infra-old", "bl4ko corp", "k9s"].enumerated().map {
+        HerdrTab(tabID: "w1:t\($0.offset)", workspaceID: "w1", label: $0.element)
+    }
+    func match(_ spoken: String) -> String? { Herdr.tab(matching: spoken, in: tabs)?.label }
+
+    #expect(match("Security.") == "security")
+    #expect(match("home assistant") == "homeassistant")
+    #expect(match("infra") == "infra")
+    #expect(match("home") == "homeassistant")
+    #expect(match("corp") == "bl4ko corp")
+    #expect(match("securty") == "security")
+    #expect(match("blako corp") == "bl4ko corp")
+    #expect(match("weather") == nil)
+    #expect(match("ho") == nil)
+    #expect(match("") == nil)
+}

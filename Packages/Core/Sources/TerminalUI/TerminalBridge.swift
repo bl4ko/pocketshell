@@ -254,6 +254,24 @@
             view?.clearSearch()
         }
 
+        public func scrollHalfPage(up: Bool) {
+            guard let view else { return }
+            let terminal = view.getTerminal()
+            guard terminal.mouseMode != .off else {
+                if up {
+                    view.scrollUp(lines: max(1, terminal.rows / 2))
+                } else {
+                    view.scrollDown(lines: max(1, terminal.rows / 2))
+                }
+                return
+            }
+            let flags = terminal.encodeButton(
+                button: up ? 4 : 5, release: false, shift: false, meta: false, control: false)
+            for _ in 0..<max(1, terminal.rows / 6) {
+                terminal.sendEvent(buttonFlags: flags, x: terminal.cols / 2, y: terminal.rows / 2)
+            }
+        }
+
         public func copySelection() {
             guard let view, view.selectionActive else { return }
             view.copy(nil)
@@ -288,6 +306,10 @@
             } else {
                 _ = view.becomeFirstResponder()
             }
+        }
+
+        public func closeKeyboard() {
+            view?.window?.endEditing(true)
         }
 
         public func toggleShortcuts(category: ShortcutCategory? = nil) {

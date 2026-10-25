@@ -19,6 +19,18 @@ import VoiceKit
     #expect(VoiceCommand.parse("pick option two") == .text("pick option two"))
 }
 
+@Test func scrollAndCloseKeyboardAreReadOnlyWhenSpokenAlone() {
+    #expect(VoiceCommand.parse("Scroll up.") == .scroll(up: true))
+    #expect(VoiceCommand.parse("scroll down") == .scroll(up: false))
+    #expect(VoiceCommand.parse("Scroll down.") == .scroll(up: false))
+    #expect(VoiceCommand.parse("Close keyboard.") == .closeKeyboard)
+    #expect(VoiceCommand.parse("scroll up to the error") == .text("scroll up to the error"))
+    #expect(VoiceCommand.parse("then scroll down") == .text("then scroll down"))
+    #expect(VoiceCommand.parse("Close keyboard shortcuts") == .text("Close keyboard shortcuts"))
+    #expect(VoiceCommand.parse("please close keyboard") == .text("please close keyboard"))
+    #expect(VoiceCommand.parse("scroll") == .text("scroll"))
+}
+
 @Test func endingAPhraseWithClearDropsTheDraft() {
     #expect(VoiceCommand.parse("no wait, clear.") == .clear)
 }
@@ -61,7 +73,12 @@ import VoiceKit
     #expect(VoiceCommand.apply("three", to: &draft) == .keys("3"))
     #expect(VoiceCommand.apply("go to security", to: &draft) == .jump("security"))
     #expect(VoiceCommand.apply("Next agent.", to: &draft) == .nextAgent)
+    #expect(VoiceCommand.apply("Scroll up.", to: &draft) == .scroll(up: true))
+    #expect(VoiceCommand.apply("Scroll down.", to: &draft) == .scroll(up: false))
+    #expect(VoiceCommand.apply("Close keyboard.", to: &draft) == .closeKeyboard)
     #expect(draft == "half a thought")
+    #expect(VoiceCommand.apply("then scroll down", to: &draft) == nil)
+    #expect(draft == "half a thought then scroll down")
     #expect(VoiceCommand.apply("clear", to: &draft) == nil)
     #expect(draft == "")
 }

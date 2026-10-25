@@ -338,5 +338,62 @@
             #expect(!sent.isEmpty)
             withExtendedLifetime(window) {}
         }
+
+        @MainActor
+        @Test func closeKeyboardResignsTerminalAndTextField() {
+            let bridge = TerminalBridge()
+            let (view, window) = windowedTerminal()
+            bridge.view = view
+            #expect(view.becomeFirstResponder())
+            bridge.closeKeyboard()
+            #expect(!view.isFirstResponder)
+            let field = UITextField(frame: CGRect(x: 0, y: 0, width: 100, height: 30))
+            window.addSubview(field)
+            #expect(field.becomeFirstResponder())
+            bridge.closeKeyboard()
+            #expect(!field.isFirstResponder)
+            withExtendedLifetime(window) {}
+        }
     #endif
+
+    @MainActor
+    @Test func halfPageScrollSendsWheelStepsAtCenterCellWhenMouseReporting() {
+        let bridge = TerminalBridge()
+        var sent = ""
+        bridge.sendToHost = { sent += String(decoding: $0, as: UTF8.self) }
+        let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
+        let view = makeTerminal()
+        view.getTerminal().resize(cols: 40, rows: 24)
+        view.terminalDelegate = coordinator
+        bridge.view = view
+        view.feed(text: "\u{1b}[?1000h\u{1b}[?1006h")
+        bridge.scrollHalfPage(up: true)
+        #expect(sent == String(repeating: "\u{1b}[<64;21;13M", count: 4))
+        sent = ""
+        bridge.scrollHalfPage(up: false)
+        #expect(sent == String(repeating: "\u{1b}[<65;21;13M", count: 4))
+        view.getTerminal().resize(cols: 40, rows: 5)
+        sent = ""
+        bridge.scrollHalfPage(up: true)
+        #expect(sent == "\u{1b}[<64;21;3M")
+    }
+
+    @MainActor
+    @Test func halfPageScrollMovesLocalScrollbackWithoutMouseReporting() {
+        let bridge = TerminalBridge()
+        var sent: [Data] = []
+        bridge.sendToHost = { sent.append($0) }
+        let view = makeTerminal()
+        let terminal = view.getTerminal()
+        terminal.resize(cols: 40, rows: 10)
+        bridge.view = view
+        view.feed(text: (0..<60).map { "line \($0)" }.joined(separator: "\r\n"))
+        let bottom = terminal.getTopVisibleRow()
+        #expect(bottom == 50)
+        bridge.scrollHalfPage(up: true)
+        #expect(terminal.getTopVisibleRow() == bottom - 5)
+        bridge.scrollHalfPage(up: false)
+        #expect(terminal.getTopVisibleRow() == bottom)
+        #expect(sent.isEmpty)
+    }
 #endif

@@ -453,6 +453,10 @@ struct TerminalScreen: View {
                     voiceNotice = "no agent needs input"
                 }
             }
+        case .scroll(let up):
+            connection.bridge.scrollHalfPage(up: up)
+        case .closeKeyboard:
+            connection.bridge.closeKeyboard()
         case nil:
             break
         }

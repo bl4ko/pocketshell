@@ -9,17 +9,25 @@ public enum VoiceCommand: Equatable, Sendable {
     case digit(Int)
     case jump(String)
     case nextAgent
+    case scroll(up: Bool)
+    case closeKeyboard
 
     public static func parse(_ phrase: String) -> VoiceCommand? {
         let raw = phrase.split(whereSeparator: \.isWhitespace).map(String.init)
         let words = raw.map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
         guard let last = words.last else { return nil }
-        if words.count == 1 {
-            if last == "escape" { return .escape }
-            if last == "enter" { return .enter }
-            if let digit = digits[last] { return .digit(digit) }
+        switch words.joined(separator: " ") {
+        case "escape": return .escape
+        case "enter": return .enter
+        case "scroll up": return .scroll(up: true)
+        case "scroll down": return .scroll(up: false)
+        case "close keyboard": return .closeKeyboard
+        case "next agent": return .nextAgent
+        default: break
         }
-        if words == ["next", "agent"] { return .nextAgent }
+        if words.count == 1, let digit = digits[last] {
+            return .digit(digit)
+        }
         if words.count > 2, words[0] == "go", words[1] == "to" {
             return .jump(words.dropFirst(2).joined(separator: " "))
         }
@@ -38,6 +46,8 @@ public enum VoiceCommand: Equatable, Sendable {
         case keys(String)
         case jump(String)
         case nextAgent
+        case scroll(up: Bool)
+        case closeKeyboard
     }
 
     public static func apply(_ phrase: String, to draft: inout String) -> Action? {
@@ -60,6 +70,10 @@ public enum VoiceCommand: Equatable, Sendable {
             return .jump(name)
         case .nextAgent:
             return .nextAgent
+        case .scroll(let up):
+            return .scroll(up: up)
+        case .closeKeyboard:
+            return .closeKeyboard
         case nil:
             break
         }

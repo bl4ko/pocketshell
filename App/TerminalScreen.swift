@@ -447,6 +447,12 @@ struct TerminalScreen: View {
                     voiceNotice = "no tab: \(name)"
                 }
             }
+        case .nextAgent:
+            Task {
+                if !(await connection.focusHerdrAgentNeedingInput()) {
+                    voiceNotice = "no agent needs input"
+                }
+            }
         case nil:
             break
         }

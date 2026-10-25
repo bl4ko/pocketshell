@@ -28,6 +28,13 @@ import VoiceKit
     #expect(VoiceCommand.parse("go to") == .text("go to"))
 }
 
+@Test func nextAgentIsReadOnlyWhenSpokenAlone() {
+    #expect(VoiceCommand.parse("Next agent.") == .nextAgent)
+    #expect(VoiceCommand.parse("next agent") == .nextAgent)
+    #expect(VoiceCommand.parse("ask the next agent to review it") == .text("ask the next agent to review it"))
+    #expect(VoiceCommand.parse("next agent please") == .text("next agent please"))
+}
+
 @Test func silenceIsNoCommand() {
     #expect(VoiceCommand.parse("  ") == nil)
 }
@@ -53,6 +60,7 @@ import VoiceKit
     #expect(VoiceCommand.apply("enter", to: &draft) == .keys("\r"))
     #expect(VoiceCommand.apply("three", to: &draft) == .keys("3"))
     #expect(VoiceCommand.apply("go to security", to: &draft) == .jump("security"))
+    #expect(VoiceCommand.apply("Next agent.", to: &draft) == .nextAgent)
     #expect(draft == "half a thought")
     #expect(VoiceCommand.apply("clear", to: &draft) == nil)
     #expect(draft == "")

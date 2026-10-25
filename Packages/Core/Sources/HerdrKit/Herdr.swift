@@ -162,6 +162,24 @@ public enum Herdr {
         "\(commandPrefix(session: session)) tab focus \(shellQuote(tabID))"
     }
 
+    public static func focusAgentCommand(session: String, paneID: String, tabID: String) -> String {
+        "\(commandPrefix(session: session)) agent focus \(shellQuote(paneID)) || \(focusTabCommand(session: session, tabID: tabID))"
+    }
+
+    public static func nextAgentNeedingInput(in snapshot: HerdrSnapshot) -> HerdrAgent? {
+        let workspaceRank = Dictionary(
+            snapshot.workspaces.map { ($0.workspaceID, $0.number) }, uniquingKeysWith: { first, _ in first })
+        let tabRank = Dictionary(
+            (snapshot.tabs ?? []).enumerated().map { ($0.element.tabID, $0.offset) },
+            uniquingKeysWith: { first, _ in first })
+        func rank(_ item: EnumeratedSequence<[HerdrAgent]>.Element) -> (Int, Int, Int) {
+            (workspaceRank[item.element.workspaceID] ?? .max, tabRank[item.element.tabID] ?? .max, item.offset)
+        }
+        let ordered = snapshot.agents.enumerated().sorted { rank($0) < rank($1) }.map(\.element)
+        let start = ordered.firstIndex(where: \.focused).map { $0 + 1 } ?? 0
+        return (ordered[start...] + ordered[..<start]).first { $0.status == .blocked }
+    }
+
     public static func tab(matching spoken: String, in tabs: [HerdrTab]) -> HerdrTab? {
         let key = matchKey(spoken)
         guard !key.isEmpty else { return nil }

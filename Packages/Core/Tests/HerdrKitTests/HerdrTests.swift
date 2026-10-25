@@ -133,3 +133,87 @@ import Testing
     #expect(match("ho") == nil)
     #expect(match("") == nil)
 }
+
+private func snapshot(
+    workspaces: [(id: String, number: Int)], tabs: [String]?,
+    agents: [(tab: String, pane: String, status: String)], focused: String? = nil
+) throws -> HerdrSnapshot {
+    func workspace(of tab: String) -> String { String(tab.prefix { $0 != ":" }) }
+    let workspaceJSON = workspaces.map {
+        #"{"workspace_id":"\#($0.id)","number":\#($0.number),"label":"\#($0.id)","agent_status":"unknown","focused":false}"#
+    }
+    let agentJSON = agents.map {
+        #"{"pane_id":"\#($0.pane)","workspace_id":"\#(workspace(of: $0.tab))","tab_id":"\#($0.tab)","agent_status":"\#($0.status)","focused":\#($0.pane == focused)}"#
+    }
+    let tabJSON = tabs.map { tabs in
+        #","tabs":["#
+            + tabs.map { #"{"tab_id":"\#($0)","workspace_id":"\#(workspace(of: $0))","label":"\#($0)"}"# }
+            .joined(separator: ",") + "]"
+    }
+    let output =
+        #"{"result":{"snapshot":{"version":"0.9.5","protocol":21,"workspaces":["#
+        + workspaceJSON.joined(separator: ",") + #"],"agents":["# + agentJSON.joined(separator: ",") + "]"
+        + (tabJSON ?? "") + "}}}"
+    return try #require(Herdr.parseSnapshot(output))
+}
+
+@Test func walksAgentsWaitingForInputInWorkspaceTabAndPaneOrder() throws {
+    var current = try snapshot(
+        workspaces: [("w1", 2), ("w2", 1)], tabs: ["w1:t5", "w1:t2", "w2:t1"],
+        agents: [
+            ("w1:t2", "w1:p4", "blocked"), ("w1:t5", "w1:p9", "blocked"), ("w1:t5", "w1:p1", "working"),
+            ("w1:t5", "w1:p2", "blocked"), ("w2:t1", "w2:p1", "blocked"), ("w2:t1", "w2:p3", "idle"),
+        ], focused: "w2:p3")
+
+    var visited: [String] = []
+    for _ in 0..<5 {
+        let next = try #require(Herdr.nextAgentNeedingInput(in: current))
+        visited.append(next.paneID)
+        current.agents = current.agents.map {
+            var agent = $0
+            agent.focused = agent.paneID == next.paneID
+            return agent
+        }
+    }
+    #expect(visited == ["w1:p9", "w1:p2", "w1:p4", "w2:p1", "w1:p9"])
+}
+
+@Test func startsFromTheFirstWaitingAgentWhenNoAgentHasFocus() throws {
+    let ordered = try snapshot(
+        workspaces: [("w1", 2), ("w2", 1)], tabs: ["w1:t1", "w2:t1"],
+        agents: [("w1:t1", "w1:p1", "blocked"), ("w2:t1", "w2:p1", "blocked")])
+    let withoutTabs = try snapshot(
+        workspaces: [("w1", 1)], tabs: nil, agents: [("w1:t2", "w1:p5", "blocked"), ("w1:t1", "w1:p1", "blocked")])
+
+    #expect(Herdr.nextAgentNeedingInput(in: ordered)?.paneID == "w2:p1")
+    #expect(Herdr.nextAgentNeedingInput(in: withoutTabs)?.paneID == "w1:p5")
+}
+
+@Test func keepsTheFocusedAgentWhenItIsTheOnlyOneWaiting() throws {
+    let lone = try snapshot(
+        workspaces: [("w1", 1)], tabs: ["w1:t1"],
+        agents: [("w1:t1", "w1:p1", "idle"), ("w1:t1", "w1:p2", "blocked")], focused: "w1:p2")
+
+    #expect(Herdr.nextAgentNeedingInput(in: lone)?.paneID == "w1:p2")
+}
+
+@Test func findsNoAgentWhenNoneNeedsInput() throws {
+    let busy = try snapshot(
+        workspaces: [("w1", 1)], tabs: ["w1:t1"],
+        agents: [("w1:t1", "w1:p1", "working"), ("w1:t1", "w1:p2", "idle"), ("w1:t1", "w1:p3", "done")],
+        focused: "w1:p1")
+    let empty = try snapshot(workspaces: [("w1", 1)], tabs: ["w1:t1"], agents: [])
+
+    #expect(Herdr.nextAgentNeedingInput(in: busy) == nil)
+    #expect(Herdr.nextAgentNeedingInput(in: empty) == nil)
+}
+
+@Test func focusesTheAgentPaneAndFallsBackToItsTab() {
+    let herdr = "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH:$HOME/.local/bin\" herdr"
+    #expect(
+        Herdr.focusAgentCommand(session: "work", paneID: "w1:p3", tabID: "w1:t1")
+            == "\(herdr) --session 'work' agent focus 'w1:p3' || \(herdr) --session 'work' tab focus 'w1:t1'")
+    #expect(
+        Herdr.focusAgentCommand(session: "default", paneID: "w'1:p1", tabID: "w'1:t1")
+            == "\(herdr) agent focus 'w'\\''1:p1' || \(herdr) tab focus 'w'\\''1:t1'")
+}

@@ -8,6 +8,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case enter
     case digit(Int)
     case jump(String)
+    case nextAgent
 
     public static func parse(_ phrase: String) -> VoiceCommand? {
         let raw = phrase.split(whereSeparator: \.isWhitespace).map(String.init)
@@ -18,6 +19,7 @@ public enum VoiceCommand: Equatable, Sendable {
             if last == "enter" { return .enter }
             if let digit = digits[last] { return .digit(digit) }
         }
+        if words == ["next", "agent"] { return .nextAgent }
         if words.count > 2, words[0] == "go", words[1] == "to" {
             return .jump(words.dropFirst(2).joined(separator: " "))
         }
@@ -35,6 +37,7 @@ public enum VoiceCommand: Equatable, Sendable {
         case submit(String)
         case keys(String)
         case jump(String)
+        case nextAgent
     }
 
     public static func apply(_ phrase: String, to draft: inout String) -> Action? {
@@ -55,6 +58,8 @@ public enum VoiceCommand: Equatable, Sendable {
             return .keys("\(digit)")
         case .jump(let name):
             return .jump(name)
+        case .nextAgent:
+            return .nextAgent
         case nil:
             break
         }

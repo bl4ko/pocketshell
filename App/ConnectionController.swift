@@ -290,6 +290,17 @@ final class ConnectionController: ObservableObject {
         return true
     }
 
+    func focusHerdrAgentNeedingInput() async -> Bool {
+        guard let connection, case .herdr(let session, _) = pendingShell,
+            let snapshot = await currentHerdrSnapshot(),
+            let agent = Herdr.nextAgentNeedingInput(in: snapshot),
+            (try? await connection.exec(
+                Herdr.focusAgentCommand(session: session, paneID: agent.paneID, tabID: agent.tabID))) != nil
+        else { return false }
+        pendingShell = .herdr(session: session, workspaceID: agent.workspaceID)
+        return true
+    }
+
     func tmuxWindows(session: String) async -> [TmuxWindow] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""

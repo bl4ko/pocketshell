@@ -5,6 +5,7 @@ import SwiftUI
 import TmuxKit
 import UIKit
 import UserNotifications
+import VoiceKit
 
 struct TerminalTab: Identifiable {
     let id = UUID()
@@ -349,6 +350,9 @@ struct HostTabsScreen: View {
 
             [local tabs]
             \(localTabs)
+
+            [voice]
+            \(VoiceListener.report)
 
             [remote tmux]
             \(remote)

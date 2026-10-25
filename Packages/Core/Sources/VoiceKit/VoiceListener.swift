@@ -19,16 +19,22 @@
         public var contextualStrings: [String] = []
         public var onPhrase: ((String) -> Void)?
 
+        public private(set) static weak var current: VoiceListener?
+
         private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-        private let engine = AVAudioEngine()
         private let feed = AudioFeed()
-        private var wanted = false
+        private var engine: AVAudioEngine?
+        private var starting: UUID?
         private var task: SFSpeechRecognitionTask?
         private var phraseID: ObjectIdentifier?
         private var pending: Task<Void, Never>?
         private var muteObserver: NSObjectProtocol?
         private var routeObserver: NSObjectProtocol?
         private var fallback = SpeechFallback(onDeviceAvailable: false)
+        private var tapFormat = "-"
+        private var restarts = 0
+        private var results = 0
+        private var lastFailure: SpeechFailure?
 
         public init() {}
 
@@ -46,12 +52,34 @@
             }
         }
 
+        public static var report: String {
+            current?.report ?? "never started"
+        }
+
+        public var report: String {
+            let session = AVAudioSession.sharedInstance()
+            let route = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
+            let failure = lastFailure.map { "\($0.domain) \($0.code) \($0.message)" } ?? "-"
+            return """
+                state=\(state) onDevice=\(fallback.onDevice) engine=\(engine?.isRunning == true ? "running" : "stopped") restarts=\(restarts)
+                route=\(route.joined(separator: ",")) sessionRate=\(Int(session.sampleRate)) tap=\(tapFormat) muted=\(AVAudioApplication.shared.isInputMuted)
+                \(feed.stats) results=\(results)
+                lastFailure=\(failure)
+                """
+        }
+
         public func start() async {
-            guard !isOn, !wanted else { return }
-            wanted = true
+            guard !isOn, starting == nil else { return }
+            let attempt = UUID()
+            starting = attempt
+            defer { if starting == attempt { starting = nil } }
+            Self.current = self
+            feed.reset()
             let allowed = await Self.speechAuthorized()
-            guard wanted else { return }
-            guard allowed, await AVAudioApplication.requestRecordPermission(), wanted else {
+            guard starting == attempt else { return }
+            let recordAllowed = await AVAudioApplication.requestRecordPermission()
+            guard starting == attempt else { return }
+            guard allowed, recordAllowed else {
                 fail("Allow microphone and speech recognition in Settings")
                 return
             }
@@ -70,11 +98,6 @@
                 fail(error.localizedDescription)
                 return
             }
-            routeObserver = NotificationCenter.default.addObserver(
-                forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.restartEngine() }
-            }
             try? AVAudioApplication.shared.setInputMuted(false)
             muteObserver = NotificationCenter.default.addObserver(
                 forName: AVAudioApplication.inputMuteStateChangeNotification, object: nil, queue: .main
@@ -87,7 +110,7 @@
         }
 
         public func stop() {
-            wanted = false
+            starting = nil
             guard isOn else {
                 if case .failed = state { state = .off }
                 return
@@ -98,19 +121,44 @@
 
         private func fail(_ message: String) {
             teardown()
-            wanted = false
+            starting = nil
             state = .failed(message)
         }
 
         private func startEngine() throws {
-            Self.installTap(on: engine.inputNode, feed: feed) { [weak self] loud in self?.hearingSound = loud }
+            let engine = AVAudioEngine()
+            let input = engine.inputNode
+            let format = input.outputFormat(forBus: 0)
+            tapFormat = "\(Int(format.sampleRate))Hz/\(format.channelCount)ch"
+            guard format.sampleRate > 0, format.channelCount > 0 else { throw NoMicrophone() }
+            Self.installTap(on: input, format: format, feed: feed) { [weak self] loud in self?.hearingSound = loud }
             engine.prepare()
-            try engine.start()
+            do {
+                try engine.start()
+            } catch {
+                input.removeTap(onBus: 0)
+                throw error
+            }
+            self.engine = engine
+            routeObserver = NotificationCenter.default.addObserver(
+                forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.restartEngine() }
+            }
+        }
+
+        private func stopEngine() {
+            if let routeObserver { NotificationCenter.default.removeObserver(routeObserver) }
+            routeObserver = nil
+            engine?.inputNode.removeTap(onBus: 0)
+            engine?.stop()
+            engine = nil
         }
 
         private func restartEngine() {
             guard isOn else { return }
-            engine.inputNode.removeTap(onBus: 0)
+            restarts += 1
+            stopEngine()
             do {
                 try startEngine()
             } catch {
@@ -120,14 +168,10 @@
 
         private func teardown() {
             endPhrase()
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
+            stopEngine()
             hearingSound = false
-            for observer in [muteObserver, routeObserver].compactMap({ $0 }) {
-                NotificationCenter.default.removeObserver(observer)
-            }
+            if let muteObserver { NotificationCenter.default.removeObserver(muteObserver) }
             muteObserver = nil
-            routeObserver = nil
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
 
@@ -161,7 +205,9 @@
             if let text {
                 partial = text
                 problem = nil
+                results += 1
             }
+            if let failure { lastFailure = failure }
             let done = final || failure != nil
             if let failure, let message = fallback.phraseEnded(heardSpeech: !partial.isEmpty, failure: failure) {
                 problem = message
@@ -200,9 +246,10 @@
         }
 
         nonisolated private static func installTap(
-            on node: AVAudioInputNode, feed: AudioFeed, loudness: @escaping @MainActor (Bool) -> Void
+            on node: AVAudioInputNode, format: AVAudioFormat, feed: AudioFeed,
+            loudness: @escaping @MainActor (Bool) -> Void
         ) {
-            node.installTap(onBus: 0, bufferSize: 1024, format: node.outputFormat(forBus: 0)) { buffer, _ in
+            node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
                 if let loud = feed.append(buffer) {
                     Task { @MainActor in loudness(loud) }
                 }
@@ -224,10 +271,16 @@
         }
     }
 
+    private struct NoMicrophone: LocalizedError {
+        var errorDescription: String? { "No microphone input is available" }
+    }
+
     private final class AudioFeed: @unchecked Sendable {
         private let lock = NSLock()
         private var current: SFSpeechAudioBufferRecognitionRequest?
         private var loud = false
+        private var buffers = 0
+        private var maxPeak: Float = 0
 
         var request: SFSpeechAudioBufferRecognitionRequest? {
             get { lock.withLock { current } }
@@ -239,9 +292,23 @@
             guard let samples = buffer.floatChannelData?[0] else { return nil }
             let peak = (0..<Int(buffer.frameLength)).reduce(Float(0)) { max($0, abs(samples[$1])) }
             return lock.withLock {
+                buffers += 1
+                maxPeak = max(maxPeak, peak)
                 guard (peak > 0.05) != loud else { return nil }
                 loud.toggle()
                 return loud
+            }
+        }
+
+        var stats: String {
+            lock.withLock { "buffers=\(buffers) maxPeak=\(String(format: "%.3f", maxPeak))" }
+        }
+
+        func reset() {
+            lock.withLock {
+                buffers = 0
+                maxPeak = 0
+                loud = false
             }
         }
     }

@@ -23,7 +23,7 @@ let package = Package(
         .library(name: "VoiceKit", targets: ["VoiceKit"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.1"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
         .package(

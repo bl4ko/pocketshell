@@ -226,6 +226,18 @@
             withExtendedLifetime(window) {}
         }
 
+        @MainActor
+        @Test func mouseReportingTapMeasuresFromTheParkedCaretNotAMidRepaintCursor() {
+            let view = makeTerminal()
+            view.multiplexerMode = true
+            view.feed(Data("\u{1b}[?1000h\u{1b}[?1006h\u{1b}[?25l\u{1b}[1;1H\u{1b}[?25h".utf8))
+            view.feed(Data(("\u{1b}[?25l" + String(repeating: "\r\n", count: 10)).utf8))
+            #expect(view.cursorViewportRow() == 10)
+            #expect(view.committedCaret?.row == 0)
+            #expect(!view.tapRaisesKeyboard(at: cellPoint(view, col: 4, row: 10)))
+            #expect(view.tapRaisesKeyboard(at: cellPoint(view, col: 4, row: 1)))
+        }
+
         private final class ScriptedPan: UIPanGestureRecognizer {
             var forced = UIGestureRecognizer.State.possible
             var point = CGPoint.zero

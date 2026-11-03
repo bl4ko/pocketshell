@@ -586,7 +586,7 @@
                 return true
             #else
                 guard !isFirstResponder, mouseReportingActive else { return true }
-                return abs(cell(at: point).row - cursorViewportRow()) <= 2
+                return abs(cell(at: point).row - (caretPaint?.row ?? cursorViewportRow())) <= 2
             #endif
         }
 

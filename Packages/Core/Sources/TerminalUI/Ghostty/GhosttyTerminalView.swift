@@ -379,7 +379,7 @@
                 row: cursor.row, col: cursor.col, hidden: !cursor.visible, addressed: terminal.cursorAddressed,
                 cell: screen.cell(col: cursor.col, row: cursor.row).scalar,
                 previousCell: screen.cell(col: cursor.col - 1, row: cursor.row).scalar, now: CACurrentMediaTime())
-            let style: CaretPaint.Style = isFirstResponder ? .block : .hollow
+            let style = CaretPaint.Style.block
             switch update {
             case .show(let row, let col):
                 caretPaint = CaretPaint(col: col, row: row, style: style)

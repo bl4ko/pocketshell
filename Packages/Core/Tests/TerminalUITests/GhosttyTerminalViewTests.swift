@@ -302,6 +302,13 @@
             #expect(view.point(inside: CGPoint(x: 50, y: 120), with: nil))
         }
 
+        @Test func caretStaysASteadyBlockWithoutFocus() {
+            let view = makeGhostty()
+            view.feedEngine(Data("\u{1b}[3;5H".utf8))
+            #expect(!view.isFirstResponder)
+            #expect(view.committedCaret?.style == .block)
+        }
+
         @Test func keyRepeatMatchesHardwareRates() {
             let view = makeGhostty()
             #expect(view.keyRepeatDelay == 0.3)

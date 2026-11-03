@@ -47,6 +47,11 @@
         private var handleGrab: (handle: SelectionHandleSide, colOffset: Int, rowOffset: Int)?
         private var selectionPivot: VTPoint?
         private var rectangularSelection = false
+        private lazy var editMenu: UIEditMenuInteraction = {
+            let interaction = UIEditMenuInteraction(delegate: nil)
+            addInteraction(interaction)
+            return interaction
+        }()
         var document = TextInputDocument()
         weak var textInputDelegate: UITextInputDelegate?
 
@@ -63,6 +68,7 @@
             metalLayer.framebufferOnly = true
             metalLayer.isOpaque = true
             metalLayer.presentsWithTransaction = false
+            metalLayer.maximumDrawableCount = 2
             if let device = MTLCreateSystemDefaultDevice() {
                 metalLayer.device = device
             }
@@ -149,7 +155,7 @@
             let scale = displayScale
             metalLayer.contentsScale = scale
             let drawable = CGSize(width: max(1, bounds.width * scale), height: max(1, bounds.height * scale))
-            if metalLayer.drawableSize != drawable {
+            if !drawablesReleased, metalLayer.drawableSize != drawable {
                 metalLayer.drawableSize = drawable
             }
             if let metrics, bounds.width > 0, bounds.height > 0 {
@@ -266,8 +272,31 @@
 
         override func setNeedsDisplay() {
             super.setNeedsDisplay()
+            restoreDrawableSize()
             renderer?.invalidate()
             setNeedsRender()
+        }
+
+        private var drawablesReleased = false
+
+        private func restoreDrawableSize() {
+            guard drawablesReleased else { return }
+            drawablesReleased = false
+            let scale = displayScale
+            metalLayer.drawableSize = CGSize(width: max(1, bounds.width * scale), height: max(1, bounds.height * scale))
+        }
+
+        var drawableReleasedForHiddenLayer: Bool { drawablesReleased }
+
+        func setRenderingSuspended(_ suspended: Bool) {
+            layer.isHidden = suspended
+            if suspended {
+                drawablesReleased = true
+                metalLayer.drawableSize = CGSize(width: 1, height: 1)
+                displayLink?.isPaused = true
+            } else {
+                setNeedsDisplay()
+            }
         }
 
         func tick() {
@@ -376,6 +405,14 @@
                 rectangularSelection = false
             }
             setNeedsRender()
+        }
+
+        func showEditMenu(at point: CGPoint) {
+            #if !targetEnvironment(macCatalyst)
+                guard selectionActive else { return }
+                _ = becomeFirstResponder()
+                editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: point))
+            #endif
         }
 
         func clearSelection() {

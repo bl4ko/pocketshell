@@ -82,6 +82,17 @@
             #expect(!view.selectionActive)
         }
 
+        @Test func editMenuOffersCopyOnlyWithASelection() {
+            let view = makeGhostty()
+            view.feedEngine(Data("foo bar".utf8))
+            let copy = #selector(UIResponderStandardEditActions.copy(_:))
+            let paste = #selector(UIResponderStandardEditActions.paste(_:))
+            #expect(!view.canPerformAction(copy, withSender: nil))
+            #expect(view.canPerformAction(paste, withSender: nil))
+            view.selectWord(at: point(view, col: 5, row: 0))
+            #expect(view.canPerformAction(copy, withSender: nil))
+        }
+
         @Test func copyPutsSelectionOnThePasteboard() {
             let view = makeGhostty()
             var copied: [String] = []
@@ -194,8 +205,10 @@
             bridge.feed(Data("background output".utf8))
             view.tick()
             #expect(view.renderCount == before)
+            #expect(view.drawableReleasedForHiddenLayer)
             bridge.setLive(true)
             #expect(!view.layer.isHidden)
+            #expect(!view.drawableReleasedForHiddenLayer)
             view.tick()
             #expect(view.renderCount == before + 1)
         }

@@ -69,10 +69,7 @@
         // Layer-level, not view-level: hiding the view would resign first responder.
         private func suspendRendering(_ suspended: Bool) {
             guard let view, view.layer.isHidden != suspended else { return }
-            view.layer.isHidden = suspended
-            if !suspended {
-                view.setNeedsDisplay()
-            }
+            view.setRenderingSuspended(suspended)
         }
 
         private func flushPending() {

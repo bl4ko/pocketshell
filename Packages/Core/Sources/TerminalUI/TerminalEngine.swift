@@ -52,6 +52,7 @@ public enum TerminalEngine: String, CaseIterable, Sendable {
         func copySelectionToPasteboard()
         func clearSelection()
         func pasteFromClipboard()
+        func setRenderingSuspended(_ suspended: Bool)
         func paste(_ sender: Any?)
         func find(_ term: String, forward: Bool) -> Bool
         func clearFind()
@@ -128,6 +129,13 @@ public enum TerminalEngine: String, CaseIterable, Sendable {
 
         func startPointerSelection(at point: CGPoint) {
             startPointerSelection(at: point, rectangular: false)
+        }
+
+        func setRenderingSuspended(_ suspended: Bool) {
+            layer.isHidden = suspended
+            if !suspended {
+                setNeedsDisplay()
+            }
         }
     }
 #endif

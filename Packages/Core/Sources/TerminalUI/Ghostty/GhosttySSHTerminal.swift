@@ -147,7 +147,10 @@
                 let cursorGesture = CursorGestureController(view: view, bridge: bridge) {
                     [weak self, weak view] point in
                     guard let self, let view else { return }
-                    if !self.openLink(at: point) { view.selectWord(at: point) }
+                    if !self.openLink(at: point) {
+                        view.selectWord(at: point)
+                        view.showEditMenu(at: point)
+                    }
                 }
                 self.cursorGesture = cursorGesture
                 pan.require(toFail: cursorGesture.press)
@@ -180,11 +183,13 @@
         @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let view, !view.mouseReportingActive else { return }
             view.selectWord(at: gesture.location(in: view))
+            view.showEditMenu(at: gesture.location(in: view))
         }
 
         @objc func handleTripleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let view, !view.mouseReportingActive else { return }
             view.selectRow(at: gesture.location(in: view))
+            view.showEditMenu(at: gesture.location(in: view))
         }
 
         func sendMouseClick(at location: CGPoint) {

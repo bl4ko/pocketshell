@@ -1,78 +1,5 @@
 #if os(iOS)
-    import Models
-    import SwiftUI
-    import ToolbarUI
     import UIKit
-    import VTKit
-
-    extension SSHTerminalView {
-        @MainActor
-        func makeGhostty(controller: TerminalViewController, view: GhosttyTerminalView, context: Context)
-            -> UIViewController
-        {
-            let bridge = context.coordinator.bridge
-            let gestures = GhosttyGestureCoordinator(bridge: bridge, view: view)
-            context.coordinator.ghostty = gestures
-            view.accessibilityIdentifier = "terminal.view"
-            view.multiplexerMode = multiplexerMode
-            view.onSend = { [weak bridge] data in bridge?.processOutgoing(data) }
-            view.onResize = { [weak bridge] cols, rows in bridge?.resizeHost?(cols, rows) }
-            view.onTitle = { [weak bridge] title in bridge?.setTerminalTitle(title) }
-            view.pasteImage = { [weak bridge] in bridge?.pasteImage() ?? false }
-            let composition = IMECompositionView()
-            view.addSubview(composition)
-            view.markedTextObserver = { [weak view, weak composition] text, clause in
-                guard let view, let composition else { return }
-                composition.update(
-                    text: text, clause: clause, font: view.font, foreground: view.themeForeground,
-                    background: view.themeBackground, caret: view.caretFrame, visible: view.bounds)
-            }
-            #if targetEnvironment(macCatalyst)
-                controller.sendControl = { [weak bridge] character in
-                    guard let data = ToolbarKeyEncoder.applyCtrl(to: character) else { return }
-                    bridge?.processOutgoing(data)
-                }
-                controller.sendEscape = { [weak bridge] in
-                    bridge?.processOutgoing(Data([0x1b]))
-                }
-                controller.sendBytes = { [weak bridge] data in
-                    bridge?.processOutgoing(data)
-                }
-                controller.installControlKeyCommands()
-            #endif
-            gestures.install()
-            let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
-            let base = FontZoom.range.contains(saved) ? saved : Double(view.font.pointSize)
-            view.setFont(
-                UIFont.monospacedSystemFont(ofSize: CGFloat(FontZoom.size(base: base, scale: scale)), weight: .regular))
-            context.coordinator.scale = scale
-            gestures.zoomScale = scale
-            bridge.view = view
-            view.onResign = { [weak bridge] in bridge?.keyboardHold = nil }
-            bridge.setTheme(theme)
-            #if !targetEnvironment(macCatalyst)
-                bridge.updateShortcutKeyboard = { [weak controller, weak bridge] in
-                    guard let bridge else { return }
-                    controller?.updateShortcuts(bridge: bridge, keys: shortcutKeys, theme: theme)
-                }
-                controller.updateShortcuts(bridge: bridge, keys: shortcutKeys, theme: theme)
-            #endif
-            return controller
-        }
-
-        @MainActor
-        func updateGhosttyScale(_ view: GhosttyTerminalView, context: Context) {
-            let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
-            let base =
-                FontZoom.range.contains(saved)
-                ? saved
-                : Double(view.font.pointSize) / context.coordinator.scale
-            view.setFont(
-                UIFont.monospacedSystemFont(ofSize: CGFloat(FontZoom.size(base: base, scale: scale)), weight: .regular))
-            context.coordinator.scale = scale
-            context.coordinator.ghostty?.zoomScale = scale
-        }
-    }
 
     @MainActor
     final class GhosttyGestureCoordinator: NSObject, UIGestureRecognizerDelegate {
@@ -81,7 +8,7 @@
         private var scrollTracker = PanScrollTracker(step: 1)
         private var pinchBaseSize: Double = 0
         private var lastPresenceNudge = Date.distantPast
-        private var selectionStart: CGPoint?
+        private(set) var selectionStart: CGPoint?
         private(set) var tap: UITapGestureRecognizer?
         #if !targetEnvironment(macCatalyst)
             var cursorGesture: CursorGestureController?
@@ -127,6 +54,11 @@
                 tap.require(toFail: selectionPan)
                 let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
                 view.addGestureRecognizer(hover)
+                let linkPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLinkPress(_:)))
+                linkPress.minimumPressDuration = 0.5
+                linkPress.delegate = self
+                linkPress.cancelsTouchesInView = false
+                view.addGestureRecognizer(linkPress)
             #endif
             let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
             view.addGestureRecognizer(pinch)
@@ -138,11 +70,6 @@
                 swipe.delaysTouchesEnded = false
                 view.addGestureRecognizer(swipe)
             }
-            let linkPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLinkPress(_:)))
-            linkPress.minimumPressDuration = 0.5
-            linkPress.delegate = self
-            linkPress.cancelsTouchesInView = false
-            view.addGestureRecognizer(linkPress)
             #if !targetEnvironment(macCatalyst)
                 let cursorGesture = CursorGestureController(view: view, bridge: bridge) {
                     [weak self, weak view] point in
@@ -211,11 +138,6 @@
             bridge.processOutgoing(Data("\u{02}\(gesture.direction == .left ? "n" : "p")".utf8))
         }
 
-        @objc func handleLinkPress(_ gesture: UILongPressGestureRecognizer) {
-            guard gesture.state == .began, let view else { return }
-            _ = openLink(at: gesture.location(in: view))
-        }
-
         func openLink(at location: CGPoint) -> Bool {
             guard let view else { return false }
             let (row, col) = view.cell(at: location)
@@ -242,6 +164,11 @@
         }
 
         #if targetEnvironment(macCatalyst)
+            @objc func handleLinkPress(_ gesture: UILongPressGestureRecognizer) {
+                guard gesture.state == .began, let view else { return }
+                _ = openLink(at: gesture.location(in: view))
+            }
+
             @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
                 guard gesture.view?.window?.isKeyWindow == true else { return }
                 noteUserPresence()
@@ -310,10 +237,6 @@
         var zoomScale = 1.0
 
         @objc func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
-            handleScrollPanOnMain(gesture)
-        }
-
-        func handleScrollPanOnMain(_ gesture: UIPanGestureRecognizer) {
             guard let view else { return }
             if gesture.state == .began {
                 noteUserPresence()

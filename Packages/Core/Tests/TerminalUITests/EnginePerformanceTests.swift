@@ -1,17 +1,12 @@
 import CoreText
 import Foundation
 import Metal
-import SwiftTerm
 import Testing
 import VTKit
 
 @testable import TerminalUI
 
 struct EnginePerformanceTests {
-    private final class Silent: TerminalDelegate {
-        func send(source: Terminal, data: ArraySlice<UInt8>) {}
-    }
-
     private static func stream(megabytes: Int) -> [UInt8] {
         var bytes: [UInt8] = []
         var line = 0
@@ -30,14 +25,12 @@ struct EnginePerformanceTests {
         return Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
     }
 
-    @Test func compareParseAndFrameCost() throws {
+    @Test func measureParseAndFrameCost() throws {
         guard ProcessInfo.processInfo.environment["PS_PERF"] == "1" else { return }
         let data = Self.stream(megabytes: 11)
         let chunks = stride(from: 0, to: data.count, by: 16_384).map { Array(data[$0..<min($0 + 16_384, data.count)]) }
         let ghostty = VTTerminal(cols: 120, rows: 40)
         let ghosttyMs = Self.time { for chunk in chunks { ghostty.feed(chunk) } }
-        let swiftTerm = Terminal(delegate: Silent(), options: TerminalOptions(cols: 120, rows: 40))
-        let swiftTermMs = Self.time { for chunk in chunks { swiftTerm.feed(byteArray: chunk) } }
         let device = try #require(MTLCreateSystemDefaultDevice())
         let atlas = try #require(
             GlyphAtlas(device: device, font: CTFontCreateWithName("Menlo" as CFString, 14, nil), scale: 3))
@@ -59,7 +52,7 @@ struct EnginePerformanceTests {
         }
         frames.sort()
         print(
-            "PERF bytes=\(data.count) ghostty_feed_ms=\(Int(ghosttyMs)) swiftterm_feed_ms=\(Int(swiftTermMs)) "
+            "PERF bytes=\(data.count) ghostty_feed_ms=\(Int(ghosttyMs)) "
                 + "frame_build_p50_ms=\(String(format: "%.2f", frames[frames.count / 2])) "
                 + "frame_build_p95_ms=\(String(format: "%.2f", frames[frames.count * 95 / 100]))")
         #expect(ghosttyMs > 0)

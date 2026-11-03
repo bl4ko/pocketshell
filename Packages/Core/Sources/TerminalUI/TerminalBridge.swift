@@ -24,10 +24,9 @@
         public var imagePaste: ((Data) -> Void)?
         public var userInteracted: (() -> Void)?
         public var userSentInput: (() -> Void)?
-        weak var view: (any TerminalEngineView)? {
+        weak var view: GhosttyTerminalView? {
             didSet { suspendRendering(!gate.isLive) }
         }
-        private var theme: TerminalTheme?
         private var gate = FeedGate()
         private var flushTask: Task<Void, Never>?
         private var feedingView = false
@@ -84,10 +83,7 @@
             Self.bytesFed += out.count
             feedingView = true
             defer { feedingView = false }
-            view.feedEngine(out)
-            if let theme {
-                view.applyEngineTheme(theme)
-            }
+            view.feed(out)
             schedulePromptCheck()
         }
 
@@ -123,8 +119,7 @@
         }
 
         func setTheme(_ theme: TerminalTheme) {
-            self.theme = theme
-            view?.applyEngineTheme(theme)
+            view?.applyTheme(theme)
         }
 
         public var isFullScreenApp: Bool {

@@ -4,7 +4,7 @@
 
     @MainActor
     final class CursorGestureController: NSObject, UIGestureRecognizerDelegate {
-        private weak var view: (any TerminalEngineView)?
+        private weak var view: (GhosttyTerminalView)?
         private let bridge: TerminalBridge
         private let onStationaryPress: (CGPoint) -> Void
         private var origin = CGPoint.zero
@@ -16,16 +16,12 @@
         private let indicator = UILabel()
         let press: UILongPressGestureRecognizer
 
-        init(view: any TerminalEngineView, bridge: TerminalBridge, onStationaryPress: @escaping (CGPoint) -> Void) {
+        init(view: GhosttyTerminalView, bridge: TerminalBridge, onStationaryPress: @escaping (CGPoint) -> Void) {
             self.view = view
             self.bridge = bridge
             self.onStationaryPress = onStationaryPress
             press = UILongPressGestureRecognizer()
             super.init()
-            // SwiftTerm's word-selection hold would otherwise claim this touch midway through a drag.
-            for gesture in view.gestureRecognizers ?? [] where gesture is UILongPressGestureRecognizer {
-                view.removeGestureRecognizer(gesture)
-            }
             press.minimumPressDuration = 0.4
             press.numberOfTouchesRequired = 1
             press.delegate = self

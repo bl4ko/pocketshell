@@ -1275,7 +1275,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("no software keyboard on this simulator")
         }
         // Japanese Romaji, not Korean: iOS composes kana through marked text, while the
-        // Korean keyboard hands SwiftTerm finished jamo that it assembles itself.
+        // Korean keyboard hands over finished jamo that the terminal assembles itself.
         let globe = app.buttons["Next keyboard"]
         for _ in 0..<3 where globe.exists && !app.otherElements["terminal.composition"].exists {
             globe.tap()
@@ -1285,7 +1285,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("no Japanese keyboard on this simulator")
         }
 
-        // Marked text never reaches the host and SwiftTerm does not draw it, so this
+        // Marked text never reaches the host and the renderer does not draw it, so this
         // overlay is the only thing a CJK user sees while composing.
         app.keys["n"].tap()
         app.keys["i"].tap()

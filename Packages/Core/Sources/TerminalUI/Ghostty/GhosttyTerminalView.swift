@@ -6,7 +6,7 @@
     import UIKit
     import VTKit
 
-    final class GhosttyTerminalView: UIView, TerminalEngineView {
+    final class GhosttyTerminalView: UIView {
         override class var layerClass: AnyClass { CAMetalLayer.self }
 
         let terminal: VTTerminal
@@ -44,7 +44,6 @@
         private var previousSize = CGSize.zero
         private var resizeCount = 0
         private var keyRepeat: Timer?
-        private var customInputView: UIView?
         private var findMatch: VTSelection?
         private var handleGrab: (handle: SelectionHandleSide, colOffset: Int, rowOffset: Int)?
         private var selectionPivot: VTPoint?
@@ -131,7 +130,7 @@
             setNeedsRender()
         }
 
-        func applyEngineTheme(_ theme: TerminalTheme) {
+        func applyTheme(_ theme: TerminalTheme) {
             guard theme != appliedTheme else { return }
             appliedTheme = theme
             let background = Models.RGBColor(hex: theme.background).map(VTColor.init) ?? palette.background
@@ -204,7 +203,7 @@
             return true
         }
 
-        // MARK: - Engine surface
+        // MARK: - Terminal state
 
         var terminalCols: Int { terminal.cols }
         var terminalRows: Int { terminal.rows }
@@ -214,17 +213,12 @@
         var mouseReportingActive: Bool { terminal.mouseTracking != .none }
         var mouseTracking: VTMouseTracking { terminal.mouseTracking }
         var scrolledToBottom: Bool { terminal.viewportAtBottom }
-        var canScroll: Bool { terminal.scrollbar.canScroll }
 
-        var engineInputView: UIView? {
-            get { customInputView }
-            set { customInputView = newValue }
-        }
-
+        var customInputView: UIView?
         override var inputView: UIView? { customInputView }
         override var inputAccessoryView: UIView? { nil }
 
-        func feedEngine(_ data: Data) {
+        func feed(_ data: Data) {
             terminal.feed(data)
             caret.noteFeed(
                 at: CACurrentMediaTime(), sawHide: terminal.tracker.sawHide, sawSyncEnd: terminal.tracker.sawSyncEnd)
@@ -726,8 +720,6 @@
             RunLoop.main.add(timer, forMode: .common)
             keyRepeat = timer
         }
-
-        var keyRepeatActive: Bool { keyRepeat != nil }
     }
 
     @MainActor

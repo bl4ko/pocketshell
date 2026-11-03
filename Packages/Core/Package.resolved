@@ -1,5 +1,5 @@
 {
-  "originHash" : "695ccda90fc03a688cc406ab5a2061db0f1071c3f240a96e54ba43d9eb53decf",
+  "originHash" : "c85cd62e8c92578ccb640e3e1a09c402bafeef4b9e16cb356f69dd3972494e70",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -25,15 +25,6 @@
       "location" : "https://github.com/bl4ko/royalvnc.git",
       "state" : {
         "revision" : "7cd41cff27e175c12b552dce2812ff78b35eb541"
-      }
-    },
-    {
-      "identity" : "swift-argument-parser",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser",
-      "state" : {
-        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-        "version" : "1.8.2"
       }
     },
     {
@@ -97,14 +88,6 @@
       "state" : {
         "revision" : "7502b711c92a17741fa625d722b0ccbd595d8ed1",
         "version" : "1.7.2"
-      }
-    },
-    {
-      "identity" : "swiftterm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/bl4ko/SwiftTerm.git",
-      "state" : {
-        "revision" : "33900c04f88d7a7bfe4d9d3332f379c34949e1c4"
       }
     }
   ],

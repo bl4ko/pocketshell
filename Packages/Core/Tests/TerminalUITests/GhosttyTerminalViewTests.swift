@@ -39,13 +39,13 @@
 
         @Test func screenLinesScrubNUL() {
             let view = makeGhostty()
-            view.feedEngine(Data("export\u{1b}[1CTART_HOME".utf8))
+            view.feed(Data("export\u{1b}[1CTART_HOME".utf8))
             #expect(view.screenLines()[0] == "export TART_HOME")
         }
 
         @Test func pointerSelectionIncludesBothEnds() {
             let view = makeGhostty()
-            view.feedEngine(Data("hello world".utf8))
+            view.feed(Data("hello world".utf8))
             view.startPointerSelection(at: point(view, col: 4, row: 0))
             view.extendPointerSelection(to: point(view, col: 0, row: 0))
             #expect(view.selectedText() == "hello")
@@ -56,7 +56,7 @@
 
         @Test func handleDragKeepsTheGrabbedEdge() {
             let view = makeGhostty()
-            view.feedEngine(Data("hello world".utf8))
+            view.feed(Data("hello world".utf8))
             view.startPointerSelection(at: point(view, col: 6, row: 0))
             view.extendPointerSelection(to: point(view, col: 10, row: 0))
             let metrics = view.metrics!
@@ -73,7 +73,7 @@
 
         @Test func wordAndRowSelection() {
             let view = makeGhostty()
-            view.feedEngine(Data("foo barbaz qux".utf8))
+            view.feed(Data("foo barbaz qux".utf8))
             view.selectWord(at: point(view, col: 5, row: 0))
             #expect(view.selectedText() == "barbaz")
             view.selectRow(at: point(view, col: 0, row: 0))
@@ -84,7 +84,7 @@
 
         @Test func editMenuOffersCopyOnlyWithASelection() {
             let view = makeGhostty()
-            view.feedEngine(Data("foo bar".utf8))
+            view.feed(Data("foo bar".utf8))
             let copy = #selector(UIResponderStandardEditActions.copy(_:))
             let paste = #selector(UIResponderStandardEditActions.paste(_:))
             #expect(!view.canPerformAction(copy, withSender: nil))
@@ -97,18 +97,18 @@
             let view = makeGhostty()
             var copied: [String] = []
             view.writePasteboard = { copied.append($0) }
-            view.feedEngine(Data("copy\u{1b}[2Cme".utf8))
+            view.feed(Data("copy\u{1b}[2Cme".utf8))
             view.startPointerSelection(at: point(view, col: 0, row: 0))
             view.extendPointerSelection(to: point(view, col: 7, row: 0))
             view.copySelectionToPasteboard()
-            view.feedEngine(Data("\u{1b}]52;c;aGk=\u{07}".utf8))
+            view.feed(Data("\u{1b}]52;c;aGk=\u{07}".utf8))
             #expect(copied == ["copy  me", "hi"])
             #expect(!view.selectionActive)
         }
 
         @Test func scrollingUpdatesAccessibilityPosition() {
             let view = makeGhostty()
-            view.feedEngine(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))
+            view.feed(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))
             #expect(view.accessibilityValue == "bottom")
             view.scrollViewport(up: 5)
             #expect(view.accessibilityValue == "history")
@@ -121,7 +121,7 @@
             let view = makeGhostty()
             var sent: [Data] = []
             view.onSend = { sent.append($0) }
-            view.feedEngine(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))
+            view.feed(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))
             view.scrollViewport(up: 5)
             view.insertText("x")
             #expect(sent == [Data("x".utf8)])
@@ -159,7 +159,7 @@
             var text = (0..<20).map { "head \($0)" }
             text += ["Question 1/1", "1. Alpha", "2. Beta", "3. Gamma", "enter to submit answer"]
             text += (0..<40).map { "filler \($0)" }
-            view.feedEngine(Data((text.joined(separator: "\r\n") + "\r\n").utf8))
+            view.feed(Data((text.joined(separator: "\r\n") + "\r\n").utf8))
             view.scrollViewport(up: 30)
             let rows = view.screenLines()
             let optionRow = try! #require(rows.firstIndex(of: "2. Beta"))
@@ -174,7 +174,7 @@
             let view = makeGhostty()
             view.onSend = { [weak bridge] in bridge?.processOutgoing($0) }
             let gestures = GhosttyGestureCoordinator(bridge: bridge, view: view)
-            view.feedEngine(Data("\u{1b}[?1000h\u{1b}[?1006h".utf8))
+            view.feed(Data("\u{1b}[?1000h\u{1b}[?1006h".utf8))
             gestures.sendMouseClick(at: point(view, col: 2, row: 3))
             #expect(sent == [Data("\u{1b}[<0;3;4M".utf8), Data("\u{1b}[<0;3;4m".utf8)])
         }
@@ -216,7 +216,7 @@
         @Test func shrinkingFullScreenAppKeepsHeader() {
             let view = makeGhostty(height: 300)
             let rows = view.terminalRows
-            view.feedEngine(Data("\u{1b}[?1049h\u{1b}[1;1HHEADER\u{1b}[\(rows);1HPROMPT".utf8))
+            view.feed(Data("\u{1b}[?1049h\u{1b}[1;1HHEADER\u{1b}[\(rows);1HPROMPT".utf8))
             view.frame.size.height = 150
             view.layoutIfNeeded()
             #expect(view.screenLines()[0] == "HEADER")
@@ -224,7 +224,7 @@
 
         @Test func themeColorsReachTheTerminal() throws {
             let view = makeGhostty()
-            view.applyEngineTheme(.pocketshell)
+            view.applyTheme(.pocketshell)
             view.terminal.updateScreen()
             let hex = TerminalTheme.pocketshell.background
             let background = try #require(RGBColor(hex: hex))
@@ -238,13 +238,13 @@
             let view = makeGhostty()
             view.onSend = { [weak bridge] in bridge?.processOutgoing($0) }
             bridge.view = view
-            view.feedEngine(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))
+            view.feed(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))
             bridge.scrollHalfPage(up: true)
             #expect(!view.scrolledToBottom)
             #expect(sent.isEmpty)
             bridge.scrollHalfPage(up: false)
             #expect(view.scrolledToBottom)
-            view.feedEngine(Data("\u{1b}[?1000h\u{1b}[?1006h".utf8))
+            view.feed(Data("\u{1b}[?1000h\u{1b}[?1006h".utf8))
             bridge.scrollHalfPage(up: true)
             let center = "\u{1b}[<64;\(view.terminalCols / 2 + 1);\(view.terminalRows / 2 + 1)M"
             #expect(sent == String(repeating: center, count: max(1, view.terminalRows / 6)))
@@ -256,19 +256,19 @@
             window.addSubview(view)
             view.tick()
             let before = view.renderCount
-            view.feedEngine(Data("\u{1b}[?2026hhalf".utf8))
+            view.feed(Data("\u{1b}[?2026hhalf".utf8))
             view.tick()
             #expect(view.renderCount == before)
-            view.feedEngine(Data("done\u{1b}[?2026l".utf8))
+            view.feed(Data("done\u{1b}[?2026l".utf8))
             view.tick()
             #expect(view.renderCount == before + 1)
         }
 
         @Test func programBackgroundOverrideDoesNotBeatTheTheme() {
             let view = makeGhostty()
-            view.applyEngineTheme(.pocketshell)
+            view.applyTheme(.pocketshell)
             let themed = view.renderBackground
-            view.feedEngine(Data("\u{1b}]11;#000000\u{07}".utf8))
+            view.feed(Data("\u{1b}]11;#000000\u{07}".utf8))
             #expect(view.renderBackground == themed)
             #expect(themed != VTColor(r: 0, g: 0, b: 0))
         }
@@ -276,13 +276,13 @@
         @Test func tmuxRedrawTransactionParksTheCaretAtTheFinalPosition() {
             let view = makeGhostty()
             view.multiplexerMode = true
-            view.feedEngine(Data("\u{1b}[5;3H".utf8))
+            view.feed(Data("\u{1b}[5;3H".utf8))
             #expect(view.committedCaret.map { [$0.row, $0.col] } == [4, 2])
-            view.feedEngine(Data("\u{1b}[?25l\u{1b}[10;42Hpane".utf8))
+            view.feed(Data("\u{1b}[?25l\u{1b}[10;42Hpane".utf8))
             #expect(view.committedCaret.map { [$0.row, $0.col] } == [4, 2])
-            view.feedEngine(Data("\u{1b}[1;1H\u{1b}[?25h".utf8))
+            view.feed(Data("\u{1b}[1;1H\u{1b}[?25h".utf8))
             #expect(view.committedCaret.map { [$0.row, $0.col] } == [0, 0])
-            view.feedEngine(Data("\u{1b}[12;30Hmid-frame".utf8))
+            view.feed(Data("\u{1b}[12;30Hmid-frame".utf8))
             #expect(view.committedCaret.map { [$0.row, $0.col] } == [0, 0])
         }
 
@@ -304,7 +304,7 @@
 
         @Test func caretStaysASteadyBlockWithoutFocus() {
             let view = makeGhostty()
-            view.feedEngine(Data("\u{1b}[3;5H".utf8))
+            view.feed(Data("\u{1b}[3;5H".utf8))
             #expect(!view.isFirstResponder)
             #expect(view.committedCaret?.style == .block)
         }
@@ -313,11 +313,6 @@
             let view = makeGhostty()
             #expect(view.keyRepeatDelay == 0.3)
             #expect(view.keyRepeatInterval == 1.0 / 30.0)
-        }
-
-        @Test func controllerHostsTheSelectedEngine() {
-            #expect(TerminalViewController(engine: .ghostty).terminalView is GhosttyTerminalView)
-            #expect(TerminalViewController(engine: .swiftTerm).terminalView is BottomAnchoredTerminalView)
         }
     }
 #endif

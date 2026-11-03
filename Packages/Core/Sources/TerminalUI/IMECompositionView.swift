@@ -1,14 +1,7 @@
 #if os(iOS)
-    import SwiftTerm
     import UIKit
 
-    /// Draws the in-progress IME composition inline at the caret.
-    ///
-    /// SwiftTerm keeps marked text in its own storage and sends nothing to the host until
-    /// the input method commits it, and it never draws that text — so Korean, Japanese and
-    /// Chinese keyboards otherwise compose invisibly and only the committed result appears.
-    /// The fork calls `markedTextObserver` on every composition change; this view renders it
-    /// underlined over the caret cell, the way a native text field does.
+    /// Marked text never reaches the host or the renderer, so the composition is drawn here at the caret.
     final class IMECompositionView: UIView {
         private let label = UILabel()
 
@@ -28,12 +21,6 @@
         @available(*, unavailable)
         required init?(coder: NSCoder) {
             fatalError("not used from a storyboard")
-        }
-
-        func update(text: String, clause: NSRange, in view: TerminalView) {
-            update(
-                text: text, clause: clause, font: view.font, foreground: view.nativeForegroundColor,
-                background: view.nativeBackgroundColor, caret: view.caretFrame, visible: view.bounds)
         }
 
         func update(

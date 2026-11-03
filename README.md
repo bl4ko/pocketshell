@@ -7,7 +7,7 @@ Built for one workflow: agents run in a persistent multiplexer on a machine at h
 ## Features
 
 **Terminal**
-- Full SSH terminal (SwiftTerm) with tabs and automatic discovery of running Herdr and tmux sessions
+- Full SSH terminal (libghostty-vt with a Metal renderer) with tabs and automatic discovery of running Herdr and tmux sessions
 - Herdr's semantic working / blocked / done state, with screen-based status detection for tmux and plain shells
 - Optional private Cloudflare/APNs relay for reliable Herdr alerts while PocketShell is suspended
 - Notification taps reconnect to the named Herdr session and focus the exact workspace

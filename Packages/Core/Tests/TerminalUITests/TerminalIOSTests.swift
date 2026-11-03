@@ -1,7 +1,6 @@
 #if os(iOS)
     import Combine
     import Models
-    import SwiftTerm
     import Testing
     import ToolbarUI
     import UIKit
@@ -19,11 +18,24 @@
     }
 
     @MainActor
-    private func makeTerminal(rows: Int = 10) -> BottomAnchoredTerminalView {
-        let view = BottomAnchoredTerminalView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
-        view.getTerminal().resize(cols: 40, rows: rows)
+    private func makeTerminal() -> GhosttyTerminalView {
+        let view = GhosttyTerminalView(font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+        view.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
         view.layoutIfNeeded()
         return view
+    }
+
+    @MainActor
+    private func cellPoint(_ view: GhosttyTerminalView, col: Int, row: Int) -> CGPoint {
+        let metrics = view.metrics!
+        return CGPoint(x: (CGFloat(col) + 0.5) * metrics.pointWidth, y: (CGFloat(row) + 0.5) * metrics.pointHeight)
+    }
+
+    @MainActor
+    private func gestures(_ view: GhosttyTerminalView, _ bridge: TerminalBridge) -> GhosttyGestureCoordinator {
+        view.onSend = { [weak bridge] in bridge?.processOutgoing($0) }
+        bridge.view = view
+        return GhosttyGestureCoordinator(bridge: bridge, view: view)
     }
 
     @MainActor
@@ -43,48 +55,22 @@
             for state in [UIGestureRecognizer.State.cancelled, .failed] {
                 let bridge = TerminalBridge()
                 bridge.selectMode = true
-                let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
                 let view = makeTerminal()
-                view.feed(text: "hello world\r\n")
-                view.startPointerSelection(at: CGPoint(x: 1, y: 1))
-                view.extendPointerSelection(to: CGPoint(x: 60, y: 1))
-                #expect(view.grabSelectionHandle(at: CGPoint(x: 1, y: 1), slop: 10_000))
+                let coordinator = gestures(view, bridge)
+                view.feed(Data("hello world\r\n".utf8))
+                view.startPointerSelection(at: cellPoint(view, col: 0, row: 0))
+                view.extendPointerSelection(to: cellPoint(view, col: 6, row: 0))
+                #expect(view.grabSelectionHandle(at: cellPoint(view, col: 0, row: 0), slop: 10_000))
                 #expect(view.selectionHandleDragActive)
                 let pan = StatefulPan()
                 view.addGestureRecognizer(pan)
                 pan.deliver(state)
                 #expect(pan.state == state)
-                coordinator.handleScrollPanOnMain(pan)
+                coordinator.handleScrollPan(pan)
                 #expect(!view.selectionHandleDragActive)
             }
         }
-    #endif
 
-    @MainActor
-    @Test func scrolledTapMapsToVisibleRowNotLastRow() {
-        let bridge = TerminalBridge()
-        var sent: [Data] = []
-        bridge.sendToHost = { sent.append($0) }
-        let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
-        let view = makeTerminal()
-        var text = (0..<20).map { "head \($0)" }
-        text += ["Question 1/1", "1. Alpha", "2. Beta", "3. Gamma", "enter to submit answer"]
-        text += (0..<40).map { "filler \($0)" }
-        view.feed(text: text.joined(separator: "\r\n") + "\r\n")
-        view.layoutIfNeeded()
-        view.scrollUp(lines: 30)
-        let terminal = view.getTerminal()
-        let rows = (0..<terminal.rows).map { terminal.getLine(row: $0)?.translateToString(trimRight: true) ?? "" }
-        let optionRow = try! #require(rows.firstIndex(of: "2. Beta"))
-        let rowHeight = view.bounds.height / CGFloat(terminal.rows)
-        let y = view.contentOffset.y + (CGFloat(optionRow) + 0.5) * rowHeight
-        #expect(view.contentOffset.y > 0)
-        #expect(optionRow < terminal.rows - 1)
-        coordinator.sendMouseClick(in: view, at: CGPoint(x: 10, y: y))
-        #expect(sent == [Data([UInt8(ascii: "2")])])
-    }
-
-    #if !targetEnvironment(macCatalyst)
         private func key(_ label: String) -> ToolbarKey {
             ToolbarKey(label: label, action: .sequence(label))
         }
@@ -154,15 +140,16 @@
         @MainActor
         @Test func cancelledCatalystSelectionPanEndsHandleDragAndNextPanStartsFresh() {
             for state in [UIGestureRecognizer.State.cancelled, .failed] {
-                let coordinator = SSHTerminalView.Coordinator(bridge: TerminalBridge())
                 let view = makeTerminal()
-                view.feed(text: "hello world\r\n")
-                view.startPointerSelection(at: CGPoint(x: 1, y: 1))
-                view.extendPointerSelection(to: CGPoint(x: 60, y: 1))
-                #expect(view.grabSelectionHandle(at: CGPoint(x: 1, y: 1), slop: 10_000))
+                let coordinator = gestures(view, TerminalBridge())
+                view.feed(Data("hello world\r\n".utf8))
+                let start = cellPoint(view, col: 0, row: 0)
+                view.startPointerSelection(at: start)
+                view.extendPointerSelection(to: cellPoint(view, col: 6, row: 0))
+                #expect(view.grabSelectionHandle(at: start, slop: 10_000))
                 let pan = PointerPan()
                 view.addGestureRecognizer(pan)
-                pan.point = CGPoint(x: 1, y: 1)
+                pan.point = start
                 pan.forced = .began
                 coordinator.handleSelectionPan(pan)
                 #expect(view.selectionHandleDragActive)
@@ -179,6 +166,7 @@
             }
         }
     #endif
+
     #if !targetEnvironment(macCatalyst)
         private final class EndedTap: UITapGestureRecognizer {
             var point = CGPoint.zero
@@ -190,31 +178,28 @@
         }
 
         @MainActor
-        private func windowedTerminal() -> (BottomAnchoredTerminalView, UIWindow) {
-            let view = BottomAnchoredTerminalView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
-            view.getTerminal().resize(cols: 40, rows: 10)
+        private func windowedTerminal() -> (GhosttyTerminalView, UIWindow) {
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+            let view = makeTerminal()
             window.addSubview(view)
             window.makeKeyAndVisible()
             return (view, window)
         }
 
         @MainActor
-        @Test func mouseReportingTapSendsClickWithoutRaisingKeyboard() async throws {
+        @Test func mouseReportingTapSendsClickWithoutRaisingKeyboard() {
             let bridge = TerminalBridge()
             var sent: [Data] = []
             bridge.sendToHost = { sent.append($0) }
-            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
             let (view, window) = windowedTerminal()
-            view.terminalDelegate = coordinator
-            view.feed(text: "\u{1b}[?1000h\u{1b}[?1006h")
+            let coordinator = gestures(view, bridge)
+            view.feed(Data("\u{1b}[?1000h\u{1b}[?1006h".utf8))
             #expect(!view.isFirstResponder)
             let tap = EndedTap()
-            tap.point = CGPoint(x: 10, y: 285)
+            tap.point = cellPoint(view, col: 0, row: view.terminalRows - 1)
             #expect(!view.tapRaisesKeyboard(at: tap.point))
             view.addGestureRecognizer(tap)
-            coordinator.handleMouseTap(tap)
-            try await Task.sleep(for: .milliseconds(200))
+            coordinator.handleTap(tap)
             #expect(!view.isFirstResponder)
             #expect(!sent.isEmpty)
             withExtendedLifetime(window) {}
@@ -222,14 +207,12 @@
 
         @MainActor
         @Test func plainShellTapRaisesKeyboard() {
-            let bridge = TerminalBridge()
-            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
             let (view, window) = windowedTerminal()
-            view.terminalDelegate = coordinator
+            let coordinator = gestures(view, TerminalBridge())
             #expect(view.tapRaisesKeyboard(at: .zero))
             let tap = EndedTap()
             view.addGestureRecognizer(tap)
-            coordinator.handleMouseTap(tap)
+            coordinator.handleTap(tap)
             #expect(view.isFirstResponder)
             withExtendedLifetime(window) {}
         }
@@ -237,9 +220,9 @@
         @MainActor
         @Test func mouseReportingTapKeepsKeyboardWhenAlreadyUp() {
             let (view, window) = windowedTerminal()
-            view.feed(text: "\u{1b}[?1000h")
+            view.feed(Data("\u{1b}[?1000h".utf8))
             #expect(view.becomeFirstResponder())
-            #expect(view.tapRaisesKeyboard(at: CGPoint(x: 10, y: 285)))
+            #expect(view.tapRaisesKeyboard(at: cellPoint(view, col: 0, row: view.terminalRows - 1)))
             withExtendedLifetime(window) {}
         }
 
@@ -261,27 +244,23 @@
             bridge.selectMode = true
             var sent = ""
             bridge.sendToHost = { sent += String(decoding: $0, as: UTF8.self) }
-            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
             let view = makeTerminal()
-            view.terminalDelegate = coordinator
+            let coordinator = gestures(view, bridge)
             view.multiplexerMode = true
-            view.feed(text: "\u{1b}[?1002h\u{1b}[?1006h")
+            view.feed(Data("\u{1b}[?1002h\u{1b}[?1006h".utf8))
             let pan = ScriptedPan()
             view.addGestureRecognizer(pan)
             pan.point = CGPoint(x: 55, y: 45)
             pan.moved = CGPoint(x: 20, y: 0)
             pan.forced = .began
-            coordinator.handleScrollPanOnMain(pan)
+            coordinator.handleScrollPan(pan)
             pan.point = CGPoint(x: 205, y: 105)
             pan.forced = .changed
-            coordinator.handleScrollPanOnMain(pan)
+            coordinator.handleScrollPan(pan)
             pan.forced = .ended
-            coordinator.handleScrollPanOnMain(pan)
-            let terminal = view.getTerminal()
+            coordinator.handleScrollPan(pan)
             func sgr(_ x: CGFloat, _ y: CGFloat) -> String {
-                let cell = TerminalCell.at(
-                    CGPoint(x: x, y: y), contentOffset: view.contentOffset, viewport: view.bounds.size,
-                    rows: terminal.rows, cols: terminal.cols)
+                let cell = view.cell(at: CGPoint(x: x, y: y))
                 return "\(cell.col + 1);\(cell.row + 1)"
             }
             #expect(sgr(35, 45) != sgr(205, 105))
@@ -298,8 +277,8 @@
             let bridge = TerminalBridge()
             var sent: [Data] = []
             bridge.sendToHost = { sent.append($0) }
-            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
             let view = makeTerminal()
+            let coordinator = gestures(view, bridge)
             view.multiplexerMode = true
             let swipe = UISwipeGestureRecognizer()
             swipe.direction = .left
@@ -308,8 +287,8 @@
             coordinator.handleWindowSwipe(swipe)
             #expect(sent.isEmpty)
             bridge.selectMode = false
-            view.feed(text: "hello world\r\n")
-            view.selectWord(at: CGPoint(x: 1, y: 1))
+            view.feed(Data("hello world\r\n".utf8))
+            view.selectWord(at: cellPoint(view, col: 0, row: 0))
             #expect(view.selectionActive)
             coordinator.handleWindowSwipe(swipe)
             #expect(sent.isEmpty)
@@ -319,21 +298,20 @@
         }
 
         @MainActor
-        @Test func mouseReportingTapOnInputLineRaisesKeyboard() async throws {
+        @Test func mouseReportingTapOnInputLineRaisesKeyboard() {
             let bridge = TerminalBridge()
             var sent: [Data] = []
             bridge.sendToHost = { sent.append($0) }
-            let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
             let (view, window) = windowedTerminal()
-            view.terminalDelegate = coordinator
-            view.feed(text: "\u{1b}[?1000h\u{1b}[?1006h\u{1b}[9;3H")
+            let coordinator = gestures(view, bridge)
+            let rows = view.terminalRows
+            view.feed(Data("\u{1b}[?1000h\u{1b}[?1006h\u{1b}[\(rows - 1);3H".utf8))
             let tap = EndedTap()
-            tap.point = CGPoint(x: 10, y: 285)
+            tap.point = cellPoint(view, col: 0, row: rows - 1)
             #expect(view.tapRaisesKeyboard(at: tap.point))
-            #expect(!view.tapRaisesKeyboard(at: CGPoint(x: 10, y: 15)))
+            #expect(!view.tapRaisesKeyboard(at: cellPoint(view, col: 0, row: 0)))
             view.addGestureRecognizer(tap)
-            coordinator.handleMouseTap(tap)
-            try await Task.sleep(for: .milliseconds(200))
+            coordinator.handleTap(tap)
             #expect(view.isFirstResponder)
             #expect(!sent.isEmpty)
             withExtendedLifetime(window) {}
@@ -355,45 +333,4 @@
             withExtendedLifetime(window) {}
         }
     #endif
-
-    @MainActor
-    @Test func halfPageScrollSendsWheelStepsAtCenterCellWhenMouseReporting() {
-        let bridge = TerminalBridge()
-        var sent = ""
-        bridge.sendToHost = { sent += String(decoding: $0, as: UTF8.self) }
-        let coordinator = SSHTerminalView.Coordinator(bridge: bridge)
-        let view = makeTerminal()
-        view.getTerminal().resize(cols: 40, rows: 24)
-        view.terminalDelegate = coordinator
-        bridge.view = view
-        view.feed(text: "\u{1b}[?1000h\u{1b}[?1006h")
-        bridge.scrollHalfPage(up: true)
-        #expect(sent == String(repeating: "\u{1b}[<64;21;13M", count: 4))
-        sent = ""
-        bridge.scrollHalfPage(up: false)
-        #expect(sent == String(repeating: "\u{1b}[<65;21;13M", count: 4))
-        view.getTerminal().resize(cols: 40, rows: 5)
-        sent = ""
-        bridge.scrollHalfPage(up: true)
-        #expect(sent == "\u{1b}[<64;21;3M")
-    }
-
-    @MainActor
-    @Test func halfPageScrollMovesLocalScrollbackWithoutMouseReporting() {
-        let bridge = TerminalBridge()
-        var sent: [Data] = []
-        bridge.sendToHost = { sent.append($0) }
-        let view = makeTerminal()
-        let terminal = view.getTerminal()
-        terminal.resize(cols: 40, rows: 10)
-        bridge.view = view
-        view.feed(text: (0..<60).map { "line \($0)" }.joined(separator: "\r\n"))
-        let bottom = terminal.getTopVisibleRow()
-        #expect(bottom == 50)
-        bridge.scrollHalfPage(up: true)
-        #expect(terminal.getTopVisibleRow() == bottom - 5)
-        bridge.scrollHalfPage(up: false)
-        #expect(terminal.getTopVisibleRow() == bottom)
-        #expect(sent.isEmpty)
-    }
 #endif

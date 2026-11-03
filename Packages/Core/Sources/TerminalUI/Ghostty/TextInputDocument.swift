@@ -31,9 +31,20 @@ struct TextInputDocument: Equatable {
         storage.replaceSubrange(lower..<upper, with: text)
     }
 
+    private func boundary(_ offset: Int, roundingUp: Bool) -> Int {
+        var position = 0
+        for character in storage {
+            let next = position + character.utf16.count
+            if next > offset { return roundingUp && position < offset ? next : position }
+            position = next
+        }
+        return position
+    }
+
     private func clamp(_ range: Range<Int>) -> Range<Int> {
-        let lower = min(max(0, range.lowerBound), length)
-        return lower..<min(max(lower, range.upperBound), length)
+        let lower = boundary(max(0, range.lowerBound), roundingUp: false)
+        guard !range.isEmpty else { return lower..<lower }
+        return lower..<max(lower, boundary(range.upperBound, roundingUp: true))
     }
 
     mutating func insert(_ text: String) -> [Output] {
@@ -72,14 +83,8 @@ struct TextInputDocument: Equatable {
         if !range.isEmpty {
             return replace(range, with: "")
         }
-        if range.lowerBound > 0 {
-            let before = substring(0..<range.lowerBound)
-            let last = String(before.last!)
-            let start = range.lowerBound - last.utf16.count
-            replaceStorage(start..<range.lowerBound, with: "")
-            selected = start..<start
-        }
-        return [.backspaces(1)]
+        guard let last = substring(0..<range.lowerBound).last else { return [.backspaces(1)] }
+        return replace((range.lowerBound - last.utf16.count)..<range.lowerBound, with: "")
     }
 
     mutating func replace(_ range: Range<Int>, with text: String) -> [Output] {

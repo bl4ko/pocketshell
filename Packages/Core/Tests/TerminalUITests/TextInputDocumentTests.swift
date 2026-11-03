@@ -103,4 +103,22 @@ struct SplitPaneTests {
         )
         #expect(terminal.selectionText() == "ab\nef")
     }
+
+    @Test func caretInsideASurrogatePairSnapsToTheCharacter() {
+        var document = TextInputDocument()
+        _ = document.insert("a😀")
+        document.select(2..<2)
+        #expect(document.selected == 1..<1)
+        #expect(document.deleteBackward() == [.backspaces(2), .text("😀")])
+        #expect(document.storage == "😀")
+    }
+
+    @Test func deleteBeforeAMovedCaretRetypesTheTail() {
+        var document = TextInputDocument()
+        _ = document.insert("abc")
+        document.select(1..<1)
+        #expect(document.deleteBackward() == [.backspaces(3), .text("bc")])
+        #expect(document.storage == "bc")
+        #expect(document.selected == 0..<0)
+    }
 }

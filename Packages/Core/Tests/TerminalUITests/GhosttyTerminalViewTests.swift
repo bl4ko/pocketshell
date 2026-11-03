@@ -106,6 +106,22 @@
             #expect(!view.selectionActive)
         }
 
+        @Test func findSelectsTheMatchAfterWideCharacters() {
+            let view = makeGhostty()
+            view.feed(Data("日本 foo 漢字".utf8))
+            #expect(view.find("FOO", forward: true))
+            #expect(view.selectedText() == "foo")
+            #expect(view.find("漢字", forward: true))
+            #expect(view.selectedText() == "漢字")
+        }
+
+        @Test func linkTapAfterWideCharactersResolvesTheURL() {
+            let view = makeGhostty()
+            let gestures = GhosttyGestureCoordinator(bridge: TerminalBridge(), view: view)
+            view.feed(Data("漢字 https://example.com/abc".utf8))
+            #expect(gestures.openLink(at: point(view, col: 27, row: 0)))
+        }
+
         @Test func scrollingUpdatesAccessibilityPosition() {
             let view = makeGhostty()
             view.feed(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))

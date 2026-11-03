@@ -515,27 +515,28 @@
         // MARK: - Find
 
         func find(_ term: String, forward: Bool) -> Bool {
-            let needle = term.lowercased()
+            let needle = term.lowercased().map { String($0) }
             guard !needle.isEmpty else { return false }
             let total = terminal.scrollbar.total
             guard total > 0 else { return false }
             let origin = findMatch?.start ?? VTPoint(col: forward ? -1 : terminal.cols, row: forward ? 0 : total - 1)
             var row = origin.row
             for step in 0..<total {
-                let text = Array(terminal.lineText(row: row, tag: .screen).lowercased())
-                var columns: [Int] = []
-                if text.count >= needle.count {
-                    for index in 0...(text.count - needle.count)
-                    where String(text[index..<index + needle.count]) == needle {
-                        columns.append(index)
+                let cells = terminal.lineCells(row: row, tag: .screen)
+                var matches: [(start: Int, end: Int)] = []
+                if cells.count >= needle.count {
+                    for index in 0...(cells.count - needle.count)
+                    where (0..<needle.count).allSatisfy({ cells[index + $0].text.lowercased() == needle[$0] }) {
+                        let last = cells[index + needle.count - 1]
+                        matches.append((cells[index].col, last.col + (last.wide ? 1 : 0)))
                     }
                 }
                 let candidates =
                     step == 0
-                    ? columns.filter { forward ? $0 > origin.col : $0 < origin.col } : columns
-                if let col = forward ? candidates.first : candidates.last {
+                    ? matches.filter { forward ? $0.start > origin.col : $0.start < origin.col } : matches
+                if let found = forward ? candidates.first : candidates.last {
                     let match = VTSelection(
-                        start: VTPoint(col: col, row: row), end: VTPoint(col: col + needle.count - 1, row: row))
+                        start: VTPoint(col: found.start, row: row), end: VTPoint(col: found.end, row: row))
                     findMatch = match
                     terminal.select(match)
                     let viewportTop = terminal.scrollbar.offset

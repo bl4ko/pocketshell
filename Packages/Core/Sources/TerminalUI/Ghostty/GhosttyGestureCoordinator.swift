@@ -142,7 +142,9 @@
             guard let view else { return false }
             let (row, col) = view.cell(at: location)
             let lines = view.terminal.lines(tag: .viewport, trimRight: false)
-            guard let link = TerminalURL.find(lines: lines, wrapped: view.wrappedRows(), row: row, column: col),
+            let offset = view.terminal.lineCells(row: row, tag: .viewport).lastIndex { $0.col <= col } ?? col
+            guard
+                let link = TerminalURL.find(lines: lines, wrapped: view.wrappedRows(), row: row, column: offset),
                 let url = URL(string: link)
             else { return false }
             presentLinkMenu(for: url, at: location)

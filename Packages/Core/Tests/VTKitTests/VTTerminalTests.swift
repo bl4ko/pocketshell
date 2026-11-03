@@ -27,6 +27,15 @@ struct VTTerminalStateTests {
         #expect(Array(terminal.lines()[0].unicodeScalars) == Array(text.unicodeScalars))
     }
 
+    @Test func lineCellsCarryTheirColumns() {
+        let terminal = VTTerminal(cols: 6, rows: 1)
+        terminal.feed("a漢b")
+        let cells = terminal.lineCells(row: 0).prefix(3)
+        #expect(cells.map(\.text) == ["a", "漢", "b"])
+        #expect(cells.map(\.col) == [0, 1, 3])
+        #expect(cells.map(\.wide) == [false, true, false])
+    }
+
     @Test func wideCharactersReadOnce() {
         let terminal = VTTerminal(cols: 10, rows: 2)
         terminal.feed("a漢b")

@@ -366,8 +366,23 @@ extension VTTerminal {
     }
 
     public func lineText(row: Int, tag: VTCoordinateSpace = .active) -> String {
-        guard var ref = gridRef(VTPoint(col: 0, row: row), tag: tag.ghostty) else { return "" }
         var scalars = String.UnicodeScalarView()
+        forEachCell(row: row, tag: tag) { _, _, cell in scalars.append(contentsOf: cell) }
+        return String(scalars)
+    }
+
+    public func lineCells(row: Int, tag: VTCoordinateSpace = .active) -> [VTLineCell] {
+        var cells: [VTLineCell] = []
+        forEachCell(row: row, tag: tag) { col, wide, scalars in
+            cells.append(VTLineCell(text: String(scalars), col: col, wide: wide))
+        }
+        return cells
+    }
+
+    private func forEachCell(
+        row: Int, tag: VTCoordinateSpace, _ body: (Int, Bool, String.UnicodeScalarView) -> Void
+    ) {
+        guard var ref = gridRef(VTPoint(col: 0, row: row), tag: tag.ghostty) else { return }
         var buffer = [UInt32](repeating: 0, count: 16)
         for col in 0..<cols {
             ref.x = UInt16(col)
@@ -386,15 +401,16 @@ extension VTTerminal {
                     ghostty_grid_ref_graphemes(&ref, $0.baseAddress, $0.count, &length)
                 }
             }
-            if result != GHOSTTY_SUCCESS || length == 0 || buffer[0] == 0 {
+            var scalars = String.UnicodeScalarView()
+            if result == GHOSTTY_SUCCESS, length > 0, buffer[0] != 0 {
+                for value in buffer.prefix(length) {
+                    if let scalar = Unicode.Scalar(value) { scalars.append(scalar) }
+                }
+            } else {
                 scalars.append(" ")
-                continue
             }
-            for value in buffer.prefix(length) {
-                if let scalar = Unicode.Scalar(value) { scalars.append(scalar) }
-            }
+            body(col, wide == GHOSTTY_CELL_WIDE_WIDE, scalars)
         }
-        return String(scalars)
     }
 
     public func lineWrapped(row: Int, tag: VTCoordinateSpace = .active) -> Bool {
@@ -427,6 +443,12 @@ extension VTTerminal {
     public func visibleText() -> String {
         lines().joined(separator: "\n")
     }
+}
+
+public struct VTLineCell: Equatable, Sendable {
+    public var text: String
+    public var col: Int
+    public var wide: Bool
 }
 
 public enum VTCoordinateSpace: Sendable {

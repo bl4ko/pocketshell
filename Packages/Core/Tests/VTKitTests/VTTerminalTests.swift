@@ -213,3 +213,41 @@ struct VTEncoderTests {
         #expect(VTKey(hidUsage: 0x02) == nil)
     }
 }
+
+struct VTWrapTests {
+    @Test func softWrappedRowsReportContinuation() {
+        let terminal = VTTerminal(cols: 5, rows: 3)
+        terminal.feed("abcdefgh\r\nxy")
+        #expect(terminal.lineWrapped(row: 0))
+        #expect(!terminal.lineIsContinuation(row: 0))
+        #expect(terminal.lineIsContinuation(row: 1))
+        #expect(!terminal.lineIsContinuation(row: 2))
+    }
+}
+
+struct VTDirtyTests {
+    @Test func selectionChangesMarkRowsDirty() {
+        let terminal = VTTerminal(cols: 20, rows: 3)
+        terminal.feed("hello\r\nworld")
+        terminal.updateScreen()
+        _ = terminal.screen.takeDirtyRows()
+        terminal.select(VTSelection(start: VTPoint(col: 0, row: 1), end: VTPoint(col: 2, row: 1)))
+        #expect(terminal.updateScreen())
+        #expect(terminal.screen.takeDirtyRows().contains(1))
+        #expect(terminal.screen.selection[1] == 0...2)
+        terminal.clearSelection()
+        #expect(terminal.updateScreen())
+        #expect(terminal.screen.selection[1] == nil)
+    }
+
+    @Test func scrollingRedrawsTheViewport() {
+        let terminal = VTTerminal(cols: 10, rows: 3)
+        terminal.feed((1...10).map { "l\($0)" }.joined(separator: "\r\n"))
+        terminal.updateScreen()
+        _ = terminal.screen.takeDirtyRows()
+        terminal.scroll(by: -3)
+        #expect(terminal.updateScreen())
+        #expect(terminal.screen.takeDirtyRows().count == 3)
+        #expect(terminal.screen.line(0).hasPrefix("l5"))
+    }
+}

@@ -1,5 +1,6 @@
 import Models
 import SwiftUI
+import TerminalUI
 import UniformTypeIdentifiers
 
 enum AppSettings {
@@ -43,6 +44,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.iCloudSyncKey) private var iCloudSync = false
     @AppStorage(AppSettings.iCloudCredentialsSyncKey) private var iCloudCredentialsSync = false
     @AppStorage(AppSettings.developerModeKey) private var developerMode = false
+    @AppStorage(TerminalEngine.defaultsKey) private var terminalEngine = TerminalEngine.ghostty.rawValue
     @StateObject private var pushRelay = PushRelayClient.shared
     @State private var pushRelayURL = UserDefaults.standard.string(forKey: AppSettings.pushRelayURLKey) ?? ""
     @State private var pushPairingSecret = ""
@@ -170,11 +172,19 @@ struct SettingsView: View {
             }
             Section {
                 Toggle("Developer Mode", isOn: $developerMode)
+                if developerMode {
+                    Picker("Terminal Engine", selection: $terminalEngine) {
+                        ForEach(TerminalEngine.allCases, id: \.rawValue) { engine in
+                            Text(engine.title).tag(engine.rawValue)
+                        }
+                    }
+                    .accessibilityIdentifier("settings.terminalEngine")
+                }
             } header: {
                 Text("Diagnostics")
             } footer: {
                 Text(
-                    "Adds Copy Debug Report to the terminal menu. Reports include session and window names, but never credentials or terminal contents."
+                    "Adds Copy Debug Report to the terminal menu and the terminal engine choice, which applies to terminals opened afterwards. Reports include session and window names, but never credentials or terminal contents."
                 )
             }
         }

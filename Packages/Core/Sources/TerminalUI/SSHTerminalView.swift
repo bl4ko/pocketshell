@@ -72,7 +72,17 @@
     }
 
     final class TerminalViewController: UIViewController {
-        let terminalView = BottomAnchoredTerminalView()
+        let terminalView: any TerminalEngineView
+
+        init(engine: TerminalEngine = .current) {
+            terminalView = engine == .ghostty ? GhosttyTerminalView() : BottomAnchoredTerminalView()
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("not used from a storyboard")
+        }
         var sendControl: ((Character) -> Void)?
         var sendEscape: (() -> Void)?
         var sendBytes: ((Data) -> Void)?
@@ -99,7 +109,7 @@
             }
 
             @objc private func keyboardDidChangeFrame(_ note: Notification) {
-                guard terminalView.inputView == nil, terminalView.isFirstResponder,
+                guard terminalView.engineInputView == nil, terminalView.isFirstResponder,
                     let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
                     let screen = view.window?.windowScene?.screen, frame.minY < screen.bounds.maxY,
                     frame.height > 150  // ponytail: skips the hardware-keyboard bar
@@ -116,12 +126,12 @@
                     renderShortcuts(bridge: bridge, keys: keys, theme: theme)
                 }
                 let input: UIView? = bridge.shortcutsActive ? shortcutInput : nil
-                if terminalView.inputView !== input {
+                if terminalView.engineInputView !== input {
                     // UIKit posts no show for the keyboard replacing a same-height panel, only the panel's hide.
                     let hold = input == nil && terminalView.isFirstResponder ? Self.typingKeyboardHeight : nil
                     if bridge.keyboardHold != hold { bridge.keyboardHold = hold }
                     shortcutInput.frame.size.height = Self.typingKeyboardHeight
-                    terminalView.inputView = input
+                    terminalView.engineInputView = input
                     terminalView.reloadInputViews()
                 }
             }
@@ -224,7 +234,7 @@
 
             @objc private func handleCopy() {
                 guard terminalView.selectionActive else { return }
-                terminalView.copy(nil)
+                terminalView.copySelectionToPasteboard()
             }
 
             @objc private func handlePaste() {
@@ -250,7 +260,7 @@
                 case UIKeyCommand.inputLeftArrow: letter = "D"
                 default: return
                 }
-                let prefix = terminalView.getTerminal().applicationCursor ? "\u{1b}O" : "\u{1b}["
+                let prefix = terminalView.applicationCursorKeys ? "\u{1b}O" : "\u{1b}["
                 sendBytes?(Data((prefix + letter).utf8))
             }
         #endif
@@ -258,10 +268,10 @@
 
     public struct SSHTerminalView: UIViewControllerRepresentable {
         @ObservedObject private var bridge: TerminalBridge
-        private let theme: TerminalTheme
-        private let scale: Double
-        private let multiplexerMode: Bool
-        private let shortcutKeys: [ToolbarKey]
+        let theme: TerminalTheme
+        let scale: Double
+        let multiplexerMode: Bool
+        let shortcutKeys: [ToolbarKey]
 
         public init(
             bridge: TerminalBridge,
@@ -313,7 +323,10 @@
 
         public func makeUIViewController(context: Context) -> UIViewController {
             let controller = TerminalViewController()
-            let view = controller.terminalView
+            if let ghostty = controller.terminalView as? GhosttyTerminalView {
+                return makeGhostty(controller: controller, view: ghostty, context: context)
+            }
+            let view = controller.terminalView as! BottomAnchoredTerminalView
             view.accessibilityIdentifier = "terminal.view"
             view.terminalDelegate = context.coordinator
             view.allowMouseReporting = false
@@ -441,8 +454,8 @@
         }
 
         public func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-            guard let uiView = (uiViewController as? TerminalViewController)?.terminalView else { return }
-            uiView.multiplexerMode = multiplexerMode
+            guard let engineView = (uiViewController as? TerminalViewController)?.terminalView else { return }
+            engineView.multiplexerMode = multiplexerMode
             bridge.setTheme(theme)
             #if !targetEnvironment(macCatalyst)
                 if let controller = uiViewController as? TerminalViewController {
@@ -454,6 +467,11 @@
                 }
             #endif
             guard context.coordinator.scale != scale else { return }
+            if let ghostty = engineView as? GhosttyTerminalView {
+                updateGhosttyScale(ghostty, context: context)
+                return
+            }
+            guard let uiView = engineView as? BottomAnchoredTerminalView else { return }
             let saved = UserDefaults.standard.double(forKey: Coordinator.fontSizeKey)
             let base =
                 FontZoom.range.contains(saved)
@@ -485,10 +503,11 @@
         }
 
         public final class Coordinator: NSObject, TerminalViewDelegate, @unchecked Sendable {
-            private let bridge: TerminalBridge
+            let bridge: TerminalBridge
             private var scrollTracker = PanScrollTracker(step: 1)
             var gestureDelegate: SimultaneousGestureDelegate?
             var nativeTapGate: NativeTapGate?
+            var ghostty: GhosttyGestureCoordinator?
             #if !targetEnvironment(macCatalyst)
                 var cursorGesture: CursorGestureController?
             #endif

@@ -85,7 +85,7 @@ let package = Package(
         .testTarget(name: "GitKitTests", dependencies: ["GitKit"], swiftSettings: strict),
         .testTarget(name: "VoiceKitTests", dependencies: ["VoiceKit"], swiftSettings: strict),
         .testTarget(
-            name: "VTKitTests", dependencies: ["VTKit"], resources: [.copy("Resources")], swiftSettings: strict),
+            name: "VTKitTests", dependencies: ["VTKit"], resources: [.copy("Fixtures")], swiftSettings: strict),
         .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"], swiftSettings: strict),
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"], swiftSettings: strict),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"], swiftSettings: strict),

@@ -19,8 +19,8 @@
     }
 
     @MainActor
-    private func makeTerminal(rows: Int = 10) -> TerminalView {
-        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+    private func makeTerminal(rows: Int = 10) -> BottomAnchoredTerminalView {
+        let view = BottomAnchoredTerminalView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
         view.getTerminal().resize(cols: 40, rows: rows)
         view.layoutIfNeeded()
         return view

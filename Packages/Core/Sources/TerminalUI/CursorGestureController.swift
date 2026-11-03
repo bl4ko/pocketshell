@@ -1,10 +1,10 @@
 #if os(iOS) && !targetEnvironment(macCatalyst)
-    import SwiftTerm
+
     import UIKit
 
     @MainActor
     final class CursorGestureController: NSObject, UIGestureRecognizerDelegate {
-        private weak var view: TerminalView?
+        private weak var view: (any TerminalEngineView)?
         private let bridge: TerminalBridge
         private let onStationaryPress: (CGPoint) -> Void
         private var origin = CGPoint.zero
@@ -16,7 +16,7 @@
         private let indicator = UILabel()
         let press: UILongPressGestureRecognizer
 
-        init(view: TerminalView, bridge: TerminalBridge, onStationaryPress: @escaping (CGPoint) -> Void) {
+        init(view: any TerminalEngineView, bridge: TerminalBridge, onStationaryPress: @escaping (CGPoint) -> Void) {
             self.view = view
             self.bridge = bridge
             self.onStationaryPress = onStationaryPress
@@ -59,7 +59,7 @@
                 selecting = bridge.selectMode || view.selectionActive
                 bridge.userInteracted?()
                 if selecting {
-                    if !view.grabSelectionHandle(at: point) { view.selectWord(at: point) }
+                    if !view.grabSelectionHandle(at: point, slop: 30) { view.selectWord(at: point) }
                     return
                 }
                 indicator.frame = CGRect(x: view.bounds.minX + 12, y: view.bounds.minY + 12, width: 104, height: 52)

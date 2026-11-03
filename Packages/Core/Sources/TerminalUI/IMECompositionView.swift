@@ -31,17 +31,25 @@
         }
 
         func update(text: String, clause: NSRange, in view: TerminalView) {
+            update(
+                text: text, clause: clause, font: view.font, foreground: view.nativeForegroundColor,
+                background: view.nativeBackgroundColor, caret: view.caretFrame, visible: view.bounds)
+        }
+
+        func update(
+            text: String, clause: NSRange, font: UIFont, foreground: UIColor, background: UIColor, caret: CGRect,
+            visible: CGRect
+        ) {
             accessibilityValue = text
             guard !text.isEmpty else {
                 isHidden = true
                 label.attributedText = nil
                 return
             }
-            let foreground = view.nativeForegroundColor
             let attributed = NSMutableAttributedString(
                 string: text,
                 attributes: [
-                    .font: view.font,
+                    .font: font,
                     .foregroundColor: foreground,
                     .underlineStyle: NSUnderlineStyle.single.rawValue,
                     .underlineColor: foreground,
@@ -56,14 +64,14 @@
             label.attributedText = attributed
             let size = attributed.size()
             frame = IMECompositionLayout.frame(
-                caret: view.caretFrame,
+                caret: caret,
                 textWidth: ceil(size.width),
                 textHeight: ceil(size.height),
-                visible: view.bounds
+                visible: visible
             )
             label.frame = bounds
             // Opaque, so the glyphs the composition sits on top of do not show through.
-            backgroundColor = view.nativeBackgroundColor
+            backgroundColor = background
             isHidden = false
         }
     }

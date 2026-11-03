@@ -1,7 +1,6 @@
 #if os(iOS)
     import Foundation
     import Models
-    import SwiftTerm
     import ToolbarUI
     import UIKit
 
@@ -25,7 +24,7 @@
         public var imagePaste: ((Data) -> Void)?
         public var userInteracted: (() -> Void)?
         public var userSentInput: (() -> Void)?
-        weak var view: TerminalView? {
+        weak var view: (any TerminalEngineView)? {
             didSet { suspendRendering(!gate.isLive) }
         }
         private var theme: TerminalTheme?
@@ -88,9 +87,9 @@
             Self.bytesFed += out.count
             feedingView = true
             defer { feedingView = false }
-            view.feed(byteArray: [UInt8](out)[...])
-            if let theme, !SSHTerminalView.isApplied(theme, to: view) {
-                SSHTerminalView.apply(theme, to: view)
+            view.feedEngine(out)
+            if let theme {
+                view.applyEngineTheme(theme)
             }
             schedulePromptCheck()
         }
@@ -103,14 +102,8 @@
                     try? await Task.sleep(for: .milliseconds(150))
                     guard !Task.isCancelled, let self else { return }
                     self.promptTask = nil
-                    guard self.gate.isLive, let view = self.view,
-                        !view.canScroll || view.scrollPosition == 1
-                    else { return }
-                    let terminal = view.getTerminal()
-                    let lines = (0..<terminal.rows).compactMap {
-                        terminal.getLine(row: $0)?.translateToString(trimRight: true)
-                            .replacingOccurrences(of: "\u{0}", with: " ")
-                    }
+                    guard self.gate.isLive, let view = self.view, view.scrolledToBottom else { return }
+                    let lines = view.screenLines()
                     let transition = self.arrowPrompt.update(lines: lines)
                     if self.arrowPrompt.needsRecheck { self.schedulePromptCheck() }
                     guard let visible = transition else { return }
@@ -134,40 +127,35 @@
 
         func setTheme(_ theme: TerminalTheme) {
             self.theme = theme
-            guard let view, !SSHTerminalView.isApplied(theme, to: view) else { return }
-            SSHTerminalView.apply(theme, to: view)
+            view?.applyEngineTheme(theme)
         }
 
         public var isFullScreenApp: Bool {
-            view?.getTerminal().isCurrentBufferAlternate ?? false
+            view?.isAlternateScreen ?? false
         }
 
         public func visibleText() -> String {
             flushTask?.cancel()
             flushPending()
-            guard let terminal = view?.getTerminal() else { return "" }
-            return (0..<terminal.rows)
-                .compactMap { terminal.getLine(row: $0)?.translateToString(trimRight: true) }
-                .joined(separator: "\n")
-                .replacingOccurrences(of: "\u{0}", with: " ")
+            return view?.screenLines().joined(separator: "\n") ?? ""
         }
 
         public func paste() {
-            view?.paste(nil)
+            view?.pasteFromClipboard()
         }
 
         /// Sends a prompt composed outside the terminal into the live session.
         public func sendComposed(_ text: String) {
             let payload = ComposerMessage.payload(
                 text,
-                bracketedPaste: view?.getTerminal().bracketedPasteMode == true
+                bracketedPaste: view?.bracketedPasteMode == true
             )
             guard !payload.isEmpty else { return }
             processOutgoing(Data(payload.utf8))
         }
 
         public func sendPasted(_ text: String) {
-            guard view?.getTerminal().bracketedPasteMode == true else {
+            guard view?.bracketedPasteMode == true else {
                 sendToHost?(Data(text.utf8))
                 return
             }
@@ -247,34 +235,25 @@
 
         public func find(_ term: String, forward: Bool) -> Bool {
             guard let view, !term.isEmpty else { return false }
-            return forward ? view.findNext(term) : view.findPrevious(term)
+            return view.find(term, forward: forward)
         }
 
         public func clearFind() {
-            view?.clearSearch()
+            view?.clearFind()
         }
 
         public func scrollHalfPage(up: Bool) {
             guard let view else { return }
-            let terminal = view.getTerminal()
-            guard terminal.mouseMode != .off else {
-                if up {
-                    view.scrollUp(lines: max(1, terminal.rows / 2))
-                } else {
-                    view.scrollDown(lines: max(1, terminal.rows / 2))
-                }
+            guard view.mouseReportingActive else {
+                view.scrollViewport(up: up ? max(1, view.terminalRows / 2) : -max(1, view.terminalRows / 2))
                 return
             }
-            let flags = terminal.encodeButton(
-                button: up ? 4 : 5, release: false, shift: false, meta: false, control: false)
-            for _ in 0..<max(1, terminal.rows / 6) {
-                terminal.sendEvent(buttonFlags: flags, x: terminal.cols / 2, y: terminal.rows / 2)
-            }
+            view.sendWheel(up: up, count: max(1, view.terminalRows / 6))
         }
 
         public func copySelection() {
             guard let view, view.selectionActive else { return }
-            view.copy(nil)
+            view.copySelectionToPasteboard()
             view.clearSelection()
             selectMode = false
         }
@@ -342,7 +321,7 @@
                 return
             }
             if let data = ToolbarKeyEncoder.data(
-                for: action, applicationCursor: view?.getTerminal().applicationCursor == true)
+                for: action, applicationCursor: view?.applicationCursorKeys == true)
             {
                 processOutgoing(data)
             }
@@ -371,7 +350,7 @@
 
         public var currentSize: (cols: Int, rows: Int) {
             guard let view else { return (80, 24) }
-            return (view.getTerminal().cols, view.getTerminal().rows)
+            return (view.terminalCols, view.terminalRows)
         }
     }
 #endif

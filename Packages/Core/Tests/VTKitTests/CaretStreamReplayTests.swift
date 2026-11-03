@@ -74,7 +74,7 @@ struct CaretStreamReplayTests {
 
     static func capture() throws -> [UInt8] {
         let url = try #require(
-            Bundle.module.url(forResource: "busy-tui-client-stream", withExtension: "raw", subdirectory: "Resources"))
+            Bundle.module.url(forResource: "busy-tui-client-stream", withExtension: "raw", subdirectory: "Fixtures"))
         return [UInt8](try Data(contentsOf: url))
     }
 

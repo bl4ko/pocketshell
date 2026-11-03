@@ -2,6 +2,7 @@ import HerdrKit
 import Models
 import MonitorKit
 import SwiftUI
+import TerminalUI
 import TmuxKit
 import UIKit
 import UserNotifications
@@ -346,7 +347,7 @@ struct HostTabsScreen: View {
             PocketShell debug report
             app=\(version) build=\(build)
             platform=\(platform) os=\(ProcessInfo.processInfo.operatingSystemVersionString) model=\(UIDevice.current.model)
-            scene=\(String(describing: scenePhase)) tabs=\(tabs.count)
+            scene=\(String(describing: scenePhase)) tabs=\(tabs.count) engine=\(TerminalEngine.current.rawValue)
 
             [local tabs]
             \(localTabs)

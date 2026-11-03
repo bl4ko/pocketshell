@@ -392,12 +392,20 @@ extension VTTerminal {
     }
 
     public func lineWrapped(row: Int, tag: VTCoordinateSpace = .active) -> Bool {
+        rowFlag(row: row, tag: tag, GHOSTTY_ROW_DATA_WRAP)
+    }
+
+    public func lineIsContinuation(row: Int, tag: VTCoordinateSpace = .active) -> Bool {
+        rowFlag(row: row, tag: tag, GHOSTTY_ROW_DATA_WRAP_CONTINUATION)
+    }
+
+    private func rowFlag(row: Int, tag: VTCoordinateSpace, _ key: GhosttyRowData) -> Bool {
         guard var ref = gridRef(VTPoint(col: 0, row: row), tag: tag.ghostty) else { return false }
         var raw: GhosttyRow = 0
         guard ghostty_grid_ref_row(&ref, &raw) == GHOSTTY_SUCCESS else { return false }
-        var wrap = false
-        ghostty_row_get(raw, GHOSTTY_ROW_DATA_WRAP, &wrap)
-        return wrap
+        var flag = false
+        ghostty_row_get(raw, key, &flag)
+        return flag
     }
 
     public func lines(tag: VTCoordinateSpace = .active, trimRight: Bool = true) -> [String] {

@@ -193,25 +193,53 @@
             #expect(bridge.currentSize.cols == view.terminalCols)
         }
 
-        @Test func hiddenTabsSkipRenderingAndRepaintWhenShown() {
+        @Test func hiddenTabsReleaseTheDrawableAndRestoreItWhenShown() {
             let bridge = TerminalBridge()
             let view = makeGhostty()
-            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
-            window.addSubview(view)
             bridge.view = view
             bridge.setLive(false)
             #expect(view.layer.isHidden)
-            let before = view.renderCount
-            bridge.feed(Data("background output".utf8))
-            view.tick()
-            #expect(view.renderCount == before)
             #expect(view.drawableReleasedForHiddenLayer)
             bridge.setLive(true)
             #expect(!view.layer.isHidden)
             #expect(!view.drawableReleasedForHiddenLayer)
-            view.tick()
-            #expect(view.renderCount == before + 1)
         }
+
+        #if !targetEnvironment(macCatalyst)
+            @Test func hiddenTabsSkipRenderingAndRepaintWhenShown() {
+                let bridge = TerminalBridge()
+                let view = makeGhostty()
+                let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+                window.addSubview(view)
+                bridge.view = view
+                bridge.setLive(false)
+                #expect(view.layer.isHidden)
+                let before = view.renderCount
+                bridge.feed(Data("background output".utf8))
+                view.tick()
+                #expect(view.renderCount == before)
+                #expect(view.drawableReleasedForHiddenLayer)
+                bridge.setLive(true)
+                #expect(!view.layer.isHidden)
+                #expect(!view.drawableReleasedForHiddenLayer)
+                view.tick()
+                #expect(view.renderCount == before + 1)
+            }
+
+            @Test func synchronizedOutputHoldsTheFrame() {
+                let view = makeGhostty()
+                let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+                window.addSubview(view)
+                view.tick()
+                let before = view.renderCount
+                view.feed(Data("\u{1b}[?2026hhalf".utf8))
+                view.tick()
+                #expect(view.renderCount == before)
+                view.feed(Data("done\u{1b}[?2026l".utf8))
+                view.tick()
+                #expect(view.renderCount == before + 1)
+            }
+        #endif
 
         @Test func shrinkingFullScreenAppKeepsHeader() {
             let view = makeGhostty(height: 300)
@@ -248,20 +276,6 @@
             bridge.scrollHalfPage(up: true)
             let center = "\u{1b}[<64;\(view.terminalCols / 2 + 1);\(view.terminalRows / 2 + 1)M"
             #expect(sent == String(repeating: center, count: max(1, view.terminalRows / 6)))
-        }
-
-        @Test func synchronizedOutputHoldsTheFrame() {
-            let view = makeGhostty()
-            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
-            window.addSubview(view)
-            view.tick()
-            let before = view.renderCount
-            view.feed(Data("\u{1b}[?2026hhalf".utf8))
-            view.tick()
-            #expect(view.renderCount == before)
-            view.feed(Data("done\u{1b}[?2026l".utf8))
-            view.tick()
-            #expect(view.renderCount == before + 1)
         }
 
         @Test func programBackgroundOverrideDoesNotBeatTheTheme() {

@@ -964,7 +964,9 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
         let terminal = app.descendants(matching: .any)["terminal.view"].firstMatch
         XCTAssertTrue(terminal.waitForExistence(timeout: 5))
-        terminal.tap()
+        // The view centre sits on the pane corner, so a centre tap can make any pane
+        // active; tap inside the top-left pane, where the parked caret is checked.
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.25)).tap()
         sleep(2)
 
         for frame in 0..<40 {

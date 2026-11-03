@@ -184,6 +184,26 @@
             accessibilityValue = terminal.viewportAtBottom ? "bottom" : "history"
         }
 
+        override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+            guard super.point(inside: point, with: event) else { return false }
+            var ancestor = superview
+            while let current = ancestor {
+                let local = convert(point, to: current)
+                if current.clipsToBounds, !current.bounds.contains(local) { return false }
+                if let mask = current.layer.mask {
+                    let inMask = mask.convert(local, from: current.layer)
+                    if let shape = mask as? CAShapeLayer, let path = shape.path {
+                        if !path.contains(inMask) { return false }
+                    } else if !mask.bounds.contains(inMask) {
+                        return false
+                    }
+                }
+                if let maskView = current.mask, !maskView.frame.contains(local) { return false }
+                ancestor = current.superview
+            }
+            return true
+        }
+
         // MARK: - Engine surface
 
         var terminalCols: Int { terminal.cols }
@@ -206,7 +226,8 @@
 
         func feedEngine(_ data: Data) {
             terminal.feed(data)
-            caret.noteFeed(at: CACurrentMediaTime(), sawHide: terminal.tracker.sawHide)
+            caret.noteFeed(
+                at: CACurrentMediaTime(), sawHide: terminal.tracker.sawHide, sawSyncEnd: terminal.tracker.sawSyncEnd)
             if !terminal.synchronizedOutput {
                 terminal.updateScreen()
                 updateCaret()

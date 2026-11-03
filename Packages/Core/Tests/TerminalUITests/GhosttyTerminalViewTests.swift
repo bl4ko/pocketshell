@@ -286,6 +286,22 @@
             #expect(view.committedCaret.map { [$0.row, $0.col] } == [0, 0])
         }
 
+        @Test func slidContentOutsideTheMaskTakesNoTouches() {
+            let container = UIView(frame: CGRect(x: 0, y: 100, width: 400, height: 300))
+            let mask = CAShapeLayer()
+            mask.path = CGPath(rect: CGRect(x: 0, y: 0, width: 400, height: 300), transform: nil)
+            container.layer.mask = mask
+            let view = makeGhostty()
+            view.frame.origin.y = -80
+            container.addSubview(view)
+            #expect(!view.point(inside: CGPoint(x: 50, y: 40), with: nil))
+            #expect(view.point(inside: CGPoint(x: 50, y: 120), with: nil))
+            container.layer.mask = nil
+            container.clipsToBounds = true
+            #expect(!view.point(inside: CGPoint(x: 50, y: 40), with: nil))
+            #expect(view.point(inside: CGPoint(x: 50, y: 120), with: nil))
+        }
+
         @Test func keyRepeatMatchesHardwareRates() {
             let view = makeGhostty()
             #expect(view.keyRepeatDelay == 0.3)

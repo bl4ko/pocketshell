@@ -10,20 +10,25 @@ public struct CaretController: Sendable {
     public var multiplexer = false
     private var gate = CaretSettleGate()
     private var hidePending = false
+    private var frameEnded = false
     private var lastFeed: TimeInterval = 0
 
     public init() {}
 
-    public mutating func noteFeed(at time: TimeInterval, sawHide: Bool) {
+    public mutating func noteFeed(at time: TimeInterval, sawHide: Bool, sawSyncEnd: Bool = false) {
         lastFeed = time
         if multiplexer, sawHide {
             hidePending = true
+        }
+        if sawSyncEnd {
+            frameEnded = true
         }
     }
 
     public mutating func reset() {
         gate.reset()
         hidePending = false
+        frameEnded = false
     }
 
     public mutating func update(
@@ -32,7 +37,7 @@ public struct CaretController: Sendable {
     ) -> Update {
         let divider: UInt32 = 0x2502
         let redrawAnchor = col == 0 || cell == divider || previousCell == divider
-        let restoredAfterHide = hidePending && !hidden
+        let restoredAfterHide = (hidePending || frameEnded) && !hidden
         let decision = gate.evaluate(
             row: row, addressed: restoredAfterHide || (addressed && !redrawAnchor), hidden: hidden,
             lastFeed: redrawAnchor && !hidden ? now : lastFeed, now: now)
@@ -43,6 +48,7 @@ public struct CaretController: Sendable {
         case .commit:
             if restoredAfterHide {
                 hidePending = false
+                frameEnded = false
             }
             return hidden ? .hide : .show(row: row, col: col)
         case .wait(let remaining):

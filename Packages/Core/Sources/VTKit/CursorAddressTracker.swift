@@ -9,6 +9,7 @@ public struct CursorAddressTracker: Sendable {
 
     public private(set) var addressed = false
     public private(set) var sawHide = false
+    public private(set) var sawSyncEnd = false
     private var state = State.ground
     private var privateMarker = false
     private var intermediate = false
@@ -18,6 +19,7 @@ public struct CursorAddressTracker: Sendable {
 
     public mutating func beginChunk() {
         sawHide = false
+        sawSyncEnd = false
     }
 
     public mutating func scan(_ bytes: UnsafeRawBufferPointer) {
@@ -100,10 +102,12 @@ public struct CursorAddressTracker: Sendable {
 
     private mutating func dispatch(_ final: UInt8) {
         if privateMarker {
-            if !intermediate, final == 0x6c,
-                params.split(separator: 0x3b).contains(where: { Array($0) == [0x32, 0x35] })
-            {
+            let modes = params.split(separator: 0x3b).map(Array.init)
+            if !intermediate, final == 0x6c, modes.contains([0x32, 0x35]) {
                 sawHide = true
+            }
+            if !intermediate, final == 0x6c, modes.contains([0x32, 0x30, 0x32, 0x36]) {
+                sawSyncEnd = true
             }
             return
         }

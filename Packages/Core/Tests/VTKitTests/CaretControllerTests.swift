@@ -96,3 +96,34 @@ struct CaretControllerTests {
                 == .show(row: 11, col: 2))
     }
 }
+
+struct CaretSyncTests {
+    @Test func synchronizedFrameEndTrustsTheFinalPark() {
+        var caret = CaretController()
+        caret.multiplexer = true
+        _ = caret.update(row: 10, col: 41, hidden: false, addressed: true, cell: 0, previousCell: 0, now: 1)
+        caret.noteFeed(at: 1.01, sawHide: false, sawSyncEnd: true)
+        #expect(
+            caret.update(row: 0, col: 0, hidden: false, addressed: true, cell: 0, previousCell: 0, now: 1.01)
+                == .show(row: 0, col: 0))
+        caret.noteFeed(at: 1.02, sawHide: false)
+        guard
+            case .hold = caret.update(
+                row: 7, col: 0, hidden: false, addressed: false, cell: 0, previousCell: 0, now: 1.02)
+        else {
+            Issue.record("only the frame end itself is trusted")
+            return
+        }
+    }
+
+    @Test func trackerRecordsSyncEnd() {
+        var tracker = CursorAddressTracker()
+        tracker.beginChunk()
+        tracker.scan(Array("\u{1b}[?2026h\u{1b}[1;1H".utf8))
+        #expect(!tracker.sawSyncEnd)
+        tracker.scan(Array("\u{1b}[?2026l".utf8))
+        #expect(tracker.sawSyncEnd)
+        tracker.beginChunk()
+        #expect(!tracker.sawSyncEnd)
+    }
+}

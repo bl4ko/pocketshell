@@ -377,8 +377,14 @@ extension VTTerminal {
             ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide)
             if wide == GHOSTTY_CELL_WIDE_SPACER_TAIL || wide == GHOSTTY_CELL_WIDE_SPACER_HEAD { continue }
             var length = 0
-            let result = buffer.withUnsafeMutableBufferPointer {
+            var result = buffer.withUnsafeMutableBufferPointer {
                 ghostty_grid_ref_graphemes(&ref, $0.baseAddress, $0.count, &length)
+            }
+            if result == GHOSTTY_OUT_OF_SPACE, length > buffer.count {
+                buffer = [UInt32](repeating: 0, count: length)
+                result = buffer.withUnsafeMutableBufferPointer {
+                    ghostty_grid_ref_graphemes(&ref, $0.baseAddress, $0.count, &length)
+                }
             }
             if result != GHOSTTY_SUCCESS || length == 0 || buffer[0] == 0 {
                 scalars.append(" ")

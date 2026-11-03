@@ -20,6 +20,13 @@ struct VTTerminalStateTests {
         #expect(!terminal.visibleText().contains("\u{0}"))
     }
 
+    @Test func longGraphemeClustersSurviveLineText() {
+        let terminal = VTTerminal(cols: 10, rows: 2)
+        let text = "e" + String(repeating: "\u{0301}", count: 20) + "x"
+        terminal.feed(text)
+        #expect(Array(terminal.lines()[0].unicodeScalars) == Array(text.unicodeScalars))
+    }
+
     @Test func wideCharactersReadOnce() {
         let terminal = VTTerminal(cols: 10, rows: 2)
         terminal.feed("a漢b")

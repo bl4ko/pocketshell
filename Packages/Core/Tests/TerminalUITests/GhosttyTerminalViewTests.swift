@@ -250,6 +250,42 @@
             #expect(sent == String(repeating: center, count: max(1, view.terminalRows / 6)))
         }
 
+        @Test func synchronizedOutputHoldsTheFrame() {
+            let view = makeGhostty()
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+            window.addSubview(view)
+            view.tick()
+            let before = view.renderCount
+            view.feedEngine(Data("\u{1b}[?2026hhalf".utf8))
+            view.tick()
+            #expect(view.renderCount == before)
+            view.feedEngine(Data("done\u{1b}[?2026l".utf8))
+            view.tick()
+            #expect(view.renderCount == before + 1)
+        }
+
+        @Test func programBackgroundOverrideDoesNotBeatTheTheme() {
+            let view = makeGhostty()
+            view.applyEngineTheme(.pocketshell)
+            let themed = view.renderBackground
+            view.feedEngine(Data("\u{1b}]11;#000000\u{07}".utf8))
+            #expect(view.renderBackground == themed)
+            #expect(themed != VTColor(r: 0, g: 0, b: 0))
+        }
+
+        @Test func tmuxRedrawTransactionParksTheCaretAtTheFinalPosition() {
+            let view = makeGhostty()
+            view.multiplexerMode = true
+            view.feedEngine(Data("\u{1b}[5;3H".utf8))
+            #expect(view.committedCaret.map { [$0.row, $0.col] } == [4, 2])
+            view.feedEngine(Data("\u{1b}[?25l\u{1b}[10;42Hpane".utf8))
+            #expect(view.committedCaret.map { [$0.row, $0.col] } == [4, 2])
+            view.feedEngine(Data("\u{1b}[1;1H\u{1b}[?25h".utf8))
+            #expect(view.committedCaret.map { [$0.row, $0.col] } == [0, 0])
+            view.feedEngine(Data("\u{1b}[12;30Hmid-frame".utf8))
+            #expect(view.committedCaret.map { [$0.row, $0.col] } == [0, 0])
+        }
+
         @Test func keyRepeatMatchesHardwareRates() {
             let view = makeGhostty()
             #expect(view.keyRepeatDelay == 0.3)

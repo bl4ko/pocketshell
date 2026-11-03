@@ -111,10 +111,10 @@ final class TerminalRenderer {
     }
 
     private func colors(of cell: VTCell, selected: Bool, screen: VTScreen) -> (fg: VTColor, bg: VTColor?) {
-        var fg = cell.fg ?? screen.foreground
+        var fg = cell.fg ?? palette.foreground
         var bg = cell.bg
         if cell.flags.contains(.inverse) {
-            let swapped = bg ?? screen.background
+            let swapped = bg ?? palette.background
             bg = fg
             fg = swapped
         }
@@ -138,7 +138,7 @@ final class TerminalRenderer {
             let selected = selection?.contains(col) ?? false
             let (fg, bg) = colors(of: cell, selected: selected, screen: screen)
             let x = Float(col) * cw
-            if let bg, bg != screen.background || selected {
+            if let bg, bg != palette.background || selected {
                 rowBackgrounds.append(
                     RenderInstance(rect: SIMD4(x, y, cw * Float(span), ch), color: Self.color(bg)))
             }
@@ -199,7 +199,7 @@ final class TerminalRenderer {
             let span: Float = cell.flags.contains(.wide) ? 2 : 1
             let x = Float(caret.col) * cw
             let y = Float(caret.row) * ch
-            let color = Self.color(screen.cursorColor ?? palette.cursor)
+            let color = Self.color(palette.cursor)
             switch caret.style {
             case .block:
                 all.append(RenderInstance(rect: SIMD4(x, y, cw * span, ch), color: color))
@@ -209,7 +209,7 @@ final class TerminalRenderer {
                             scalars: [cell.scalar] + (cell.extra ?? []), bold: cell.flags.contains(.bold),
                             italic: cell.flags.contains(.italic), span: Int(span)))
                     if !entry.empty {
-                        let background = cell.bg ?? screen.background
+                        let background = cell.bg ?? palette.background
                         all.append(
                             RenderInstance(
                                 rect: SIMD4(x, y, Float(entry.width), Float(entry.height)),

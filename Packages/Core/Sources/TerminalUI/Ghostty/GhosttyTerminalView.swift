@@ -38,6 +38,8 @@
         private var renderPending = false
         private var caret = CaretController()
         private var caretPaint: CaretPaint?
+        var committedCaret: CaretPaint? { caretPaint }
+        var renderBackground: VTColor { palette.background }
         private var caretTimer: Timer?
         private var previousSize = CGSize.zero
         private var resizeCount = 0
@@ -205,6 +207,10 @@
         func feedEngine(_ data: Data) {
             terminal.feed(data)
             caret.noteFeed(at: CACurrentMediaTime(), sawHide: terminal.tracker.sawHide)
+            if !terminal.synchronizedOutput {
+                terminal.updateScreen()
+                updateCaret()
+            }
             updateScrollAccessibility()
             setNeedsRender()
         }
@@ -278,6 +284,7 @@
         }
 
         private var drawablesReleased = false
+        private var syncStarted: CFTimeInterval?
 
         private func restoreDrawableSize() {
             guard drawablesReleased else { return }
@@ -308,6 +315,14 @@
                 displayLink?.isPaused = true
                 return
             }
+            let now = CACurrentMediaTime()
+            if terminal.synchronizedOutput {
+                let started = syncStarted ?? now
+                syncStarted = started
+                if now - started < 1 { return }
+            } else {
+                syncStarted = nil
+            }
             renderPending = false
             render()
         }
@@ -322,7 +337,7 @@
                 screen: terminal.screen, caret: caretPaint, handles: handlePaint())
             guard let drawable = metalLayer.nextDrawable(),
                 let buffer = renderer.encode(
-                    instances: instances, into: drawable.texture, background: terminal.screen.background)
+                    instances: instances, into: drawable.texture, background: palette.background)
             else { return }
             buffer.present(drawable)
             buffer.commit()

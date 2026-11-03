@@ -67,6 +67,7 @@ let package = Package(
             dependencies: [
                 "Models",
                 "ToolbarUI",
+                "VTKit",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ], swiftSettings: strict),
         .target(name: "ToolbarUI", dependencies: ["Models"], swiftSettings: strict),

@@ -124,4 +124,45 @@ struct GhosttyRendererTests {
         renderer.update(screen: terminal.screen, dirty: terminal.screen.takeDirtyRows())
         #expect(renderer.instances(screen: terminal.screen, caret: nil, handles: nil).count == 2)
     }
+
+    @Test func framesEncodedBeforeCommitKeepTheirOwnInstances() throws {
+        let device = try #require(device)
+        let atlas = try #require(GlyphAtlas(device: device, font: font, scale: 2))
+        let palette = RenderPalette(
+            background: VTColor(r: 0, g: 0, b: 0), foreground: VTColor(r: 255, g: 255, b: 255),
+            cursor: VTColor(r: 0, g: 255, b: 0))
+        let renderer = try #require(TerminalRenderer(device: device, atlas: atlas, palette: palette))
+        let terminal = VTTerminal(cols: 10, rows: 1)
+        terminal.updateScreen()
+        renderer.update(screen: terminal.screen, dirty: terminal.screen.takeDirtyRows())
+        let metrics = atlas.metrics
+        let width = metrics.width * 10
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm, width: width, height: metrics.height, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .shared
+        func frame(caretCol: Int) throws -> (MTLTexture, MTLCommandBuffer) {
+            let target = try #require(device.makeTexture(descriptor: descriptor))
+            let instances = renderer.instances(
+                screen: terminal.screen, caret: CaretPaint(col: caretCol, row: 0, style: .block), handles: nil)
+            let buffer = try #require(
+                renderer.encode(instances: instances, into: target, background: palette.background))
+            return (target, buffer)
+        }
+        let first = try frame(caretCol: 0)
+        let second = try frame(caretCol: 5)
+        for (_, buffer) in [first, second] { buffer.commit() }
+        for (_, buffer) in [first, second] { buffer.waitUntilCompleted() }
+        func green(_ target: MTLTexture, col: Int) -> UInt8 {
+            var pixel = [UInt8](repeating: 0, count: 4)
+            target.getBytes(
+                &pixel, bytesPerRow: 4,
+                from: MTLRegionMake2D(col * metrics.width + metrics.width / 2, metrics.height / 2, 1, 1), mipmapLevel: 0
+            )
+            return pixel[1]
+        }
+        #expect(green(first.0, col: 0) == 255)
+        #expect(green(first.0, col: 5) == 0)
+        #expect(green(second.0, col: 5) == 255)
+    }
 }

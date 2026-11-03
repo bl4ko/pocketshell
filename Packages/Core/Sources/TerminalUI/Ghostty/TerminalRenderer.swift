@@ -58,7 +58,8 @@ final class TerminalRenderer {
     private var glyphs: [[RenderInstance]] = []
     private var atlasGeneration = 0
     private var palette: RenderPalette
-    private var instanceBuffer: MTLBuffer?
+    private var instanceBuffers: [MTLBuffer] = []
+    private let busyBuffers = BusyBuffers()
     private(set) var lastInstanceCount = 0
 
     init?(device: MTLDevice, atlas: GlyphAtlas, palette: RenderPalette) {
@@ -261,10 +262,9 @@ final class TerminalRenderer {
         lastInstanceCount = instances.count
         if !instances.isEmpty {
             let length = instances.count * MemoryLayout<RenderInstance>.stride
-            if (instanceBuffer?.length ?? 0) < length {
-                instanceBuffer = device.makeBuffer(length: max(length, 64 * 1024), options: .storageModeShared)
-            }
-            if let instanceBuffer {
+            if let instanceBuffer = claimInstanceBuffer(length: length) {
+                let id = ObjectIdentifier(instanceBuffer)
+                commandBuffer.addCompletedHandler { [busyBuffers] _ in busyBuffers.release(id) }
                 instances.withUnsafeBytes { bytes in
                     instanceBuffer.contents().copyMemory(from: bytes.baseAddress!, byteCount: length)
                 }
@@ -280,6 +280,17 @@ final class TerminalRenderer {
         }
         encoder.endEncoding()
         return commandBuffer
+    }
+
+    private func claimInstanceBuffer(length: Int) -> MTLBuffer? {
+        if let free = busyBuffers.claim(from: instanceBuffers, length: length) { return free }
+        instanceBuffers.removeAll { $0.length < length && !busyBuffers.isBusy($0) }
+        guard let buffer = device.makeBuffer(length: max(length, 64 * 1024), options: .storageModeShared) else {
+            return nil
+        }
+        instanceBuffers.append(buffer)
+        busyBuffers.mark(buffer)
+        return buffer
     }
 
     nonisolated(unsafe) private static var pipelines: [ObjectIdentifier: MTLRenderPipelineState] = [:]
@@ -357,4 +368,30 @@ final class TerminalRenderer {
             return t * in.color.a;
         }
         """
+}
+
+private final class BusyBuffers: @unchecked Sendable {
+    private let lock = NSLock()
+    private var busy = Set<ObjectIdentifier>()
+
+    func claim(from buffers: [MTLBuffer], length: Int) -> MTLBuffer? {
+        lock.withLock {
+            guard let free = buffers.first(where: { $0.length >= length && !busy.contains(ObjectIdentifier($0)) })
+            else { return nil }
+            busy.insert(ObjectIdentifier(free))
+            return free
+        }
+    }
+
+    func isBusy(_ buffer: MTLBuffer) -> Bool {
+        lock.withLock { busy.contains(ObjectIdentifier(buffer)) }
+    }
+
+    func mark(_ buffer: MTLBuffer) {
+        _ = lock.withLock { busy.insert(ObjectIdentifier(buffer)) }
+    }
+
+    func release(_ id: ObjectIdentifier) {
+        _ = lock.withLock { busy.remove(id) }
+    }
 }

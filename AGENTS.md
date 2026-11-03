@@ -9,6 +9,7 @@ iOS SSH terminal + VNC app (SwiftUI, iOS 17+) for managing tmux-based agent sess
 ## Commands
 
 ```sh
+./Scripts/build-libghostty.sh                      # build the pinned libghostty-vt xcframework (zig) into Packages/Core/Frameworks; required once before any build or test
 xcodegen generate                                  # regenerate pocketshell.xcodeproj (required after project.yml edits; .xcodeproj is gitignored)
 swift test --package-path Packages/Core            # all unit + sshd integration tests (fast, no simulator)
 swift test --package-path Packages/Core --filter TmuxKitTests            # one test target
@@ -22,6 +23,7 @@ pre-commit run --all-files                         # format + lint + Core tests 
 ./Scripts/ship.sh                                  # archive iOS + Catalyst and upload both to TestFlight
 ```
 
+- libghostty-vt is a gitignored binary target: `Scripts/build-libghostty.sh` pins the Ghostty commit, applies `Scripts/libghostty-maccatalyst.patch` (Zig 0.17 Catalyst slice, OS tag `maccatalyst`), and needs `zig` (Homebrew, ≥ 0.17). Its Zig dependencies come from `deps.files.ghostty.org`, `github.com`, and `codeberg.org`. Set `PS_LIBGHOSTTY_BUILD`/`ZIG_GLOBAL_CACHE_DIR` to keep build output and caches off the internal disk, `PS_GHOSTTY_SRC` to reuse a local Ghostty clone.
 - Warnings are errors everywhere: `SWIFT_TREAT_WARNINGS_AS_ERRORS` in `project.yml`, `.treatAllWarnings(as: .error)` in `Package.swift`. Any warning fails the build.
 - Formatting is enforced by toolchain `swift format` via pre-commit (`.swift-format`: 4-space indent, line length 120). Run `swift format --in-place --recursive <paths>` before committing if hooks are not installed.
 - Coverage: `swift test --package-path Packages/Core --enable-code-coverage`, then `xcrun llvm-cov report "$(swift build --package-path Packages/Core --show-bin-path)/CorePackageTests.xctest/Contents/MacOS/CorePackageTests" -instr-profile "$(swift build --package-path Packages/Core --show-bin-path)/codecov/default.profdata" -ignore-filename-regex='(Tests|checkouts)'`.

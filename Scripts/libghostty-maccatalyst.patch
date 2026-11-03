@@ -1,0 +1,53 @@
+--- a/src/build/GhosttyLibVt.zig
++++ b/src/build/GhosttyLibVt.zig
+@@ -127,6 +127,7 @@
+     macos_universal,
+     ios,
+     ios_simulator,
++    maccatalyst,
+     // tvOS, watchOS, and visionOS are not yet supported by Zig's
+     // standard library (missing PATH_MAX, mcontext fields, etc.).
+ 
+@@ -212,6 +213,42 @@
+         }
+     }
+ 
++    const catalyst_query = struct {
++        fn q(arch: std.Target.Cpu.Arch) std.Target.Query {
++            return .{
++                .cpu_arch = arch,
++                .os_tag = .maccatalyst,
++                .os_version_min = .{ .semver = .{ .major = 17, .minor = 0, .patch = 0 } },
++            };
++        }
++    }.q;
++    if (detectAppleSDK(
++        b.graph.io,
++        b.allocator,
++        &b.graph.environ_map,
++        b.resolveTargetQuery(catalyst_query(.aarch64)).result,
++    )) {
++        const arm_zig = try zig.retarget(b, cfg, deps, b.resolveTargetQuery(catalyst_query(.aarch64)));
++        const x86_zig = try zig.retarget(b, cfg, deps, b.resolveTargetQuery(catalyst_query(.x86_64)));
++        const arm = try initStatic(b, &arm_zig);
++        const x86 = try initStatic(b, &x86_zig);
++        const fat = LipoStep.create(b, .{
++            .name = "ghostty-vt-maccatalyst",
++            .out_name = "libghostty-vt.a",
++            .input_a = arm.output,
++            .input_b = x86.output,
++        });
++        result.put(.maccatalyst, .{
++            .step = fat.step,
++            .artifact = fat.step,
++            .kind = .static,
++            .output = fat.output,
++            .dsym = null,
++            .pkg_config = null,
++            .pkg_config_static = null,
++        });
++    }
++
+     return result;
+ }
+ 

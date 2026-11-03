@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "SFTPKit", targets: ["SFTPKit"]),
         .library(name: "GitKit", targets: ["GitKit"]),
         .library(name: "VoiceKit", targets: ["VoiceKit"]),
+        .library(name: "VTKit", targets: ["VTKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.15.1"),
@@ -40,6 +41,8 @@ let package = Package(
         .target(name: "SFTPKit", swiftSettings: strict),
         .target(name: "GitKit", swiftSettings: strict),
         .target(name: "VoiceKit", swiftSettings: strict),
+        .binaryTarget(name: "GhosttyVt", path: "Frameworks/GhosttyVt.xcframework"),
+        .target(name: "VTKit", dependencies: ["GhosttyVt"], swiftSettings: strict),
         .target(
             name: "KeyKit",
             dependencies: [
@@ -80,6 +83,8 @@ let package = Package(
         .testTarget(name: "SFTPKitTests", dependencies: ["SFTPKit"], swiftSettings: strict),
         .testTarget(name: "GitKitTests", dependencies: ["GitKit"], swiftSettings: strict),
         .testTarget(name: "VoiceKitTests", dependencies: ["VoiceKit"], swiftSettings: strict),
+        .testTarget(
+            name: "VTKitTests", dependencies: ["VTKit"], resources: [.copy("Resources")], swiftSettings: strict),
         .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"], swiftSettings: strict),
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"], swiftSettings: strict),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"], swiftSettings: strict),

@@ -1,0 +1,16 @@
+--- a/src/terminal/Screen.zig
++++ b/src/terminal/Screen.zig
+@@ -2238,6 +2238,13 @@
+     const tw = resize_tw;
+     defer self.assertIntegrity();
+ 
++    // PocketShell: without scrollback the top rows have nowhere to go, so a
++    // shrink keeps them and drops rows from the bottom instead.
++    if (self.no_scrollback and opts.rows < self.pages.rows) {
++        if (self.cursor.y >= opts.rows) self.cursorAbsolute(self.cursor.x, opts.rows - 1);
++        self.clearRows(.{ .active = .{ .y = opts.rows } }, null, false);
++    }
++
+     // We need to insert a tracked pin for our saved cursor so we can
+     // modify its X/Y for reflow. Do this before changing any state since
+     // tracking the pin can fail.

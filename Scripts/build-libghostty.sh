@@ -21,7 +21,7 @@ src="$build/src-$GHOSTTY_COMMIT"
 rm -rf "$src"
 mkdir -p "$src"
 git -C "$clone" archive "$GHOSTTY_COMMIT" | tar -x -C "$src"
-patch -d "$src" -p1 < "$root/Scripts/libghostty-maccatalyst.patch"
+for p in "$root"/Scripts/libghostty-*.patch; do patch -d "$src" -p1 < "$p"; done
 
 (cd "$src" && zig build -Demit-lib-vt -Demit-xcframework=true -Doptimize=ReleaseFast --prefix "$build/out")
 

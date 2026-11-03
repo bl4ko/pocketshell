@@ -1,0 +1,496 @@
+
+@@425443.9537@@[?1049h[22;0;0t[?1h=[H[2J[?12l[?25h[?1000l[?1002l[?1003l[?1006l[?1005l[?2004h[?2031h[?996n(B[m[?12l[?25h[?1006l[?1000l[?1002l[?1003l[1;1H[1;50r[c[>c[>q]10;?\]11;?\[2;1H[?1006l[?1000l[?1002l[?1003l[?1006h[?1000h[?1002h
+@@425443.9544@@[?25l[Hsh /private/tmp/claude-501/-Users-bl4ot-Projects-github-pocketshell/aca76c02-ccb6-4c6f-a161-47a743eb3622/scratchpad/fakeink.sh A[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[38;2;29;32;47m[48;2;122;162;247m[1m
+ fake (B[m[38;2;122;162;247m[48;2;31;35;53m_[38;2;31;35;53m[48;2;59;66;97m_[38;2;122;162;247m[1m 0 _ tmux * (B[m[38;2;59;66;97m[48;2;31;35;53m_[38;2;122;162;247m[144X[38;2;31;35;53m[144C_[38;2;122;162;247m  [38;2;59;66;97m_[38;2;122;162;247m[48;2;59;66;97m 2026-08-03 _ 01:24 PM _[38;2;29;32;47m[48;2;122;162;247m[1m bl4ot (B[m[?12l[?25h[2;1H[18t[14t(B[m[?12l[?25h[?1006l[?1000l[?1002l[?1003l[1;1H[1;50r
+@@425443.9547@@[?25l[1;1Hsh /private/tmp/claude-501/-Users-bl4ot-Projects-github-pocketshell/aca76c02-ccb6-4c6f-a161-47a743eb3622/scratchpad/fakeink.sh A[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[38;2;29;32;47m[48;2;122;162;247m[1m
+ fake (B[m[38;2;122;162;247m[48;2;31;35;53m_[38;2;31;35;53m[48;2;59;66;97m_[38;2;122;162;247m[1m 0 _ tmux * (B[m[38;2;59;66;97m[48;2;31;35;53m_[38;2;122;162;247m[144X[38;2;31;35;53m[144C_[38;2;122;162;247m  [38;2;59;66;97m_[38;2;122;162;247m[48;2;59;66;97m 2026-08-03 _ 01:24 PM _[38;2;29;32;47m[48;2;122;162;247m[1m bl4ot (B[m[?12l[?25h[2;1H[?1006l[?1000l[?1002l[?1003l[?1006h[?1000h[?1002h
+@@425443.9772@@                                                                                                                                                                                                        [2;1H
+@@425444.0935@@[1;49r[1;1H[3;49r[47S[2;1H[K[36m(0lqq(B(B[m[36m([34m[1mbl4ot_bl4ot(B[m[36m)-[[39m[1m~/Projects/github/pocketshe[1;50r[2;46H(B[m[1mll(B[m[36m]-[][39m-[36m[[34m_[36m|[31mprod-bezigrad[39m:[36mrenovate]
+(0mq(B(B[m[34m[1m$(B[m [Ks
+@@425444.0938@@sh
+@@425444.0940@@ 
+@@425444.0943@@/
+@@425444.0945@@p
+@@425444.0947@@r
+@@425444.0950@@i
+@@425444.0952@@v
+@@425444.0954@@a
+@@425444.0956@@t
+@@425444.0958@@e
+@@425444.0961@@/
+@@425444.0963@@t
+@@425444.0965@@m
+@@425444.0967@@p
+@@425444.0969@@/
+@@425444.0971@@c
+@@425444.0973@@l
+@@425444.0976@@a
+@@425444.0978@@u
+@@425444.0981@@d
+@@425444.0983@@e
+@@425444.0985@@-
+@@425444.0987@@5
+@@425444.0990@@0
+@@425444.0992@@1
+@@425444.0994@@/
+@@425444.0996@@-
+@@425444.0998@@U
+@@425444.1000@@s
+@@425444.1002@@e
+@@425444.1005@@r
+@@425444.1007@@s
+@@425444.1009@@-
+@@425444.1011@@b
+@@425444.1014@@l
+@@425444.1016@@4
+@@425444.1018@@o
+@@425444.1021@@t
+@@425444.1023@@-
+@@425444.1025@@P
+@@425444.1027@@r
+@@425444.1029@@o
+@@425444.1031@@j
+@@425444.1034@@e
+@@425444.1036@@c
+@@425444.1038@@t
+@@425444.1040@@s
+@@425444.1042@@-
+@@425444.1045@@g
+@@425444.1047@@i
+@@425444.1049@@t
+@@425444.1051@@h
+@@425444.1053@@u
+@@425444.1055@@b
+@@425444.1058@@-
+@@425444.1060@@p
+@@425444.1062@@o
+@@425444.1064@@c
+@@425444.1066@@k
+@@425444.1068@@e
+@@425444.1071@@t
+@@425444.1073@@s
+@@425444.1075@@h
+@@425444.1077@@e
+@@425444.1080@@l
+@@425444.1082@@l
+@@425444.1084@@/
+@@425444.1086@@a
+@@425444.1088@@c
+@@425444.1091@@a
+@@425444.1093@@7
+@@425444.1095@@6
+@@425444.1097@@c
+@@425444.1100@@0
+@@425444.1102@@2
+@@425444.1104@@-
+@@425444.1106@@c
+@@425444.1108@@c
+@@425444.1110@@b
+@@425444.1113@@6
+@@425444.1115@@-
+@@425444.1117@@4
+@@425444.1119@@c
+@@425444.1121@@6
+@@425444.1124@@f
+@@425444.1126@@-
+@@425444.1128@@a
+@@425444.1130@@1
+@@425444.1132@@6
+@@425444.1134@@1
+@@425444.1136@@-
+@@425444.1139@@4
+@@425444.1141@@7
+@@425444.1143@@a
+@@425444.1145@@7
+@@425444.1147@@4
+@@425444.1150@@3
+@@425444.1152@@e
+@@425444.1154@@b
+@@425444.1156@@3
+@@425444.1158@@6
+@@425444.1160@@2
+@@425444.1162@@2
+@@425444.1165@@/
+@@425444.1167@@s
+@@425444.1169@@c
+@@425444.1171@@r
+@@425444.1173@@a
+@@425444.1175@@t
+@@425444.1177@@c
+@@425444.1180@@h
+@@425444.1182@@p
+@@425444.1184@@a
+@@425444.1187@@d
+@@425444.1189@@/
+@@425444.1191@@f
+@@425444.1193@@a
+@@425444.1195@@k
+@@425444.1198@@e
+@@425444.1200@@i
+@@425444.1202@@n
+@@425444.1204@@k
+@@425444.1207@@.
+@@425444.1209@@s
+@@425444.1211@@h
+@@425444.1214@@ 
+@@425444.1216@@A
+@@425444.1231@@[5G[32msh[39m [4m/private/tmp/claude-501/-Users-bl4ot-Projects-github-pocketshell/aca76c02-ccb6-4c6f-a161-47a743eb3622/scratchpad/fakeink.sh(B[m [4mA(B[m
+@@425444.1240@@A
+
+@@425444.1285@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 1 line one
+line two of the frame
+line three
+
+@@425444.2202@@line four
+line five[40;5H
+@@425444.3333@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 2 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425444.3357@@[?25l[38;2;29;32;47m[48;2;122;162;247m[1m[50d fake (B[m[38;2;122;162;247m[48;2;31;35;53m_[38;2;31;35;53m[48;2;59;66;97m_[38;2;122;162;247m[1m 0 _ bash * (B[m[38;2;59;66;97m[48;2;31;35;53m_[38;2;122;162;247m[144X[38;2;31;35;53m[144C_[38;2;122;162;247m  [38;2;59;66;97m_[38;2;122;162;247m[48;2;59;66;97m 2026-08-03 _ 01:24 PM _[38;2;29;32;47m[48;2;122;162;247m[1m bl4ot (B[m[?12l[?25h[33;1H
+@@425444.4215@@line four
+line five[40;5H
+@@425444.5347@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 3 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425444.6256@@line four
+line five[40;5H
+@@425444.7420@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 4 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425444.8294@@line four
+line five[40;5H
+@@425444.9415@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 5 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425445.0347@@line four
+line five[40;5H
+@@425445.1523@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 6 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425445.2433@@line four
+line five[40;5H
+@@425445.3599@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 7 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425445.4514@@line four
+line five[40;5H
+@@425445.5611@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 8 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425445.6517@@line four
+line five[40;5H
+@@425445.7683@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 9 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425445.8665@@line four
+line five[40;5H
+@@425445.9827@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 10 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425446.0783@@line four
+line five[40;5H
+@@425446.1917@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 11 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425446.2863@@line four
+line five[40;5H
+@@425446.4023@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 12 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425446.4911@@line four
+line five[40;5H
+@@425446.6016@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 13 line one
+line two of the frame
+line three[1;50r[33;1H
+@@425446.7003@@line four
+line five[40;5H
+@@425446.8183@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 14 line one
+line two of the frame
+line three
+
+@@425446.9083@@line four
+line five[40;5H
+@@425447.0232@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 15 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425447.1132@@line four
+line five[40;5H
+@@425447.2211@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 16 line one
+line two of the frame
+line three
+
+@@425447.3111@@line four
+line five[40;5H
+@@425447.4224@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 17 line one
+line two of the frame
+line three
+
+@@425447.5097@@line four
+line five[40;5H
+@@425447.6279@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 18 line one
+line two of the frame
+line three
+
+@@425447.7186@@line four
+line five[40;5H
+@@425447.8349@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 19 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425447.9309@@line four
+line five[40;5H
+@@425448.0409@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 20 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425448.1301@@line four
+line five[40;5H
+@@425448.2426@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 21 line one
+line two of the frame
+line three
+
+@@425448.3362@@line four
+line five[40;5H
+@@425448.4507@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 22 line one
+line two of the frame
+line three
+
+@@425448.5385@@line four
+line five[40;5H
+@@425448.6561@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 23 line one
+line two of the frame
+line three
+
+@@425448.7513@@line four
+line five[40;5H
+@@425448.8684@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 24 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425448.9555@@[?1004h[?7727h(B[m[?12l[?25h[?1006l[?1000l[?1002l[?1003l[1;1H[1;50r[33;1H[?1006l[?1000l[?1002l[?1003l[?1006h[?1000h[?1002h
+@@425448.9571@@[?25l[Hsh /private/tmp/claude-501/-Users-bl4ot-Projects-github-pocketshell/aca76c02-ccb6-4c6f-a161-47a743eb3622/scratchpad/fakeink.sh A[K[36m(0
+lqq(B(B[m[36m([34m[1mbl4ot_bl4ot(B[m[36m)-[[39m[1m~/Projects/github/pocketshell(B[m[36m]-[][39m-[36m[[34m_[36m|[31mprod-bezigrad[39m:[36mrenovate][39m[K[36m(0
+mq(B(B[m[34m[1m$(B[m [32msh[39m [4m/private/tmp/claude-501/-Users-bl4ot-Projects-github-pocketshell/aca76c02-ccb6-4c6f-a161-47a743eb3622/scratchpad/fakeink.sh(B[m A[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+redraw 24 line one[K
+line two of the frame[K
+line three[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[38;2;29;32;47m[48;2;122;162;247m[1m
+ fake (B[m[38;2;122;162;247m[48;2;31;35;53m_[38;2;31;35;53m[48;2;59;66;97m_[38;2;122;162;247m[1m 0 _ bash * (B[m[38;2;59;66;97m[48;2;31;35;53m_[38;2;122;162;247m[144X[38;2;31;
+@@425448.9572@@35;53m[144C_[38;2;122;162;247m  [38;2;59;66;97m_[38;2;122;162;247m[48;2;59;66;97m 2026-08-03 _ 01:24 PM _[38;2;29;32;47m[48;2;122;162;247m[1m bl4ot (B[m[?12l[?25h[33;1H
+@@425448.9604@@line four
+line five[40;5H
+@@425449.0694@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 25 line one
+line two of the frame
+line three
+
+@@425449.1591@@line four
+line five[40;5H
+@@425449.2691@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 26 line one
+line two of the frame
+line three
+
+@@425449.3673@@line four
+line five[40;5H
+@@425449.4796@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 27 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425449.5761@@line four
+line five[40;5H
+@@425449.6865@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 28 line one
+line two of the frame[1;50r[32;1Hline three
+
+@@425449.7805@@line four
+line five[40;5H
+@@425449.8947@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 29 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425449.9847@@line four
+line five[40;5H
+@@425450.1018@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 30 line one
+line two of the frame
+line three
+
+@@425450.2000@@line four
+line five[40;5H
+@@425450.3105@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 31 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425450.4014@@line four
+line five[40;5H
+@@425450.5095@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 32 line one
+line two of the frame
+line three
+
+@@425450.5963@@line four
+line five[40;5H
+@@425450.7124@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 33 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425450.8068@@line four
+line five[40;5H
+@@425450.9228@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 34 line one
+line two of the frame
+line three
+
+@@425451.0095@@line four
+line five[40;5H
+@@425451.1259@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 35 line one
+line two of the frame
+line three
+
+@@425451.2186@@line four
+line five[40;5H
+@@425451.3357@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 36 line one
+line two of the frame
+line three
+
+@@425451.4309@@line four
+line five[40;5H
+@@425451.5403@@[1;49r[1;1H[31;49r[19S[30;1H[K[1;50r[30;1Hredraw 37 line one
+line two of the frame
+line three
+
+@@425451.6283@@line four
+line five[40;5H
+@@425451.7407@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 38 line one[1;50r[31;1Hline two of the frame
+line three
+
+@@425451.8354@@line four
+line five[40;5H
+@@425451.9502@@[1;49r[1;1H[31;49r[19S[30;1H[Kredraw 39 line one[1;50r[31;1Hline two of the frame
+line three

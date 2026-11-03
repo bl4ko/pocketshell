@@ -8,7 +8,34 @@
      // tvOS, watchOS, and visionOS are not yet supported by Zig's
      // standard library (missing PATH_MAX, mcontext fields, etc.).
  
-@@ -212,6 +213,42 @@
+@@ -208,10 +209,68 @@
+                 .abi = .simulator,
+                 .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.apple_a17 },
+             }));
+-            result.put(p.simulator, try initStatic(b, &sim_zig));
++            const sim_arm = try initStatic(b, &sim_zig);
++            const sim_x86_zig = try zig.retarget(b, cfg, deps, b.resolveTargetQuery(.{
++                .cpu_arch = .x86_64,
++                .os_tag = p.os_tag,
++                .os_version_min = Config.osVersionMinLibVt(p.os_tag),
++                .abi = .simulator,
++            }));
++            const sim_x86 = try initStatic(b, &sim_x86_zig);
++            const sim_fat = LipoStep.create(b, .{
++                .name = "ghostty-vt-simulator",
++                .out_name = "libghostty-vt.a",
++                .input_a = sim_arm.output,
++                .input_b = sim_x86.output,
++            });
++            result.put(p.simulator, .{
++                .step = sim_fat.step,
++                .artifact = sim_fat.step,
++                .kind = .static,
++                .output = sim_fat.output,
++                .dsym = null,
++                .pkg_config = null,
++                .pkg_config_static = null,
++            });
          }
      }
  

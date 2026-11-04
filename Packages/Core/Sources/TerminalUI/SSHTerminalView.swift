@@ -246,6 +246,7 @@
             gestures.zoomScale = scale
             bridge.view = view
             view.onResign = { [weak bridge] in bridge?.keyboardHold = nil }
+            view.onCaretPlacement = { [weak bridge] in bridge?.caretPlacement = $0 }
             bridge.setTheme(theme)
             #if !targetEnvironment(macCatalyst)
                 bridge.updateShortcutKeyboard = { [weak controller, weak bridge] in

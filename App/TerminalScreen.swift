@@ -105,19 +105,22 @@ private func keyboardMotion(duration: Double) -> Animation {
 private struct KeyboardReveal: AnimatableModifier {
     let layout: CGFloat
     let slides: Bool
+    let caretSlide: KeyboardSlide?
     var animatableData: CGFloat
 
-    init(layout: CGFloat, shown: CGFloat, slides: Bool) {
+    init(layout: CGFloat, shown: CGFloat, slides: Bool, caretSlide: KeyboardSlide?) {
         self.layout = layout
         self.slides = slides
+        self.caretSlide = caretSlide
         animatableData = shown
     }
 
     func body(content: Content) -> some View {
-        let offset = slides ? min(0, layout - animatableData) : 0
+        let covered = max(0, animatableData - layout)
+        let offset = slides ? -(caretSlide?.offset(keyboard: covered) ?? covered) : 0
         content.offset(y: offset)
             .mask {
-                Rectangle().padding(.bottom, max(0, animatableData - layout))
+                Rectangle().padding(.bottom, covered)
             }
             .overlay(alignment: .topLeading) {
                 if UITestFlags.resizeCount {
@@ -144,6 +147,8 @@ private struct ContentMotionProbe: UIViewRepresentable {
 
     func updateUIView(_ view: UIView, context: Context) {
         let tally = context.coordinator
+        let current = String(Int(abs(offset)))
+        if view.accessibilityValue != current { view.accessibilityValue = current }
         guard abs(offset) > tally.largest else { return }
         tally.largest = abs(offset)
         view.accessibilityLabel = String(Int(tally.largest))
@@ -236,6 +241,7 @@ struct TerminalScreen: View {
     @State private var keyboardInset = KeyboardInset()
     @State private var shownInset: CGFloat = 0
     @State private var keyboardSlides = true
+    @State private var keyboardSlide = KeyboardSlide()
     @AppStorage(AppSettings.terminalThemeKey) private var themeName = TerminalTheme.defaultTheme.name
     @AppStorage(AppSettings.uiScaleKey) private var uiScale = 1.0
     @State private var findTerm = ""
@@ -286,7 +292,10 @@ struct TerminalScreen: View {
                 )
                 .focusEffectDisabled()
                 .transaction { $0.animation = nil }
-                .modifier(KeyboardReveal(layout: keyboardInset.layout, shown: shownInset, slides: keyboardSlides))
+                .modifier(
+                    KeyboardReveal(
+                        layout: keyboardInset.layout, shown: shownInset, slides: keyboardSlides,
+                        caretSlide: connection.isMultiplexerAttached ? keyboardSlide : nil))
                 VStack(spacing: 0) {
                     if connection.composerVisible {
                         ComposerBar(
@@ -350,7 +359,11 @@ struct TerminalScreen: View {
             }
             .background(Color(hexRGB: TerminalTheme.named(themeName).background))
             .padding(.bottom, keyboardInset.layout)
+            .onChange(of: bridge.caretPlacement, initial: true) { _, placement in
+                keyboardSlide.follow(placement, keyboard: isActive ? keyboardHeight : 0)
+            }
             .onChange(of: KeyboardTarget(inset: keyboardHeight, active: isActive), initial: true) { old, new in
+                keyboardSlide.follow(bridge.caretPlacement, keyboard: new.active ? new.inset : 0)
                 followKeyboard(
                     new.active ? new.inset : 0,
                     animated: KeyboardInset.animates(
@@ -591,7 +604,8 @@ struct TerminalScreen: View {
     }
 
     private func followKeyboard(_ inset: CGFloat, animated: Bool) {
-        // A resize makes Claude Code inside Herdr or tmux reprint its answer, so multiplexers keep their size.
+        // A resize makes Claude Code inside Herdr or tmux reprint its answer, so multiplexers keep their size
+        // and slide only as far as the parked caret needs.
         let multiplexer = connection.isMultiplexerAttached
         let layout = multiplexer ? 0 : inset
         keyboardSlides = multiplexer || !connection.bridge.isFullScreenApp

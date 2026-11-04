@@ -15,7 +15,10 @@ final class SmokeUITests: XCTestCase {
             environmentKeys += ["PS_TEST_STATUS_STABLE", "PS_TEST_STATUS_CHURN", "PS_TEST_STATUS_GAP"]
         }
         if name.contains("testTmuxRepaints") {
-            environmentKeys.append("PS_TEST_FLICKER")
+            app.launchEnvironment["PS_UI_TEST_TMUX_TAB"] = ProcessInfo.processInfo.environment["PS_TEST_FLICKER"]
+        }
+        if name.contains("testKeyboardSlidesTmux") {
+            app.launchEnvironment["PS_UI_TEST_TMUX_TAB"] = ProcessInfo.processInfo.environment["PS_TEST_KBSLIDE"]
         }
         for key in environmentKeys {
             if let value = ProcessInfo.processInfo.environment[key] {
@@ -236,6 +239,47 @@ final class SmokeUITests: XCTestCase {
         XCTAssertGreaterThan(keyboard.frame.height, 200, "the software keyboard is not on screen")
         second.tap()
         XCTAssertTrue(second.isSelected, "the slid terminal took the tab strip tap")
+    }
+
+    func testKeyboardSlidesTmuxOnlyAsFarAsTheCaret() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let port = env["PS_TEST_PORT"], let user = env["PS_TEST_USER"], env["PS_TEST_KBSLIDE"] != nil else {
+            throw XCTSkip("PS_TEST_KBSLIDE not set; tmux keyboard slide test skipped")
+        }
+        addHost(named: "slidebox", port: port, user: user)
+        app.staticTexts["slidebox"].firstMatch.tap()
+        let shellMode = app.buttons["Shells & tmux"].firstMatch
+        if shellMode.waitForExistence(timeout: 3) { shellMode.tap() }
+        XCTAssertTrue(app.buttons["esc"].firstMatch.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        sleep(3)
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        let keyboard = app.keyboards.element
+        let contentMotion = app.otherElements["keyboard.content"]
+        let resizes = terminal.label
+        keyboardButton.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertGreaterThan(keyboard.frame.height, 200, "the software keyboard is not on screen")
+        let toolbarOnKeyboard = NSPredicate { _, _ in keyboardButton.frame.maxY <= keyboard.frame.minY + 2 }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: toolbarOnKeyboard, object: nil)], timeout: 5),
+            .completed, "the toolbar never rode up with the keyboard")
+        XCTAssertEqual(contentMotion.label, "0", "a caret near the top slid the tmux content off screen")
+
+        terminal.typeText("seq 1 200\n")
+        sleep(2)
+        XCTAssertGreaterThan(
+            Int(contentMotion.value as? String ?? "") ?? 0, 100, "a caret near the bottom must slide above the keyboard"
+        )
+
+        terminal.typeText("clear\n")
+        sleep(2)
+        XCTAssertEqual(contentMotion.value as? String, "0", "the slide must give the top back once the caret moves up")
+        keyboardButton.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(terminal.label, resizes, "the keyboard resized the tmux terminal")
     }
 
     func testTerminalTapInMouseReportingAppKeepsKeyboardHidden() throws {

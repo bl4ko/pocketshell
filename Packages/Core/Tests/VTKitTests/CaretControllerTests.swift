@@ -127,3 +127,41 @@ struct CaretSyncTests {
         #expect(!tracker.sawSyncEnd)
     }
 }
+
+struct CaretParkTests {
+    @Test func hiddenCursorParkedByAddressingIsTracked() {
+        var caret = CaretController()
+        caret.multiplexer = true
+        caret.noteFeed(at: 1, sawHide: true)
+        _ = caret.update(row: 7, col: 2, hidden: true, addressed: true, cell: 0, previousCell: 0, now: 1)
+        #expect(caret.parkedRow == 7)
+        #expect(caret.parkWait == nil)
+    }
+
+    @Test func midRepaintCursorDoesNotMoveThePark() {
+        var caret = CaretController()
+        caret.multiplexer = true
+        _ = caret.update(row: 7, col: 2, hidden: true, addressed: true, cell: 0, previousCell: 0, now: 1)
+        caret.noteFeed(at: 1.1, sawHide: false)
+        _ = caret.update(row: 30, col: 5, hidden: true, addressed: false, cell: 0, previousCell: 0, now: 1.1)
+        #expect(caret.parkedRow == 7)
+        #expect(caret.parkWait == 0.25)
+        _ = caret.update(row: 30, col: 5, hidden: true, addressed: false, cell: 0, previousCell: 0, now: 1.4)
+        #expect(caret.parkedRow == 30)
+    }
+
+    @Test func redrawAnchorNeverParks() {
+        var caret = CaretController()
+        caret.multiplexer = true
+        _ = caret.update(row: 7, col: 2, hidden: false, addressed: true, cell: 0, previousCell: 0, now: 1)
+        _ = caret.update(row: 3, col: 0, hidden: false, addressed: true, cell: 0, previousCell: 0, now: 5)
+        #expect(caret.parkedRow == 7)
+        #expect(caret.parkWait == nil)
+    }
+
+    @Test func plainShellCaretParksToo() {
+        var caret = CaretController()
+        _ = caret.update(row: 4, col: 6, hidden: false, addressed: false, cell: 0, previousCell: 0, now: 1)
+        #expect(caret.parkedRow == 4)
+    }
+}

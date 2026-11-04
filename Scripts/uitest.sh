@@ -10,6 +10,7 @@ STATUS_STABLE="$TMUX_SESSION-stable"
 STATUS_CHURN="$TMUX_SESSION-churn"
 STATUS_GAP="$TMUX_SESSION-gap"
 FLICKER_SESSION="$TMUX_SESSION-flicker"
+KBSLIDE_SESSION="$TMUX_SESSION-kbslide"
 HERDR_SELECT=""
 unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID
 herdr_select() { herdr --session "psh-uitest-sel-$$" "$@"; }
@@ -20,7 +21,7 @@ cleanup() {
     fi
     kill "${WATCHDOG_PID:-}" 2>/dev/null || true
     kill "${SSHD_PID:-}" 2>/dev/null || true
-    for session in "$TMUX_SESSION" "$STATUS_STABLE" "$STATUS_CHURN" "$STATUS_GAP" "$FLICKER_SESSION"; do
+    for session in "$TMUX_SESSION" "$STATUS_STABLE" "$STATUS_CHURN" "$STATUS_GAP" "$FLICKER_SESSION" "$KBSLIDE_SESSION"; do
         tmux kill-session -t "$session" 2>/dev/null || true
     done
     rm -rf "$DIR"
@@ -191,6 +192,7 @@ tmux split-window -v -t "$FLICKER_SESSION":0.2 "$DIR/repaint 1"
 tmux select-layout -t "$FLICKER_SESSION":0 tiled
 tmux select-pane -t "$FLICKER_SESSION":0.0
 tmux set-option -t "$FLICKER_SESSION" automatic-rename off
+tmux new-session -d -s "$KBSLIDE_SESSION" -n kbslide "env PS1='kb\$ ' /bin/sh"
 
 if command -v herdr >/dev/null; then
     HERDR_SELECT="psh-uitest-sel-$$"
@@ -229,6 +231,7 @@ TEST_RUNNER_PS_TEST_STATUS_STABLE="$STATUS_STABLE" \
 TEST_RUNNER_PS_TEST_STATUS_CHURN="$STATUS_CHURN" \
 TEST_RUNNER_PS_TEST_STATUS_GAP="$STATUS_GAP" \
 TEST_RUNNER_PS_TEST_FLICKER="$FLICKER_SESSION" \
+TEST_RUNNER_PS_TEST_KBSLIDE="$KBSLIDE_SESSION" \
 TEST_RUNNER_PS_TEST_ARROW_PROMPT="$DIR/arrow-prompt" \
 TEST_RUNNER_PS_TEST_HERDR_SELECT="$HERDR_SELECT" \
 xcodebuild test \

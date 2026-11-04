@@ -15,6 +15,8 @@
         var onTitle: ((String) -> Void)?
         var pasteImage: (() -> Bool)?
         var onResign: (() -> Void)?
+        var onCaretPlacement: ((CaretPlacement) -> Void)?
+        private(set) var caretPlacement: CaretPlacement?
         var markedTextObserver: ((String, NSRange) -> Void)?
         var multiplexerMode = false {
             didSet {
@@ -374,6 +376,7 @@
                 cell: screen.cell(col: cursor.col, row: cursor.row).scalar,
                 previousCell: screen.cell(col: cursor.col - 1, row: cursor.row).scalar, now: CACurrentMediaTime())
             let style = CaretPaint.Style.block
+            var wake = caret.parkWait
             switch update {
             case .show(let row, let col):
                 caretPaint = CaretPaint(col: col, row: row, style: style)
@@ -381,10 +384,23 @@
                 caretPaint = nil
             case .hold(let remaining):
                 caretPaint?.style = style
-                caretTimer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
+                wake = min(wake ?? remaining, remaining)
+            }
+            if let wake {
+                caretTimer = Timer.scheduledTimer(withTimeInterval: wake, repeats: false) { [weak self] _ in
                     MainActor.assumeIsolated { self?.setNeedsRender() }
                 }
             }
+            publishCaretPlacement()
+        }
+
+        private func publishCaretPlacement() {
+            guard let metrics, let row = caret.parkedRow else { return }
+            let placement = CaretPlacement(
+                top: CGFloat(row) * metrics.pointHeight, lineHeight: metrics.pointHeight, viewHeight: bounds.height)
+            guard placement != caretPlacement else { return }
+            caretPlacement = placement
+            onCaretPlacement?(placement)
         }
 
         var caretFrame: CGRect {

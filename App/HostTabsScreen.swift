@@ -498,7 +498,7 @@ struct HostTabsScreen: View {
 
     private func restoreTabs() {
         if ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1" {
-            if let session = ProcessInfo.processInfo.environment["PS_TEST_FLICKER"] {
+            if let session = ProcessInfo.processInfo.environment["PS_UI_TEST_TMUX_TAB"] {
                 openWindowInNewTab(session: session, windowIndex: 0)
                 return
             }

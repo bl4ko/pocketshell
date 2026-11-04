@@ -238,6 +238,35 @@
             #expect(view.tapRaisesKeyboard(at: cellPoint(view, col: 4, row: 1)))
         }
 
+        @MainActor
+        @Test func hiddenCursorParkedOnAnInputLinePublishesTheCaretPlacement() {
+            let view = makeTerminal()
+            view.multiplexerMode = true
+            let bridge = TerminalBridge()
+            view.onCaretPlacement = { bridge.caretPlacement = $0 }
+            view.feed(Data("\u{1b}[?25l\u{1b}[8;3H".utf8))
+            let line = view.metrics!.pointHeight
+            #expect(bridge.caretPlacement == CaretPlacement(top: 7 * line, lineHeight: line, viewHeight: 300))
+            view.feed(Data((String(repeating: "\r\n", count: 10) + "abc").utf8))
+            #expect(view.cursorViewportRow() == 17)
+            #expect(bridge.caretPlacement?.top == 7 * line)
+        }
+
+        @MainActor
+        @Test func unaddressedPromptAfterOutputParksOnceTheStreamGoesQuiet() {
+            let (view, window) = windowedTerminal()
+            view.multiplexerMode = true
+            var placements: [CaretPlacement] = []
+            view.onCaretPlacement = { placements.append($0) }
+            view.feed(Data("\u{1b}[?25h\u{1b}[1;5H".utf8))
+            view.feed(Data("\u{1b}[20;1Hkb$ ".utf8))
+            let line = view.metrics!.pointHeight
+            #expect(placements.last?.top == 0)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            #expect(placements.last?.top == 19 * line)
+            withExtendedLifetime(window) {}
+        }
+
         private final class ScriptedPan: UIPanGestureRecognizer {
             var forced = UIGestureRecognizer.State.possible
             var point = CGPoint.zero

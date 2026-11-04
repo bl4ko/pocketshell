@@ -1,0 +1,75 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+            runner: ubuntu-latest
+          - language: python
+            build-mode: none
+            runner: ubuntu-latest
+          - language: swift
+            build-mode: manual
+            runner: macos-26
+    env:
+      ZIG_VERSION: 0.17.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Restore GhosttyVt.xcframework
+        if: matrix.language == 'swift'
+        id: ghostty
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: Packages/Core/Frameworks/GhosttyVt.xcframework
+          key: ghostty-vt-${{ runner.os }}-${{ runner.arch }}-zig${{ env.ZIG_VERSION }}-${{ hashFiles('Scripts/build-libghostty.sh', 'Scripts/libghostty-*.patch') }}
+
+      - if: matrix.language == 'swift' && steps.ghostty.outputs.cache-hit != 'true'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Build GhosttyVt.xcframework
+        if: matrix.language == 'swift' && steps.ghostty.outputs.cache-hit != 'true'
+        env:
+          PS_LIBGHOSTTY_BUILD: ${{ runner.temp }}/libghostty
+        run: Scripts/build-libghostty.sh
+
+      - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build Core package
+        if: matrix.build-mode == 'manual'
+        run: swift build --package-path Packages/Core
+
+      - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:${{ matrix.language }}

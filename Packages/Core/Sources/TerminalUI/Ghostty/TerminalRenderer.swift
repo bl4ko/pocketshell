@@ -294,8 +294,11 @@ final class TerminalRenderer {
     }
 
     nonisolated(unsafe) private static var pipelines: [ObjectIdentifier: MTLRenderPipelineState] = [:]
+    private static let pipelinesLock = NSLock()
 
     private static func pipeline(device: MTLDevice) -> MTLRenderPipelineState? {
+        pipelinesLock.lock()
+        defer { pipelinesLock.unlock() }
         if let cached = pipelines[ObjectIdentifier(device)] { return cached }
         guard let library = try? device.makeLibrary(source: shaderSource, options: nil) else { return nil }
         let descriptor = MTLRenderPipelineDescriptor()

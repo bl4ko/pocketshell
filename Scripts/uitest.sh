@@ -276,5 +276,5 @@ TEST_RUNNER_PS_TEST_FAKE_AGENT="$DIR/fakeagent" \
 xcodebuild test \
   -scheme pocketshell \
   -derivedDataPath "${PS_TEST_DERIVED:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-uitest}" \
-  -destination "platform=iOS Simulator,name=$SIM" \
+  -destination "platform=iOS Simulator,name=$SIM${PS_TEST_SIM_OS:+,OS=$PS_TEST_SIM_OS}" \
   "$@"

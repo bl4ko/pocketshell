@@ -16,6 +16,7 @@ struct TabStripView: View {
     let onPersist: () -> Void
     let onSaveCollapsed: () -> Void
     let onApplyRename: () -> Void
+    let onSkipPermissions: (UUID) -> Void
 
     @State private var tabWidths: [UUID: CGFloat] = [:]
     @State private var tabGroupWidths: [String: CGFloat] = [:]
@@ -131,6 +132,13 @@ struct TabStripView: View {
                 }
                 menuTab = nil
             }
+            if let id = menuTab, tabStatuses[id] != nil {
+                Button("Skip Permissions") {
+                    onSkipPermissions(id)
+                    menuTab = nil
+                }
+                .accessibilityIdentifier("tab-menu-skip-permissions")
+            }
             Button("Close Tab", role: .destructive) {
                 if let id = menuTab {
                     onClose(id)
@@ -228,6 +236,10 @@ struct TabStripView: View {
             Button("Rename Tab") {
                 renameText = tab.name ?? ""
                 renamingTab = tab.id
+            }
+            if tabStatuses[tab.id] != nil {
+                Button("Skip Permissions") { onSkipPermissions(tab.id) }
+                    .accessibilityIdentifier("tab-menu-skip-permissions")
             }
             Button("Close Tab", role: .destructive) { onClose(tab.id) }
         }

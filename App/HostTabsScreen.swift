@@ -62,6 +62,7 @@ struct HostTabsScreen: View {
     @State private var menuTab: UUID?
     @State private var collapsedTabGroups: Set<String> = []
     @State private var loadedCollapsedTabGroups = false
+    @StateObject private var skipPermissions = SkipPermissionsFlow()
 
     let host: HostConfig
     var herdrSession: String? = nil
@@ -84,7 +85,8 @@ struct HostTabsScreen: View {
                     onClose: { closeTab(id: $0) },
                     onPersist: persistTabs,
                     onSaveCollapsed: saveCollapsedTabGroups,
-                    onApplyRename: applyRename
+                    onApplyRename: applyRename,
+                    onSkipPermissions: requestSkipPermissions
                 )
             }
             ZStack {
@@ -160,6 +162,14 @@ struct HostTabsScreen: View {
                     } label: {
                         Label("Snippets", systemImage: "text.badge.plus")
                     }
+                    if let selectedTab, tabStatuses[selectedTab] != nil {
+                        Button {
+                            requestSkipPermissions(selectedTab)
+                        } label: {
+                            Label("Skip Permissions", systemImage: "exclamationmark.shield")
+                        }
+                        .accessibilityIdentifier("menu-skip-permissions")
+                    }
                     Button {
                         showDiff = true
                     } label: {
@@ -230,6 +240,7 @@ struct HostTabsScreen: View {
         .sheet(isPresented: $showForward) {
             PortForwardSheet(controller: activeController)
         }
+        .skipPermissionsAlerts(skipPermissions)
         .onAppear {
             loadCollapsedTabGroups()
             if tabs.isEmpty {
@@ -434,12 +445,22 @@ struct HostTabsScreen: View {
 
     private func makeController() -> ConnectionController {
         let currentHost = store.hosts.first { $0.id == host.id } ?? host
-        return ConnectionController(
+        let controller = ConnectionController(
             host: currentHost,
             key: (try? store.key(for: currentHost)) ?? .software(.init()),
             knownHosts: store.knownHosts,
             hops: store.hops(for: currentHost)
         )
+        controller.bridge.skipPermissions = { [weak controller] in
+            if let tab = tabs.first(where: { $0.controller === controller }) { requestSkipPermissions(tab.id) }
+        }
+        return controller
+    }
+
+    private func requestSkipPermissions(_ id: UUID) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        selectedTab = id
+        skipPermissions.request(tab.controller) { tabStatuses[id] }
     }
 
     private func addTab() {

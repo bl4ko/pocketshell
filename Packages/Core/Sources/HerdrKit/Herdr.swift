@@ -166,6 +166,15 @@ public enum Herdr {
         "\(commandPrefix(session: session)) agent focus \(shellQuote(paneID)) || \(focusTabCommand(session: session, tabID: tabID))"
     }
 
+    public static func paneShellPIDCommand(session: String, paneID: String) -> String {
+        "\(commandPrefix(session: session)) pane process-info --pane \(shellQuote(paneID))"
+            + " | sed -n 's/.*\"shell_pid\":\\([0-9][0-9]*\\).*/\\1/p'"
+    }
+
+    public static func parseFocusedPaneID(_ output: String) -> String? {
+        decode(FocusEnvelope.self, from: output)?.result.snapshot.focusedPaneID
+    }
+
     public static func nextAgentNeedingInput(in snapshot: HerdrSnapshot) -> HerdrAgent? {
         let workspaceRank = Dictionary(
             snapshot.workspaces.map { ($0.workspaceID, $0.number) }, uniquingKeysWith: { first, _ in first })
@@ -282,6 +291,22 @@ private struct SessionEnvelope: Codable {
 private struct SnapshotEnvelope: Codable {
     struct Result: Codable {
         var snapshot: HerdrSnapshot
+    }
+
+    var result: Result
+}
+
+private struct FocusEnvelope: Decodable {
+    struct Result: Decodable {
+        struct Snapshot: Decodable {
+            var focusedPaneID: String?
+
+            enum CodingKeys: String, CodingKey {
+                case focusedPaneID = "focused_pane_id"
+            }
+        }
+
+        var snapshot: Snapshot
     }
 
     var result: Result

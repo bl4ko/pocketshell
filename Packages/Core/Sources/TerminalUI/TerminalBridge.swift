@@ -25,6 +25,7 @@
         public var imagePaste: ((Data) -> Void)?
         public var userInteracted: (() -> Void)?
         public var userSentInput: (() -> Void)?
+        public var skipPermissions: (() -> Void)?
         weak var view: GhosttyTerminalView? {
             didSet { suspendRendering(!gate.isLive) }
         }

@@ -130,6 +130,44 @@ int main(int argc, char **argv) {
 }
 EOF
 cc -O2 -o "$DIR/arrow-prompt" "$DIR/arrow-prompt.c"
+mkdir "$DIR/fakeagent"
+cat > "$DIR/fakeagent/claude.c" << 'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+    const char *log = getenv("PSH_FAKE_CLAUDE_LOG");
+    FILE *file = log ? fopen(log, "a") : NULL;
+    if (file) {
+        char cwd[1024];
+        fprintf(file, "%s", getcwd(cwd, sizeof cwd) ? cwd : "?");
+        for (int i = 1; i < argc; i++) fprintf(file, " %s", argv[i]);
+        fprintf(file, "\n");
+        fclose(file);
+    }
+    struct termios original, raw;
+    tcgetattr(STDIN_FILENO, &original);
+    raw = original;
+    cfmakeraw(&raw);
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+    printf("\033[2J\033[H> \r\n\r\n  ? for shortcuts\r\n  auto mode on (shift+tab to cycle)\r\n");
+    fflush(stdout);
+    time_t armed = 0;
+    char byte;
+    while (read(STDIN_FILENO, &byte, 1) == 1) {
+        if (byte != 3) continue;
+        if (armed && time(NULL) - armed <= 2) break;
+        armed = time(NULL);
+    }
+    tcsetattr(STDIN_FILENO, TCSANOW, &original);
+    printf("\033[2J\033[H");
+    return 0;
+}
+EOF
+cc -O2 -o "$DIR/fakeagent/claude" "$DIR/fakeagent/claude.c"
 tmux new-session -d -s "$STATUS_STABLE" -n stable "$DIR/codex stable"
 tmux new-session -d -s "$STATUS_CHURN" -n churn "$DIR/codex churn"
 tmux new-session -d -s "$STATUS_GAP" -n gap "$DIR/codex gap"
@@ -234,6 +272,7 @@ TEST_RUNNER_PS_TEST_FLICKER="$FLICKER_SESSION" \
 TEST_RUNNER_PS_TEST_KBSLIDE="$KBSLIDE_SESSION" \
 TEST_RUNNER_PS_TEST_ARROW_PROMPT="$DIR/arrow-prompt" \
 TEST_RUNNER_PS_TEST_HERDR_SELECT="$HERDR_SELECT" \
+TEST_RUNNER_PS_TEST_FAKE_AGENT="$DIR/fakeagent" \
 xcodebuild test \
   -scheme pocketshell \
   -derivedDataPath "${PS_TEST_DERIVED:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-uitest}" \

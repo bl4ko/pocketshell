@@ -70,7 +70,8 @@
                     category: Binding(
                         get: { bridge.shortcutCategory },
                         set: { bridge.selectShortcutCategory($0) }
-                    )
+                    ),
+                    onSkipPermissions: { [weak bridge] in bridge?.skipPermissions?() }
                 )
                 if let shortcutHost {
                     shortcutHost.rootView = panel

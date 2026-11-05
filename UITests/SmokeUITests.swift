@@ -495,6 +495,69 @@ final class SmokeUITests: XCTestCase {
         try FileManager.default.removeItem(at: URL(fileURLWithPath: path).deletingLastPathComponent())
     }
 
+    func testSkipPermissionsResumesTheSameClaudeSession() throws {
+        guard let fake = ProcessInfo.processInfo.environment["PS_TEST_FAKE_AGENT"], !fake.isEmpty else {
+            throw XCTSkip("PS_TEST_FAKE_AGENT not set; skip permissions test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        let session = "11111111-2222-3333-4444-555555555555"
+        let log = "/tmp/psh-fake-claude-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: log) }
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText(
+            "export PATH=\(fake):$PATH PSH_FAKE_CLAUDE_LOG=\(log); cd \(fake) && claude --session-id \(session) --model opus\n"
+        )
+        let lines = {
+            (try? String(contentsOfFile: log, encoding: .utf8))?.split(separator: "\n").map(String.init) ?? []
+        }
+        let started = NSPredicate { _, _ in lines().count == 1 }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: started, object: nil)], timeout: 10), .completed)
+        defer { terminal.typeText("\u{03}\u{03}") }
+
+        let more = app.buttons["terminal.more"]
+        let skip = app.buttons["menu-skip-permissions"]
+        var offered = false
+        for _ in 0..<8 where !offered {
+            more.tap()
+            offered = skip.waitForExistence(timeout: 2)
+            if !offered { more.tap() }
+        }
+        XCTAssertTrue(offered, "an idle Claude tab must offer Skip Permissions")
+        skip.tap()
+        let confirm = app.buttons["skip-permissions-confirm"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "--resume \(session)")).firstMatch.exists)
+        confirm.tap()
+
+        let resumed = NSPredicate { _, _ in lines().count == 2 }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: resumed, object: nil)], timeout: 20), .completed,
+            "Claude was not resumed: \(lines())")
+        let directory = lines()[0].split(separator: " ").first.map(String.init) ?? ""
+        XCTAssertEqual(lines()[0], "\(directory) --session-id \(session) --model opus")
+        XCTAssertEqual(lines()[1], "\(directory) --resume \(session) --dangerously-skip-permissions --model opus")
+        XCTAssertFalse(app.alerts["Skip Permissions"].exists)
+
+        app.buttons["terminal.shortcutsToggle"].tap()
+        let agent = app.buttons["shortcuts.agent"]
+        XCTAssertTrue(agent.waitForExistence(timeout: 5))
+        if !agent.isHittable { app.buttons["shortcuts.shell"].swipeLeft() }
+        agent.tap()
+        app.buttons["shortcuts.skipPermissions"].tap()
+        let notice = app.alerts["Skip Permissions"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            notice.staticTexts.matching(NSPredicate(format: "label CONTAINS 'already runs without'")).firstMatch.exists,
+            notice.debugDescription)
+        notice.buttons["OK"].tap()
+        app.buttons["shortcuts.close"].tap()
+    }
+
     func testTerminalCameraPhotoUploadsAndInsertsPath() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; camera paste test skipped")

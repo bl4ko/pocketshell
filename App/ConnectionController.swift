@@ -301,6 +301,36 @@ final class ConnectionController: ObservableObject {
         return true
     }
 
+    func agentProbe() async -> String? {
+        guard let connection else { return nil }
+        let root: String?
+        switch pendingShell {
+        case .tmux(let session, _, _):
+            guard let cloneTag else { return nil }
+            root = Tmux.panePIDCommand(target: Tmux.cloneName(session: session, clientTag: cloneTag))
+        case .herdr(let session, _):
+            guard let output = try? await connection.exec(Herdr.snapshotCommand(session: session)),
+                let pane = Herdr.parseFocusedPaneID(output)
+            else { return nil }
+            root = Herdr.paneShellPIDCommand(session: session, paneID: pane)
+        case .plain, nil:
+            root = nil
+        }
+        return try? await connection.exec(AgentPermissionSwitch.probeCommand(rootCommand: root))
+    }
+
+    func skipAgentPermissions(_ plan: AgentPermissionSwitch.Plan) async -> AgentPermissionSwitch.Outcome {
+        let bridge = bridge
+        return await AgentPermissionSwitch.run(
+            plan,
+            io: .init(
+                probe: { [weak self] in await self?.agentProbe() },
+                send: { bridge.sendToHost?(Data($0.utf8)) },
+                screen: { bridge.visibleText() },
+                sleep: { try? await Task.sleep(for: $0) }
+            ))
+    }
+
     func tmuxWindows(session: String) async -> [TmuxWindow] {
         guard let connection else { return [] }
         let output = (try? await connection.exec(Tmux.listWindowsCommand(session: session))) ?? ""

@@ -8,6 +8,7 @@
         let multiplexer: Bool
         let onKey: (ToolbarKey.Action) -> Void
         let onClose: () -> Void
+        let onSkipPermissions: (() -> Void)?
         @Binding var category: ShortcutCategory
         @State private var arrowShiftActive = false
 
@@ -20,13 +21,15 @@
             multiplexer: Bool,
             onKey: @escaping (ToolbarKey.Action) -> Void,
             onClose: @escaping () -> Void,
-            category: Binding<ShortcutCategory>
+            category: Binding<ShortcutCategory>,
+            onSkipPermissions: (() -> Void)? = nil
         ) {
             self.theme = theme
             self.userKeys = userKeys
             self.multiplexer = multiplexer
             self.onKey = onKey
             self.onClose = onClose
+            self.onSkipPermissions = onSkipPermissions
             self._category = category
         }
 
@@ -37,6 +40,13 @@
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(ShortcutCatalog.chips(category, userKeys: userKeys)) { chip in
                             chipButton(chip)
+                        }
+                        if category == .agent, let onSkipPermissions {
+                            Button(action: onSkipPermissions) {
+                                chipLabel(glyph: "yolo", label: "skip perms")
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("shortcuts.skipPermissions")
                         }
                     }
                     if category == .multiplexer {
@@ -126,6 +136,25 @@
                 .contentShape(Rectangle())
         }
 
+        private func chipLabel(glyph: String, label: String) -> some View {
+            VStack(spacing: 2) {
+                Text(glyph)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Palette.text(theme))
+                Text(label.isEmpty ? " " : label)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.text(theme).opacity(0.6))
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .background(Palette.key(theme))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.border(theme)))
+        }
+
         private func chipButton(_ chip: ShortcutChip) -> some View {
             Button {
                 if category == .arrows, arrowShiftActive,
@@ -137,22 +166,7 @@
                 }
                 arrowShiftActive = false
             } label: {
-                VStack(spacing: 2) {
-                    Text(chip.glyph)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Palette.text(theme))
-                    Text(chip.label.isEmpty ? " " : chip.label)
-                        .font(.system(size: 9))
-                        .foregroundStyle(Palette.text(theme).opacity(0.6))
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .padding(.horizontal, 4)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(Palette.key(theme))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.border(theme)))
+                chipLabel(glyph: chip.glyph, label: chip.label)
             }
             .buttonStyle(.plain)
             .buttonRepeatBehavior(category == .arrows ? .enabled : .disabled)

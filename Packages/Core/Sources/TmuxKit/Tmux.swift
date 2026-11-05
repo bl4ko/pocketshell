@@ -220,6 +220,10 @@ public enum Tmux {
         "\(tmux) display-message -p -t \(shellQuote(target)) '#{pane_current_path}'"
     }
 
+    public static func panePIDCommand(target: String) -> String {
+        "\(tmux) display-message -p -t \(shellQuote(target)) '#{pane_pid}'"
+    }
+
     public static func capturePanesCommand(session: String) -> String {
         let target = shellQuote(session)
         return

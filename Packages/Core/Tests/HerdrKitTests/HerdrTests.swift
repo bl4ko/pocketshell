@@ -217,3 +217,32 @@ private func snapshot(
         Herdr.focusAgentCommand(session: "default", paneID: "w'1:p1", tabID: "w'1:t1")
             == "\(herdr) agent focus 'w'\\''1:p1' || \(herdr) tab focus 'w'\\''1:t1'")
 }
+
+@Test func findsTheFocusedPaneAndItsShellPID() {
+    let snapshot = #"{"id":"cli","result":{"snapshot":{"focused_pane_id":"w1:p2","agents":[],"version":"0.9.5"}}}"#
+    #expect(Herdr.parseFocusedPaneID(snapshot) == "w1:p2")
+    #expect(Herdr.parseFocusedPaneID("{}") == nil)
+    #expect(
+        Herdr.paneShellPIDCommand(session: "work", paneID: "w1:p2")
+            .hasSuffix(
+                #"herdr --session 'work' pane process-info --pane 'w1:p2' | sed -n 's/.*"shell_pid":\([0-9][0-9]*\).*/\1/p'"#
+            ))
+}
+
+#if os(macOS)
+    @Test func extractsTheShellPIDFromProcessInfo() throws {
+        let info =
+            #"{"result":{"process_info":{"foreground_process_group_id":32455,"pane_id":"w1:p1","shell_pid":31704}}}"#
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        let command = Herdr.paneShellPIDCommand(session: "default", paneID: "w1:p1")
+        let filter = try #require(command.range(of: " | ")).upperBound
+        process.arguments = ["-c", "printf '%s\\n' '\(info)' | \(command[filter...])"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        while process.isRunning { usleep(10_000) }
+        #expect(output == "31704\n")
+    }
+#endif

@@ -25,3 +25,10 @@ import Testing
     let cmd = Tmux.sendKeysCommand(target: "'claude':1", text: "-f", pressEnter: false)
     #expect(cmd.hasSuffix("send-keys -t 'claude':1 -l -- '-f'"))
 }
+
+@Test func panePIDCommandTargetsTheClone() {
+    #expect(
+        Tmux.panePIDCommand(target: "work-psh-1234abcd")
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux display-message -p -t 'work-psh-1234abcd' '#{pane_pid}'"
+    )
+}

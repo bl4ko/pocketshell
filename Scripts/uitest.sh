@@ -12,7 +12,9 @@ STATUS_GAP="$TMUX_SESSION-gap"
 FLICKER_SESSION="$TMUX_SESSION-flicker"
 KBSLIDE_SESSION="$TMUX_SESSION-kbslide"
 HERDR_SELECT=""
-unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID
+unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID TMUX
+export TMUX_TMPDIR="$DIR/tmux"
+mkdir -p "$TMUX_TMPDIR"
 herdr_select() { herdr --session "psh-uitest-sel-$$" "$@"; }
 cleanup() {
     if [ -n "$HERDR_SELECT" ]; then
@@ -21,9 +23,7 @@ cleanup() {
     fi
     kill "${WATCHDOG_PID:-}" 2>/dev/null || true
     kill "${SSHD_PID:-}" 2>/dev/null || true
-    for session in "$TMUX_SESSION" "$STATUS_STABLE" "$STATUS_CHURN" "$STATUS_GAP" "$FLICKER_SESSION" "$KBSLIDE_SESSION"; do
-        tmux kill-session -t "$session" 2>/dev/null || true
-    done
+    tmux -S "$TMUX_TMPDIR/tmux-$(id -u)/default" kill-server 2>/dev/null || true
     rm -rf "$DIR"
 }
 trap cleanup EXIT
@@ -47,6 +47,7 @@ UsePAM no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 LogLevel QUIET
+SetEnv TMUX_TMPDIR=$TMUX_TMPDIR
 EOF
 
 /usr/sbin/sshd -D -f "$DIR/sshd_config" &

@@ -86,7 +86,8 @@ let package = Package(
         .testTarget(name: "SSHKitTests", dependencies: ["SSHKit"], swiftSettings: strict),
         .testTarget(name: "ReconnectKitTests", dependencies: ["ReconnectKit"], swiftSettings: strict),
         .testTarget(name: "TmuxKitTests", dependencies: ["TmuxKit"], swiftSettings: strict),
-        .testTarget(name: "HerdrKitTests", dependencies: ["HerdrKit"], swiftSettings: strict),
+        .testTarget(
+            name: "HerdrKitTests", dependencies: ["HerdrKit"], resources: [.copy("Fixtures")], swiftSettings: strict),
         .testTarget(name: "ToolbarUITests", dependencies: ["ToolbarUI"], swiftSettings: strict),
         .testTarget(name: "TerminalUITests", dependencies: ["TerminalUI"], swiftSettings: strict),
         .testTarget(name: "VNCKitTests", dependencies: ["VNCKit"], swiftSettings: strict),

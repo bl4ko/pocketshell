@@ -39,10 +39,19 @@ public struct HerdrWorkspace: Codable, Equatable, Sendable, Identifiable {
     public var label: String
     public var status: HerdrAgentStatus
     public var focused: Bool
+    public var worktree: Worktree?
+
+    public struct Worktree: Codable, Equatable, Sendable {
+        public var isLinked: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case isLinked = "is_linked_worktree"
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case workspaceID = "workspace_id"
-        case number, label, focused
+        case number, label, focused, worktree
         case status = "agent_status"
     }
 }
@@ -53,6 +62,7 @@ public struct HerdrAgent: Codable, Equatable, Sendable, Identifiable {
     public var workspaceID: String
     public var tabID: String
     public var agent: String?
+    public var name: String?
     public var displayAgent: String?
     public var title: String?
     public var status: HerdrAgentStatus
@@ -62,9 +72,52 @@ public struct HerdrAgent: Codable, Equatable, Sendable, Identifiable {
         case paneID = "pane_id"
         case workspaceID = "workspace_id"
         case tabID = "tab_id"
-        case agent, title, focused
+        case agent, name, title, focused
         case displayAgent = "display_agent"
         case status = "agent_status"
+    }
+}
+
+public struct HerdrPane: Codable, Equatable, Sendable, Identifiable {
+    public var id: String { paneID }
+    public var paneID: String
+    public var workspaceID: String
+    public var tabID: String
+    public var agent: String?
+    public var label: String?
+    public var cwd: String?
+    public var foregroundCwd: String?
+    public var status: HerdrAgentStatus
+    public var focused: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case paneID = "pane_id"
+        case workspaceID = "workspace_id"
+        case tabID = "tab_id"
+        case agent, label, cwd, focused
+        case foregroundCwd = "foreground_cwd"
+        case status = "agent_status"
+    }
+}
+
+public struct HerdrLayout: Codable, Equatable, Sendable {
+    public struct Pane: Codable, Equatable, Sendable {
+        public var paneID: String
+
+        enum CodingKeys: String, CodingKey {
+            case paneID = "pane_id"
+        }
+    }
+
+    public var tabID: String
+    public var focusedPaneID: String?
+    public var zoomed: Bool
+    public var panes: [Pane]
+
+    enum CodingKeys: String, CodingKey {
+        case tabID = "tab_id"
+        case focusedPaneID = "focused_pane_id"
+        case zoomed, panes
     }
 }
 
@@ -73,17 +126,28 @@ public struct HerdrTab: Codable, Equatable, Sendable, Identifiable {
     public var tabID: String
     public var workspaceID: String
     public var label: String
+    public var number: Int?
+    public var status: HerdrAgentStatus?
+    public var paneCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case tabID = "tab_id"
         case workspaceID = "workspace_id"
-        case label
+        case label, number
+        case status = "agent_status"
+        case paneCount = "pane_count"
     }
 
-    public init(tabID: String, workspaceID: String, label: String) {
+    public init(
+        tabID: String, workspaceID: String, label: String, number: Int? = nil, status: HerdrAgentStatus? = nil,
+        paneCount: Int? = nil
+    ) {
         self.tabID = tabID
         self.workspaceID = workspaceID
         self.label = label
+        self.number = number
+        self.status = status
+        self.paneCount = paneCount
     }
 }
 
@@ -91,14 +155,20 @@ public struct HerdrSnapshot: Codable, Equatable, Sendable {
     public var version: String
     public var protocolVersion: Int
     public var focusedWorkspaceID: String?
+    public var focusedTabID: String?
+    public var focusedPaneID: String?
     public var workspaces: [HerdrWorkspace]
     public var agents: [HerdrAgent]
     public var tabs: [HerdrTab]?
+    public var panes: [HerdrPane]?
+    public var layouts: [HerdrLayout]?
 
     enum CodingKeys: String, CodingKey {
-        case version, workspaces, agents, tabs
+        case version, workspaces, agents, tabs, panes, layouts
         case protocolVersion = "protocol"
         case focusedWorkspaceID = "focused_workspace_id"
+        case focusedTabID = "focused_tab_id"
+        case focusedPaneID = "focused_pane_id"
     }
 }
 
@@ -110,7 +180,7 @@ public enum HerdrCompatibility: Equatable, Sendable {
 }
 
 public enum Herdr {
-    private static let executable = "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH:$HOME/.local/bin\" herdr"
+    static let executable = "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH:$HOME/.local/bin\" herdr"
 
     public static func listSessionsCommand() -> String {
         "\(executable) session list --json"
@@ -221,7 +291,7 @@ public enum Herdr {
         session == "default" ? executable : "\(executable) --session \(shellQuote(session))"
     }
 
-    private static func shellQuote(_ value: String) -> String {
+    static func shellQuote(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
@@ -246,7 +316,7 @@ public enum Herdr {
         session == "default" ? "herdr server stop" : "herdr session stop \(shellQuote(session))"
     }
 
-    private static func decode<T: Decodable>(_ type: T.Type, from output: String) -> T? {
+    static func decode<T: Decodable>(_ type: T.Type, from output: String) -> T? {
         guard let data = output.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }

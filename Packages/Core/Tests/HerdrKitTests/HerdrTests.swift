@@ -105,7 +105,10 @@ import Testing
 
     #expect(
         try #require(Herdr.parseSnapshot(output)).tabs
-            == [HerdrTab(tabID: "w1:t13", workspaceID: "w1", label: "security")])
+            == [
+                HerdrTab(
+                    tabID: "w1:t13", workspaceID: "w1", label: "security", number: 35, status: .working, paneCount: 1)
+            ])
     #expect(
         try #require(
             Herdr.parseSnapshot(

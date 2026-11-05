@@ -30,6 +30,7 @@ final class GlyphAtlas {
     private var shelfY = 0
     private var shelfHeight = 0
     private let fonts: [CTFont]
+    private let symbols: CTFont?
     private let maxSize = 4096
 
     init?(device: MTLDevice, font: CTFont, scale: CGFloat) {
@@ -40,6 +41,7 @@ final class GlyphAtlas {
             CTFontCreateCopyWithSymbolicTraits(base, 0, nil, traits, traits) ?? base
         }
         fonts = [base, variant(.traitBold), variant(.traitItalic), variant([.traitBold, .traitItalic])]
+        symbols = SymbolFont.make(size: CTFontGetSize(base))
         size = 1024
         guard let texture = Self.makeTexture(device: device, size: size) else { return nil }
         self.texture = texture
@@ -124,18 +126,13 @@ final class GlyphAtlas {
                 return BoxDrawing.draw(
                     first, in: context, width: width, height: height, thickness: metrics.underlineThickness)
             }
-            var scalars = String.UnicodeScalarView()
-            for value in key.scalars {
-                if let scalar = Unicode.Scalar(value) { scalars.append(scalar) }
+            if let symbols, let glyph = symbolGlyph(for: key) {
+                SymbolFont.draw(
+                    glyph, font: symbols, stretch: SymbolFont.stretches(first), in: context, width: width,
+                    height: height)
+                return true
             }
-            let font = fonts[(key.bold ? 1 : 0) + (key.italic ? 2 : 0)]
-            let attributed = NSAttributedString(
-                string: String(scalars),
-                attributes: [
-                    NSAttributedString.Key(kCTFontAttributeName as String): font,
-                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
-                ])
-            let line = CTLineCreateWithAttributedString(attributed)
+            let line = self.line(for: key)
             for run in (CTLineGetGlyphRuns(line) as? [CTRun]) ?? [] {
                 let attributes = CTRunGetAttributes(run) as NSDictionary
                 if let runFont = attributes[kCTFontAttributeName as String],
@@ -167,6 +164,51 @@ final class GlyphAtlas {
             region: MTLRegionMake2D(origin.0, origin.1, width, height), mipmapLevel: 0, withBytes: pixels,
             bytesPerRow: bytesPerRow)
         return GlyphEntry(x: origin.0, y: origin.1, width: width, height: height, color: color, empty: false)
+    }
+
+    private func font(for key: GlyphKey) -> CTFont {
+        fonts[(key.bold ? 1 : 0) + (key.italic ? 2 : 0)]
+    }
+
+    private func string(for key: GlyphKey) -> String {
+        var scalars = String.UnicodeScalarView()
+        for value in key.scalars {
+            if let scalar = Unicode.Scalar(value) { scalars.append(scalar) }
+        }
+        return String(scalars)
+    }
+
+    private func line(for key: GlyphKey) -> CTLine {
+        let attributed = NSAttributedString(
+            string: string(for: key),
+            attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font(for: key),
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
+            ])
+        return CTLineCreateWithAttributedString(attributed)
+    }
+
+    private func symbolGlyph(for key: GlyphKey) -> CGGlyph? {
+        guard let symbols, let first = key.scalars.first,
+            key.scalars.dropFirst().allSatisfy({ $0 == 0xFE0E || $0 == 0xFE0F }),
+            let glyph = SymbolFont.glyph(first, in: symbols)
+        else { return nil }
+        let primary = font(for: key)
+        if SymbolFont.glyph(first, in: primary) != nil { return nil }
+        if SymbolFont.isPrivateUse(first) { return glyph }
+        let text = string(for: key) as CFString
+        let fallback = CTFontCreateForString(primary, text, CFRange(location: 0, length: CFStringGetLength(text)))
+        return CTFontCopyPostScriptName(fallback) as String == "LastResort" ? glyph : nil
+    }
+
+    func fontNames(for key: GlyphKey) -> [String] {
+        if let symbols, symbolGlyph(for: key) != nil { return [CTFontCopyPostScriptName(symbols) as String] }
+        return ((CTLineGetGlyphRuns(line(for: key)) as? [CTRun]) ?? []).compactMap { run in
+            guard let font = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName as String] else {
+                return nil
+            }
+            return CTFontCopyPostScriptName(font as! CTFont) as String
+        }
     }
 
     func pixels(of entry: GlyphEntry) -> [UInt8] {

@@ -65,7 +65,7 @@ let package = Package(
                 "Models",
                 "ToolbarUI",
                 "VTKit",
-            ], swiftSettings: strict),
+            ], resources: [.copy("Fonts")], swiftSettings: strict),
         .target(name: "ToolbarUI", dependencies: ["Models"], swiftSettings: strict),
         .target(
             name: "VNCKit",

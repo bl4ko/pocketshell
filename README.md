@@ -11,6 +11,7 @@ Built for one workflow: agents run in a persistent multiplexer on a machine at h
 - Herdr's semantic working / blocked / done state, with screen-based status detection for tmux and plain shells
 - Optional private Cloudflare/APNs relay for reliable Herdr alerts while PocketShell is suspended
 - Notification taps reconnect to the named Herdr session and focus the exact workspace
+- Native Herdr controls: a finger-sized switcher for workspaces, tabs, panes and agents with their status, a focus mode that gives the screen to the zoomed Herdr pane, and quick create for tabs, splits, workspaces and worktrees with an optional agent
 - Special-keys toolbar (esc, ctrl, tab, arrows, custom sequences), editable via `toolbar.json`
 - Hands-free voice mode on iPhone: dictate into the message bar, say "send", "escape", "enter" or a digit, and "go to <tab>" to jump between Herdr tabs; an AirPods stem press pauses listening
 - Snippets: type into the terminal or exec-and-show-output

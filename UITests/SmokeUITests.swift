@@ -45,7 +45,8 @@ final class SmokeUITests: XCTestCase {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
                 #"{"sessions":[{"name":"pskbdtest","default":false,"running":true}]}"#
         }
-        if name.contains("testHerdrSelectDrag") || name.contains("testKeyboardKeepsHerdr"),
+        if name.contains("testHerdrSelectDrag") || name.contains("testKeyboardKeepsHerdr")
+            || name.contains("testZHerdrNative"),
             let session = ProcessInfo.processInfo.environment["PS_TEST_HERDR_SELECT"]
         {
             app.launchEnvironment["PS_UI_TEST_HERDR_SESSIONS"] =
@@ -1526,6 +1527,89 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Close Tab"].waitForNonExistence(timeout: 3))
         XCTAssertEqual(first.frame.minX, before, accuracy: 1)
         XCTAssertGreaterThan(first.frame.minX, second.frame.minX)
+    }
+
+    func testZHerdrNativeSwitcherFocusModeAndQuickCreate() throws {
+        guard let session = ProcessInfo.processInfo.environment["PS_TEST_HERDR_SELECT"], !session.isEmpty else {
+            throw XCTSkip("PS_TEST_HERDR_SELECT not set; Herdr native controls skipped")
+        }
+        let host = app.staticTexts["localbox"].firstMatch
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        let herdrMode = app.buttons["Herdr"].firstMatch
+        XCTAssertTrue(herdrMode.waitForExistence(timeout: 10))
+        herdrMode.tap()
+        XCTAssertTrue(app.textViews["terminal.view"].waitForExistence(timeout: 20))
+        sleep(3)
+
+        let switcher = app.buttons["herdr-switcher"]
+        XCTAssertTrue(switcher.waitForExistence(timeout: 5))
+        switcher.tap()
+        let rightPane = app.buttons["herdr-pane-w1:p2"]
+        XCTAssertTrue(rightPane.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["herdr-pane-w1:p1"].exists)
+        XCTAssertTrue(app.buttons["herdr-pane-w1:p3"].exists, "single-pane tab rows must be listed")
+        XCTAssertNotEqual(rightPane.value as? String, "focused")
+        keepScreenshot("herdr-switcher")
+        rightPane.tap()
+        let done = app.buttons["herdr-switcher-done"]
+        XCTAssertTrue(done.waitForNonExistence(timeout: 10), "jumping to a pane closes the switcher")
+        switcher.tap()
+        XCTAssertTrue(waitForValue(app.buttons["herdr-pane-w1:p2"], "focused"), "Herdr did not focus the pane")
+        XCTAssertFalse(
+            app.buttons["herdr-tab-w1:t1"].label.contains("zoomed"), "a plain jump must not leave the tab zoomed")
+        done.tap()
+
+        app.buttons["herdr-focus"].tap()
+        let exit = app.buttons["herdr-focus-exit"]
+        XCTAssertTrue(exit.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["host-switcher"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(exit.isHittable)
+        sleep(2)
+        keepScreenshot("herdr-focus-mode")
+        app.buttons["herdr-focus-switcher"].tap()
+        let splitTab = app.buttons["herdr-tab-w1:t1"]
+        XCTAssertTrue(splitTab.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLabel(splitTab, containing: "zoomed"), "focus mode must zoom the focused pane")
+        done.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5))
+        exit.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["host-switcher"].waitForExistence(timeout: 5))
+        switcher.tap()
+        XCTAssertTrue(splitTab.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLabel(splitTab, containing: "zoomed", present: false), "leaving focus mode unzooms")
+
+        app.buttons["herdr-create"].tap()
+        app.buttons["New Tab"].firstMatch.tap()
+        let name = app.textFields["herdr-create-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("native")
+        keepScreenshot("herdr-quick-create")
+        app.buttons["herdr-create-confirm"].tap()
+        XCTAssertTrue(name.waitForNonExistence(timeout: 15), "creating a tab closes the form")
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5))
+        switcher.tap()
+        let created = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'native'")).firstMatch
+        XCTAssertTrue(created.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForValue(created, "focused"), "the new tab must take Herdr focus")
+    }
+
+    private func keepScreenshot(_ name: String) {
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    private func waitForValue(_ element: XCUIElement, _ value: String) -> Bool {
+        let predicate = NSPredicate(format: "value == %@", value)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 10) == .completed
+    }
+
+    private func waitForLabel(_ element: XCUIElement, containing text: String, present: Bool = true) -> Bool {
+        let predicate = NSPredicate(format: present ? "label CONTAINS %@" : "NOT (label CONTAINS %@)", text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 10) == .completed
     }
 
     func testZZCloudRefreshKeepsRemoteDeletion() {

@@ -15,6 +15,7 @@ enum AppSettings {
     static let uiScaleKey = "pocketshell.uiScale"
     static let developerModeKey = "pocketshell.developerMode"
     static let pushRelayURLKey = "pocketshell.pushRelayURL"
+    static let herdrAgentKindKey = "pocketshell.herdrAgentKind"
 }
 
 struct ConfigDocument: FileDocument {

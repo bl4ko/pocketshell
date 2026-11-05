@@ -38,6 +38,7 @@ final class ConnectionController: ObservableObject {
         "pocketshell.composerDraft.\(host.id.uuidString)"
     }
     let bridge = TerminalBridge()
+    let herdr = HerdrState()
     var onExit: (() -> Void)?
 
     private let host: HostConfig
@@ -265,7 +266,13 @@ final class ConnectionController: ObservableObject {
             let snapshot = Herdr.parseSnapshot(output)
         else { return nil }
         pendingShell = .herdr(session: session, workspaceID: snapshot.focusedWorkspaceID)
+        if herdr.snapshot != snapshot { herdr.snapshot = snapshot }
         return snapshot
+    }
+
+    func herdrExec(_ command: (String) -> String) async -> String? {
+        guard let connection, case .herdr(let session, _) = pendingShell else { return nil }
+        return try? await connection.exec(command(session))
     }
 
     func focusHerdrWorkspace(_ workspaceID: String) async {

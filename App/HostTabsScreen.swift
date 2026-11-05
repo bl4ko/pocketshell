@@ -51,6 +51,8 @@ struct HostTabsScreen: View {
     @State private var tabResolver = TabStatusResolver()
     @State private var showSnippets = false
     @State private var showTmuxJump = false
+    @State private var showHerdrSwitcher = false
+    @State private var herdrFocus = false
     @State private var showFiles = false
     @State private var showDiff = false
     @State private var showForward = false
@@ -71,7 +73,7 @@ struct HostTabsScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !herdrOnly, tabs.count > 1 {
+            if !herdrOnly, !herdrFocus, tabs.count > 1 {
                 TabStripView(
                     tabs: $tabs,
                     selectedTab: $selectedTab,
@@ -103,11 +105,20 @@ struct HostTabsScreen: View {
                 }
             }
         }
+        .overlay {
+            if herdrFocus, let activeController {
+                HerdrFocusControls(
+                    state: activeController.herdr,
+                    onSwitcher: { showHerdrSwitcher = true },
+                    onExit: { setHerdrFocus(false) })
+            }
+        }
         .background(tabShortcuts)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(hidesSystemBackButton)
-        .toolbar(.visible, for: .navigationBar)
+        .toolbar(herdrFocus ? .hidden : .visible, for: .navigationBar)
+        .statusBarHidden(herdrFocus)
         .toolbarBackground(PocketshellTheme.paper, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
@@ -129,74 +140,44 @@ struct HostTabsScreen: View {
                         .frame(width: 150)
                 }.withoutGlass()
             #endif
-            if !herdrOnly {
+            if herdrOnly {
+                ToolbarItem(placement: .topBarTrailing) {
+                    herdrSwitcherButton
+                }.withoutGlass()
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showTmuxJump = true
+                        setHerdrFocus(true)
                     } label: {
-                        Image(systemName: "rectangle.split.3x1")
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
                     }
-                    #if targetEnvironment(macCatalyst)
-                        .keyboardShortcut("k", modifiers: .command)
-                    #endif
-                    .accessibilityIdentifier("tmux-sessions")
+                    .accessibilityLabel("Focus mode")
+                    .accessibilityIdentifier("herdr-focus")
+                }.withoutGlass()
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ObservingController(controller: activeController) { controller in
+                        if controller?.isHerdrAttached == true {
+                            herdrSwitcherButton
+                        } else {
+                            Button {
+                                showTmuxJump = true
+                            } label: {
+                                Image(systemName: "rectangle.split.3x1")
+                            }
+                            #if targetEnvironment(macCatalyst)
+                                .keyboardShortcut("k", modifiers: .command)
+                            #endif
+                            .accessibilityIdentifier("tmux-sessions")
+                        }
+                    }
                 }.withoutGlass()
             }
             // Exactly three trailing items: a fourth lands in the system
             // overflow menu, which iOS 26 renders but does not open reliably.
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        activeController?.composerVisible = true
-                    } label: {
-                        Label("Compose", systemImage: "text.bubble")
-                    }
-                    .accessibilityIdentifier("menu-compose")
-                    Button {
-                        activeController?.findVisible = true
-                    } label: {
-                        Label("Find", systemImage: "magnifyingglass")
-                    }
-                    Button {
-                        showSnippets = true
-                    } label: {
-                        Label("Snippets", systemImage: "text.badge.plus")
-                    }
-                    if let selectedTab, tabStatuses[selectedTab] != nil {
-                        Button {
-                            requestSkipPermissions(selectedTab)
-                        } label: {
-                            Label("Skip Permissions", systemImage: "exclamationmark.shield")
-                        }
-                        .accessibilityIdentifier("menu-skip-permissions")
-                    }
-                    Button {
-                        showDiff = true
-                    } label: {
-                        Label("Diff", systemImage: "arrow.triangle.branch")
-                    }
-                    .accessibilityIdentifier("menu-diff")
-                    Button {
-                        showFiles = true
-                    } label: {
-                        Label("Files", systemImage: "folder")
-                    }
-                    Button {
-                        showForward = true
-                    } label: {
-                        Label("Port forward", systemImage: "network")
-                    }
-                    if developerMode {
-                        Button {
-                            Task { UIPasteboard.general.string = await debugReport() }
-                        } label: {
-                            Label("Copy Debug Report", systemImage: "doc.on.doc")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                ObservingController(controller: activeController) { controller in
+                    moreMenu(herdr: controller?.isHerdrAttached == true)
                 }
-                .accessibilityIdentifier("terminal.more")
             }.withoutGlass()
             if !herdrOnly {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -209,6 +190,11 @@ struct HostTabsScreen: View {
                     .keyboardShortcut("t", modifiers: .command)
                     .accessibilityIdentifier("new-tab")
                 }.withoutGlass()
+            }
+        }
+        .sheet(isPresented: $showHerdrSwitcher) {
+            if let activeController {
+                HerdrSwitcherSheet(controller: activeController, hostName: host.name)
             }
         }
         .sheet(isPresented: $showDiff) {
@@ -279,7 +265,11 @@ struct HostTabsScreen: View {
                 }
             }
         }
-        .onChange(of: selectedTab, initial: true) { _, _ in
+        .onChange(of: selectedTab, initial: true) { old, _ in
+            if herdrFocus, let previous = tabs.first(where: { $0.id == old && $0.id != selectedTab }) {
+                herdrFocus = false
+                Task { await previous.controller.setHerdrFocusMode(false) }
+            }
             if let tab = tabs.first(where: { $0.id == selectedTab }) {
                 clearUnseen(tab)
             }
@@ -296,7 +286,12 @@ struct HostTabsScreen: View {
         .onDisappear {
             monitor.visibleWindowKey = nil
             for tab in tabs {
-                Task { await tab.controller.stop() }
+                Task {
+                    if tab.controller.herdr.focusMode {
+                        await tab.controller.setHerdrFocusMode(false)
+                    }
+                    await tab.controller.stop()
+                }
             }
             if !herdrOnly {
                 Task { await monitor.syncWorkspaceNow(for: host) }
@@ -325,6 +320,94 @@ struct HostTabsScreen: View {
             }
         }
         .paperScreen()
+    }
+
+    private func moreMenu(herdr: Bool) -> some View {
+        Menu {
+            if herdr, !herdrOnly {
+                Button {
+                    setHerdrFocus(true)
+                } label: {
+                    Label("Focus Mode", systemImage: "arrow.up.left.and.arrow.down.right")
+                }
+                .accessibilityIdentifier("menu-herdr-focus")
+                Button {
+                    showTmuxJump = true
+                } label: {
+                    Label("Tabs & tmux", systemImage: "rectangle.split.3x1")
+                }
+                .accessibilityIdentifier("menu-tmux-sessions")
+            }
+            Button {
+                activeController?.composerVisible = true
+            } label: {
+                Label("Compose", systemImage: "text.bubble")
+            }
+            .accessibilityIdentifier("menu-compose")
+            Button {
+                activeController?.findVisible = true
+            } label: {
+                Label("Find", systemImage: "magnifyingglass")
+            }
+            Button {
+                showSnippets = true
+            } label: {
+                Label("Snippets", systemImage: "text.badge.plus")
+            }
+            if let selectedTab, tabStatuses[selectedTab] != nil {
+                Button {
+                    requestSkipPermissions(selectedTab)
+                } label: {
+                    Label("Skip Permissions", systemImage: "exclamationmark.shield")
+                }
+                .accessibilityIdentifier("menu-skip-permissions")
+            }
+            Button {
+                showDiff = true
+            } label: {
+                Label("Diff", systemImage: "arrow.triangle.branch")
+            }
+            .accessibilityIdentifier("menu-diff")
+            Button {
+                showFiles = true
+            } label: {
+                Label("Files", systemImage: "folder")
+            }
+            Button {
+                showForward = true
+            } label: {
+                Label("Port forward", systemImage: "network")
+            }
+            if developerMode {
+                Button {
+                    Task { UIPasteboard.general.string = await debugReport() }
+                } label: {
+                    Label("Copy Debug Report", systemImage: "doc.on.doc")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityIdentifier("terminal.more")
+    }
+
+    private var herdrSwitcherButton: some View {
+        Button {
+            showHerdrSwitcher = true
+        } label: {
+            Image(systemName: "square.stack.3d.up")
+        }
+        #if targetEnvironment(macCatalyst)
+            .keyboardShortcut("k", modifiers: .command)
+        #endif
+        .accessibilityLabel("Herdr switcher")
+        .accessibilityIdentifier("herdr-switcher")
+    }
+
+    private func setHerdrFocus(_ on: Bool) {
+        guard let controller = activeController, !on || controller.isHerdrAttached else { return }
+        herdrFocus = on
+        Task { await controller.setHerdrFocusMode(on) }
     }
 
     private var activeController: ConnectionController? {
@@ -835,6 +918,12 @@ struct HostTabsScreen: View {
                 .keyboardShortcut("[", modifiers: [.command, .shift])
             Button("") { cycleTab(by: 1) }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
+            Button("") { setHerdrFocus(!herdrFocus) }
+                .keyboardShortcut(.return, modifiers: [.command, .shift])
+            if herdrFocus {
+                Button("") { showHerdrSwitcher = true }
+                    .keyboardShortcut("k", modifiers: .command)
+            }
         }
         .opacity(0)
         .frame(width: 0, height: 0)
@@ -1639,5 +1728,80 @@ private extension ToolbarContent {
         } else {
             self
         }
+    }
+}
+
+private struct ObservingController<Content: View>: View {
+    let controller: ConnectionController?
+    @ViewBuilder let content: (ConnectionController?) -> Content
+
+    var body: some View {
+        if let controller {
+            Observed(controller: controller, content: content)
+        } else {
+            content(nil)
+        }
+    }
+
+    private struct Observed: View {
+        @ObservedObject var controller: ConnectionController
+        let content: (ConnectionController?) -> Content
+
+        var body: some View {
+            content(controller)
+        }
+    }
+}
+
+struct HerdrFocusControls: View {
+    @ObservedObject var state: HerdrState
+    let onSwitcher: () -> Void
+    let onExit: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let insets = proxy.safeAreaInsets
+            let band = insets.top >= 44 ? Axis.horizontal : insets.trailing >= 44 ? .vertical : .horizontal
+            let layout =
+                band == .horizontal ? AnyLayout(HStackLayout(spacing: 10)) : AnyLayout(VStackLayout(spacing: 10))
+            layout {
+                button("square.stack.3d.up", label: "Herdr switcher", id: "herdr-focus-switcher", action: onSwitcher)
+                    .overlay(alignment: .topTrailing) {
+                        if needsInput {
+                            Circle()
+                                .fill(PocketshellTheme.waiting)
+                                .frame(width: 10, height: 10)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                button(
+                    "arrow.down.right.and.arrow.up.left", label: "Exit focus mode", id: "herdr-focus-exit",
+                    action: onExit)
+            }
+            .padding(.top, insets.top >= 44 ? (insets.top - 44) / 2 : 6)
+            .padding(.trailing, band == .vertical ? (insets.trailing - 44) / 2 : max(10, insets.trailing))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .ignoresSafeArea()
+        }
+        .ignoresSafeArea()
+    }
+
+    private var needsInput: Bool {
+        state.snapshot.map { !HerdrOutline($0).needingInput.isEmpty } ?? false
+    }
+
+    private func button(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(PocketshellTheme.ink)
+                .frame(width: 44, height: 44)
+                .background(PocketshellTheme.surface.opacity(0.92), in: Circle())
+                .overlay(Circle().stroke(PocketshellTheme.border))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(id)
     }
 }

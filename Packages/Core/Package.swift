@@ -79,7 +79,8 @@ let package = Package(
         .testTarget(name: "MonitorKitTests", dependencies: ["MonitorKit"], swiftSettings: strict),
         .testTarget(name: "SFTPKitTests", dependencies: ["SFTPKit"], swiftSettings: strict),
         .testTarget(name: "GitKitTests", dependencies: ["GitKit"], swiftSettings: strict),
-        .testTarget(name: "VoiceKitTests", dependencies: ["VoiceKit"], swiftSettings: strict),
+        .testTarget(
+            name: "VoiceKitTests", dependencies: ["VoiceKit"], resources: [.copy("Fixtures")], swiftSettings: strict),
         .testTarget(
             name: "VTKitTests", dependencies: ["VTKit"], resources: [.copy("Fixtures")], swiftSettings: strict),
         .testTarget(name: "KeyKitTests", dependencies: ["KeyKit"], swiftSettings: strict),

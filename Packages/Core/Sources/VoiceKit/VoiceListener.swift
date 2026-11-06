@@ -21,20 +21,19 @@
 
         public private(set) static weak var current: VoiceListener?
 
-        private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         private let feed = AudioFeed()
         private var engine: AVAudioEngine?
         private var starting: UUID?
-        private var task: SFSpeechRecognitionTask?
-        private var phraseID: ObjectIdentifier?
-        private var pending: Task<Void, Never>?
+        private var generation = 0
+        private var flushStream: (@Sendable () async -> Void)?
+        private var finishStream: (@Sendable () async -> Void)?
         private var muteObserver: NSObjectProtocol?
         private var routeObserver: NSObjectProtocol?
-        private var fallback = SpeechFallback(onDeviceAvailable: false)
+        private var model = "-"
         private var tapFormat = "-"
         private var restarts = 0
-        private var results = 0
-        private var lastFailure: SpeechFailure?
+        private var phrases = 0
+        private var lastFailure = "-"
 
         public init() {}
 
@@ -59,17 +58,20 @@
         public var report: String {
             let session = AVAudioSession.sharedInstance()
             let route = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
-            let failure = lastFailure.map { "\($0.domain) \($0.code) \($0.message)" } ?? "-"
             return """
-                state=\(state) onDevice=\(fallback.onDevice) engine=\(engine?.isRunning == true ? "running" : "stopped") restarts=\(restarts)
+                state=\(state) model=\(model) engine=\(engine?.isRunning == true ? "running" : "stopped") restarts=\(restarts)
                 route=\(route.joined(separator: ",")) sessionRate=\(Int(session.sampleRate)) tap=\(tapFormat) muted=\(AVAudioApplication.shared.isInputMuted)
-                \(feed.stats) results=\(results)
-                lastFailure=\(failure)
+                \(feed.stats) phrases=\(phrases)
+                lastFailure=\(lastFailure)
                 """
         }
 
         public func start() async {
             guard !isOn, starting == nil else { return }
+            guard #available(iOS 26, *) else {
+                fail("Voice mode needs iOS 26")
+                return
+            }
             let attempt = UUID()
             starting = attempt
             defer { if starting == attempt { starting = nil } }
@@ -83,12 +85,28 @@
                 fail("Allow microphone and speech recognition in Settings")
                 return
             }
-            guard let recognizer, recognizer.isAvailable else {
-                fail("Speech recognition is not available")
+            problem = "loading speech model…"
+            state = .listening
+            let stream: SpeechStream
+            do {
+                stream = try await SpeechStream.make(contextualStrings: contextualStrings + VoiceCommand.vocabulary) {
+                    [weak self] in
+                    Task { @MainActor in self?.problem = "downloading speech model…" }
+                }
+            } catch {
+                if starting == attempt { fail(error.localizedDescription) }
                 return
             }
-            fallback = SpeechFallback(onDeviceAvailable: recognizer.supportsOnDeviceRecognition)
-            problem = nil
+            guard starting == attempt, isOn else {
+                await stream.finish()
+                return
+            }
+            model = "\(stream.engine) \(stream.locale.identifier) \(Int(stream.format.sampleRate))Hz"
+            generation += 1
+            listen(to: stream, generation: generation)
+            feed.sink = stream.append
+            flushStream = { await stream.flush() }
+            finishStream = { await stream.finish() }
             do {
                 let session = AVAudioSession.sharedInstance()
                 try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP])
@@ -105,8 +123,7 @@
                 let muted = (note.userInfo?[AVAudioApplication.muteStateKey] as? NSNumber)?.boolValue ?? false
                 MainActor.assumeIsolated { self?.setMuted(muted) }
             }
-            state = .listening
-            beginPhrase()
+            problem = nil
         }
 
         public func stop() {
@@ -119,7 +136,31 @@
             state = .off
         }
 
+        @available(iOS 26, *)
+        private func listen(to stream: SpeechStream, generation: Int) {
+            Task { [weak self] in
+                do {
+                    for try await event in stream.events {
+                        guard let self else { return }
+                        switch event {
+                        case .partial(let text):
+                            if self.generation == generation, self.isOn { self.partial = text }
+                        case .phrase(let text):
+                            if self.generation == generation { self.partial = "" }
+                            self.phrases += 1
+                            self.onPhrase?(text)
+                        }
+                    }
+                } catch {
+                    guard let self else { return }
+                    self.lastFailure = error.localizedDescription
+                    if self.generation == generation, self.isOn { self.fail(error.localizedDescription) }
+                }
+            }
+        }
+
         private func fail(_ message: String) {
+            lastFailure = message
             teardown()
             starting = nil
             state = .failed(message)
@@ -167,8 +208,12 @@
         }
 
         private func teardown() {
-            endPhrase()
             stopEngine()
+            feed.sink = nil
+            if let finishStream { Task { await finishStream() } }
+            finishStream = nil
+            flushStream = nil
+            partial = ""
             hearingSound = false
             if let muteObserver { NotificationCenter.default.removeObserver(muteObserver) }
             muteObserver = nil
@@ -177,65 +222,13 @@
 
         private func setMuted(_ muted: Bool) {
             if muted, state == .listening {
-                endPhrase()
+                feed.paused = true
+                if let flushStream { Task { await flushStream() } }
                 state = .paused
             } else if !muted, state == .paused {
+                feed.paused = false
                 state = .listening
-                beginPhrase()
             }
-        }
-
-        private func beginPhrase() {
-            guard let recognizer, state == .listening else { return }
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-            request.requiresOnDeviceRecognition = fallback.onDevice
-            request.contextualStrings = contextualStrings
-            request.taskHint = .dictation
-            let id = ObjectIdentifier(request)
-            phraseID = id
-            feed.request = request
-            task = Self.recognize(request, with: recognizer) { [weak self] text, final, failure in
-                self?.heard(text, final: final, failure: failure, from: id)
-            }
-        }
-
-        private func heard(_ text: String?, final: Bool, failure: SpeechFailure?, from id: ObjectIdentifier) {
-            guard id == phraseID else { return }
-            if let text {
-                partial = text
-                problem = nil
-                results += 1
-            }
-            if let failure { lastFailure = failure }
-            let done = final || failure != nil
-            if let failure, let message = fallback.phraseEnded(heardSpeech: !partial.isEmpty, failure: failure) {
-                problem = message
-            }
-            pending?.cancel()
-            let wait: Duration = done ? (partial.isEmpty ? .seconds(1) : .zero) : .seconds(1)
-            pending = Task { [weak self] in
-                try? await Task.sleep(for: wait)
-                guard !Task.isCancelled else { return }
-                self?.finishPhrase()
-            }
-        }
-
-        private func finishPhrase() {
-            let phrase = partial
-            endPhrase()
-            if !phrase.isEmpty { onPhrase?(phrase) }
-            beginPhrase()
-        }
-
-        private func endPhrase() {
-            pending?.cancel()
-            pending = nil
-            feed.request = nil
-            phraseID = nil
-            task?.cancel()
-            task = nil
-            partial = ""
         }
 
         // Callbacks formed on the main actor trap when audio or speech threads call them.
@@ -255,20 +248,6 @@
                 }
             }
         }
-
-        nonisolated private static func recognize(
-            _ request: SFSpeechAudioBufferRecognitionRequest, with recognizer: SFSpeechRecognizer,
-            update: @escaping @MainActor (String?, Bool, SpeechFailure?) -> Void
-        ) -> SFSpeechRecognitionTask {
-            recognizer.recognitionTask(with: request) { result, error in
-                let text = result?.bestTranscription.formattedString
-                let final = result?.isFinal == true
-                let failure = (error as NSError?).map {
-                    SpeechFailure(domain: $0.domain, code: $0.code, message: $0.localizedDescription)
-                }
-                Task { @MainActor in update(text, final, failure) }
-            }
-        }
     }
 
     private struct NoMicrophone: LocalizedError {
@@ -277,18 +256,25 @@
 
     private final class AudioFeed: @unchecked Sendable {
         private let lock = NSLock()
-        private var current: SFSpeechAudioBufferRecognitionRequest?
+        private var target: (@Sendable (AVAudioPCMBuffer) -> Void)?
+        private var muted = false
         private var loud = false
         private var buffers = 0
         private var maxPeak: Float = 0
 
-        var request: SFSpeechAudioBufferRecognitionRequest? {
-            get { lock.withLock { current } }
-            set { lock.withLock { current = newValue } }
+        var sink: (@Sendable (AVAudioPCMBuffer) -> Void)? {
+            get { lock.withLock { target } }
+            set { lock.withLock { target = newValue } }
+        }
+
+        var paused: Bool {
+            get { lock.withLock { muted } }
+            set { lock.withLock { muted = newValue } }
         }
 
         func append(_ buffer: AVAudioPCMBuffer) -> Bool? {
-            request?.append(buffer)
+            let (sink, paused) = lock.withLock { (target, muted) }
+            if !paused { sink?(buffer) }
             guard let samples = buffer.floatChannelData?[0] else { return nil }
             let peak = (0..<Int(buffer.frameLength)).reduce(Float(0)) { max($0, abs(samples[$1])) }
             return lock.withLock {
@@ -309,6 +295,7 @@
                 buffers = 0
                 maxPeak = 0
                 loud = false
+                muted = false
             }
         }
     }

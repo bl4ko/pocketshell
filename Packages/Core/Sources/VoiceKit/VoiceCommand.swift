@@ -80,6 +80,10 @@ public enum VoiceCommand: Equatable, Sendable {
         return nil
     }
 
+    public static let vocabulary = [
+        "send", "clear", "escape", "enter", "go to", "next agent", "scroll up", "scroll down", "close keyboard",
+    ]
+
     public static func join(_ draft: String, _ text: String) -> String {
         [draft, text].filter { !$0.isEmpty }.joined(separator: " ")
     }

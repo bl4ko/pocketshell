@@ -398,6 +398,30 @@
             #expect(press(.keyboardLeftArrow, UIKeyCommand.inputLeftArrow) == Array("\u{1b}OD".utf8))
         }
 
+        @Test func spacebarTrackpadMovesTheShellCursor() {
+            let view = makeGhostty()
+            var sent: [Data] = []
+            view.onSend = { sent.append($0) }
+            view.insertText("abc")
+            sent.removeAll()
+            let input: UITextInput = view
+            input.beginFloatingCursor?(at: CGPoint(x: 100, y: 100))
+            input.updateFloatingCursor?(at: CGPoint(x: 90, y: 100))
+            input.updateFloatingCursor?(at: CGPoint(x: 100, y: 100))
+            input.updateFloatingCursor?(at: CGPoint(x: 100, y: 120))
+            input.endFloatingCursor?()
+            #expect(sent == [Data("\u{1b}[D".utf8), Data("\u{1b}[C".utf8)])
+            sent.removeAll()
+            view.deleteBackward()
+            #expect(sent == [Data([0x7f])])
+            sent.removeAll()
+            view.feed(Data("\u{1b}[?1049h\u{1b}[?1h".utf8))
+            input.beginFloatingCursor?(at: CGPoint(x: 100, y: 100))
+            input.updateFloatingCursor?(at: CGPoint(x: 100, y: 90))
+            input.endFloatingCursor?()
+            #expect(sent == [Data("\u{1b}OA".utf8)])
+        }
+
         @Test func keyRepeatMatchesHardwareRates() {
             let view = makeGhostty()
             #expect(view.keyRepeatDelay == 0.3)

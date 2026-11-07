@@ -1,5 +1,6 @@
 #if os(iOS)
     import UIKit
+    import VTKit
 
     final class DocumentPosition: UITextPosition {
         let offset: Int
@@ -109,6 +110,28 @@
             let start = max(0, document.selected.lowerBound - marked.lowerBound)
             let length = max(0, min(document.selected.upperBound, marked.upperBound) - document.selected.lowerBound)
             markedTextObserver?(text, NSRange(location: start, length: length))
+        }
+
+        func beginFloatingCursor(at point: CGPoint) {
+            floatingCursor = point
+        }
+
+        func updateFloatingCursor(at point: CGPoint) {
+            guard let last = floatingCursor else { return }
+            var keys: [VTKey] = []
+            if abs(point.x - last.x) > 5 { keys.append(point.x < last.x ? .left : .right) }
+            if terminal.isAlternateScreen, abs(point.y - last.y) > 2 { keys.append(point.y < last.y ? .up : .down) }
+            guard !keys.isEmpty else { return }
+            floatingCursor = point
+            _ = edit {
+                $0.reset()
+                return []
+            }
+            for key in keys { send(Data(terminal.encodeKey(key))) }
+        }
+
+        func endFloatingCursor() {
+            floatingCursor = nil
         }
 
         func text(in range: UITextRange) -> String? {

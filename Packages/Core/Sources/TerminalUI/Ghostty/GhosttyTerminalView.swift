@@ -57,6 +57,7 @@
             return interaction
         }()
         var document = TextInputDocument()
+        var floatingCursor: CGPoint?
         weak var textInputDelegate: UITextInputDelegate?
 
         private(set) var font: UIFont

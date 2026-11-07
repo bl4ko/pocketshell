@@ -90,6 +90,14 @@ struct VTTerminalStateTests {
         #expect(terminal.hyperlink(at: VTPoint(col: 1, row: 0), tag: .viewport) == nil)
     }
 
+    @Test func declinesKittyGraphicsItCannotDraw() {
+        let terminal = VTTerminal(cols: 10, rows: 3)
+        var replies: [UInt8] = []
+        terminal.onWrite = { replies += $0 }
+        terminal.feed("\u{1b}_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\u{1b}\\")
+        #expect(!String(decoding: replies, as: UTF8.self).contains("OK"))
+    }
+
     @Test func answersDeviceQueries() {
         let terminal = VTTerminal(cols: 10, rows: 3)
         var replies: [UInt8] = []

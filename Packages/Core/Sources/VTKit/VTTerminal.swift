@@ -119,6 +119,8 @@ public final class VTTerminal {
         ghostty_mouse_event_new(nil, &mouseEvent)
         var lines = scrollbackLines
         ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &lines)
+        var imageStorage: UInt64 = 0
+        ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &imageStorage)
         installCallbacks()
     }
 

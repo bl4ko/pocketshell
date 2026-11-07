@@ -1,5 +1,6 @@
 #if os(iOS)
     import UIKit
+    import VTKit
 
     @MainActor
     final class GhosttyGestureCoordinator: NSObject, UIGestureRecognizerDelegate {
@@ -10,6 +11,8 @@
         private var lastPresenceNudge = Date.distantPast
         private(set) var selectionStart: CGPoint?
         private(set) var tap: UITapGestureRecognizer?
+        var pointerHovering = false
+        var openURL: (URL) -> Void = { UIApplication.shared.open($0) }
         #if !targetEnvironment(macCatalyst)
             var cursorGesture: CursorGestureController?
         #endif
@@ -52,14 +55,14 @@
                 selectionPan.delegate = self
                 view.addGestureRecognizer(selectionPan)
                 tap.require(toFail: selectionPan)
-                let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
-                view.addGestureRecognizer(hover)
                 let linkPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLinkPress(_:)))
                 linkPress.minimumPressDuration = 0.5
                 linkPress.delegate = self
                 linkPress.cancelsTouchesInView = false
                 view.addGestureRecognizer(linkPress)
             #endif
+            let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
+            view.addGestureRecognizer(hover)
             let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
             view.addGestureRecognizer(pinch)
             for direction in [UISwipeGestureRecognizer.Direction.left, .right] {
@@ -110,6 +113,9 @@
                     view.showEditMenu(at: point)
                 }
             #endif
+            if pointerHovering, let url = link(at: point) {
+                openURL(url)
+            }
             sendMouseClick(at: point)
         }
 
@@ -144,15 +150,20 @@
             bridge.processOutgoing(Data("\u{02}\(gesture.direction == .left ? "n" : "p")".utf8))
         }
 
-        func openLink(at location: CGPoint) -> Bool {
-            guard let view else { return false }
+        func link(at location: CGPoint) -> URL? {
+            guard let view else { return nil }
             let (row, col) = view.cell(at: location)
+            if let target = view.terminal.hyperlink(at: VTPoint(col: col, row: row), tag: .viewport) {
+                return URL(string: target)
+            }
             let lines = view.terminal.lines(tag: .viewport, trimRight: false)
             let offset = view.terminal.lineCells(row: row, tag: .viewport).lastIndex { $0.col <= col } ?? col
-            guard
-                let link = TerminalURL.find(lines: lines, wrapped: view.wrappedRows(), row: row, column: offset),
-                let url = URL(string: link)
-            else { return false }
+            return TerminalURL.find(lines: lines, wrapped: view.wrappedRows(), row: row, column: offset)
+                .flatMap(URL.init(string:))
+        }
+
+        func openLink(at location: CGPoint) -> Bool {
+            guard let url = link(at: location) else { return false }
             presentLinkMenu(for: url, at: location)
             return true
         }
@@ -175,11 +186,6 @@
             @objc func handleLinkPress(_ gesture: UILongPressGestureRecognizer) {
                 guard gesture.state == .began, let view else { return }
                 _ = openLink(at: gesture.location(in: view))
-            }
-
-            @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
-                guard gesture.view?.window?.isKeyWindow == true else { return }
-                noteUserPresence()
             }
 
             @objc func handleSelectionPan(_ gesture: UIPanGestureRecognizer) {
@@ -223,6 +229,14 @@
                 }
             }
         #endif
+
+        @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
+            pointerHovering = gesture.state == .began || gesture.state == .changed
+            #if targetEnvironment(macCatalyst)
+                guard gesture.view?.window?.isKeyWindow == true else { return }
+                noteUserPresence()
+            #endif
+        }
 
         @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
             guard let view else { return }

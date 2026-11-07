@@ -392,6 +392,29 @@
         }
 
         @MainActor
+        @Test func pointerClickOnALinkOpensIt() {
+            let (view, window) = windowedTerminal()
+            let coordinator = gestures(view, TerminalBridge())
+            var opened: [URL] = []
+            coordinator.openURL = { opened.append($0) }
+            view.feed(
+                Data("go https://example.com/a and \u{1b}]8;;https://example.com/b\u{1b}\\docs\u{1b}]8;;\u{1b}\\".utf8))
+            let tap = EndedTap()
+            view.addGestureRecognizer(tap)
+            tap.point = cellPoint(view, col: 8, row: 0)
+            coordinator.handleTap(tap)
+            #expect(opened.isEmpty)
+            coordinator.pointerHovering = true
+            coordinator.handleTap(tap)
+            tap.point = cellPoint(view, col: 30, row: 0)
+            coordinator.handleTap(tap)
+            tap.point = cellPoint(view, col: 1, row: 0)
+            coordinator.handleTap(tap)
+            #expect(opened.map(\.absoluteString) == ["https://example.com/a", "https://example.com/b"])
+            withExtendedLifetime(window) {}
+        }
+
+        @MainActor
         @Test func closeKeyboardResignsTerminalAndTextField() {
             let bridge = TerminalBridge()
             let (view, window) = windowedTerminal()

@@ -415,6 +415,17 @@ extension VTTerminal {
         rowFlag(row: row, tag: tag, GHOSTTY_ROW_DATA_WRAP)
     }
 
+    public func hyperlink(at point: VTPoint, tag: VTCoordinateSpace = .active) -> String? {
+        guard var ref = gridRef(point, tag: tag.ghostty) else { return nil }
+        var length = 0
+        guard ghostty_grid_ref_hyperlink_uri(&ref, nil, 0, &length) == GHOSTTY_OUT_OF_SPACE, length > 0 else {
+            return nil
+        }
+        var bytes = [UInt8](repeating: 0, count: length)
+        guard ghostty_grid_ref_hyperlink_uri(&ref, &bytes, length, &length) == GHOSTTY_SUCCESS else { return nil }
+        return String(decoding: bytes.prefix(length), as: UTF8.self)
+    }
+
     public func lineIsContinuation(row: Int, tag: VTCoordinateSpace = .active) -> Bool {
         rowFlag(row: row, tag: tag, GHOSTTY_ROW_DATA_WRAP_CONTINUATION)
     }

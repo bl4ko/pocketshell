@@ -83,6 +83,13 @@ struct VTTerminalStateTests {
         #expect(clipboard == "hi")
     }
 
+    @Test func readsOSC8HyperlinkTargets() {
+        let terminal = VTTerminal(cols: 30, rows: 3)
+        terminal.feed("see \u{1b}]8;;https://example.com/x\u{1b}\\docs\u{1b}]8;;\u{1b}\\ here")
+        #expect(terminal.hyperlink(at: VTPoint(col: 5, row: 0), tag: .viewport) == "https://example.com/x")
+        #expect(terminal.hyperlink(at: VTPoint(col: 1, row: 0), tag: .viewport) == nil)
+    }
+
     @Test func answersDeviceQueries() {
         let terminal = VTTerminal(cols: 10, rows: 3)
         var replies: [UInt8] = []

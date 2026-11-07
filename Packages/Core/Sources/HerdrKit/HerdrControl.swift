@@ -125,6 +125,29 @@ public struct HerdrOutline: Equatable, Sendable {
             ?? focusedPane.flatMap { pane in workspaces.first { $0.workspaceID == pane.workspaceID } }
     }
 
+    public func filtered(by query: String) -> HerdrOutline {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return self }
+        func matches(_ fields: String?...) -> Bool {
+            fields.contains { $0?.localizedStandardContains(query) ?? false }
+        }
+        var result = self
+        result.workspaces = workspaces.compactMap { workspace in
+            if matches(workspace.label) { return workspace }
+            var kept = workspace
+            kept.tabs = workspace.tabs.compactMap { tab in
+                if matches(tab.label) { return tab }
+                var kept = tab
+                kept.panes = tab.panes.filter {
+                    matches($0.title, $0.detail, $0.label, $0.cwd, $0.status?.rawValue, $0.status?.switcherLabel)
+                }
+                return kept.panes.isEmpty ? nil : kept
+            }
+            return kept.tabs.isEmpty ? nil : kept
+        }
+        return result
+    }
+
     static func mostUrgent(_ statuses: [HerdrAgentStatus]) -> HerdrAgentStatus? {
         let order: [HerdrAgentStatus] = [.blocked, .working, .done, .idle, .unknown]
         return order.first(where: statuses.contains)

@@ -30,6 +30,16 @@ public enum HerdrAgentStatus: String, Codable, Equatable, Sendable {
         let value = try decoder.singleValueContainer().decode(String.self)
         self = Self(rawValue: value) ?? .unknown
     }
+
+    public var switcherLabel: String {
+        switch self {
+        case .working: "busy"
+        case .blocked: "needs input"
+        case .done: "done"
+        case .idle: "idle"
+        case .unknown: "unknown"
+        }
+    }
 }
 
 public struct HerdrWorkspace: Codable, Equatable, Sendable, Identifiable {

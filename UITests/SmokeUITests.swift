@@ -1593,6 +1593,19 @@ final class SmokeUITests: XCTestCase {
         let created = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'native'")).firstMatch
         XCTAssertTrue(created.waitForExistence(timeout: 10))
         XCTAssertTrue(waitForValue(created, "focused"), "the new tab must take Herdr focus")
+
+        let search = app.searchFields["Workspace, tab, agent, folder"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("SECOND")
+        XCTAssertTrue(app.buttons["herdr-pane-w1:p3"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["herdr-pane-w1:p1"].waitForNonExistence(timeout: 5), "search hides other panes")
+        XCTAssertFalse(app.buttons["herdr-tab-w1:t1"].exists)
+        keepScreenshot("herdr-search")
+        search.typeText("-nothing")
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'No Results'")).firstMatch
+                .waitForExistence(timeout: 5))
     }
 
     private func keepScreenshot(_ name: String) {

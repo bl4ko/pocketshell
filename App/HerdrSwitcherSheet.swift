@@ -29,6 +29,7 @@ struct HerdrSwitcherSheet: View {
     @State private var closing: Closing?
     @State private var failure: String?
     @State private var scrolledToFocus = false
+    @State private var query = ""
 
     let controller: ConnectionController
     let hostName: String
@@ -43,7 +44,7 @@ struct HerdrSwitcherSheet: View {
         NavigationStack {
             ScrollViewReader { scroller in
                 List {
-                    if let outline {
+                    if let outline = shown {
                         if !outline.needingInput.isEmpty {
                             Section {
                                 ForEach(outline.needingInput) { pane in
@@ -75,6 +76,11 @@ struct HerdrSwitcherSheet: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .overlay {
+                    if let shown, shown.workspaces.isEmpty, !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                        ContentUnavailableView.search(text: query)
+                    }
+                }
                 .task(id: outline?.focusedPaneID) {
                     guard !scrolledToFocus, let focused = outline?.focusedPaneID else { return }
                     try? await Task.sleep(for: .milliseconds(250))
@@ -84,6 +90,10 @@ struct HerdrSwitcherSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .searchable(
+                text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Workspace, tab, agent, folder"
+            )
             .navigationTitle("Herdr")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -156,6 +166,10 @@ struct HerdrSwitcherSheet: View {
 
     private var outline: HerdrOutline? {
         state.snapshot.map(HerdrOutline.init)
+    }
+
+    private var shown: HerdrOutline? {
+        outline?.filtered(by: query)
     }
 
     @ViewBuilder
@@ -635,16 +649,6 @@ struct HerdrCreateSheet: View {
 }
 
 extension HerdrAgentStatus {
-    var switcherLabel: String {
-        switch self {
-        case .working: "busy"
-        case .blocked: "needs input"
-        case .done: "done"
-        case .idle: "idle"
-        case .unknown: "unknown"
-        }
-    }
-
     var switcherColor: Color {
         switch self {
         case .working: PocketshellTheme.busyText

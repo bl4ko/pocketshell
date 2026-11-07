@@ -213,3 +213,53 @@ private func fixtureSnapshot() throws -> HerdrSnapshot {
     #expect(!Herdr.sidebarExpanded(screen: "spaces are fine in a shell"))
     #expect(!Herdr.sidebarExpanded(screen: ""))
 }
+
+@Test func searchKeepsAWholeWorkspaceWhenItsNameMatches() throws {
+    let outline = HerdrOutline(try fixtureSnapshot())
+    let found = outline.filtered(by: "API2")
+
+    #expect(found.workspaces.map(\.workspaceID) == ["w2"])
+    #expect(found.workspaces.first == outline.workspaces[1])
+}
+
+@Test func searchKeepsAWholeTabWhenItsNameMatches() throws {
+    let found = HerdrOutline(try fixtureSnapshot()).filtered(by: "buil")
+
+    #expect(found.workspaces.map(\.workspaceID) == ["w1"])
+    #expect(found.workspaces.first?.tabs.map(\.tabID) == ["w1:t2"])
+    #expect(found.panes.map(\.paneID) == ["w1:p2"])
+}
+
+@Test func searchKeepsOnlyMatchingPanesWithTheirTabAndWorkspace() throws {
+    let outline = HerdrOutline(try fixtureSnapshot())
+
+    let byName = outline.filtered(by: "reviewer")
+    #expect(byName.workspaces.map(\.workspaceID) == ["w1"])
+    #expect(byName.workspaces.first?.tabs.map(\.tabID) == ["w1:t1"])
+    #expect(byName.panes.map(\.paneID) == ["w1:p3"])
+    #expect(byName.needingInput.map(\.paneID) == ["w1:p3"])
+
+    #expect(outline.filtered(by: "codex").panes.map(\.paneID) == ["w1:p3"])
+    #expect(outline.filtered(by: "busy").panes.map(\.paneID) == ["w1:p1"])
+    #expect(outline.filtered(by: "needs input").panes.map(\.paneID) == ["w1:p3"])
+    #expect(outline.filtered(by: "src/repo").panes.map(\.paneID) == ["w3:p1"])
+    #expect(outline.filtered(by: "/tmp").panes.map(\.paneID) == ["w2:p1"])
+    #expect(outline.filtered(by: "claude").needingInput.isEmpty)
+}
+
+@Test func searchIgnoresCaseAndDiacritics() throws {
+    let outline = HerdrOutline(try fixtureSnapshot())
+
+    #expect(outline.filtered(by: "RÉVIEWER").panes.map(\.paneID) == ["w1:p3"])
+    #expect(outline.filtered(by: "Bùild").panes.map(\.paneID) == ["w1:p2"])
+}
+
+@Test func searchWithoutMatchesIsEmptyAndABlankQueryKeepsEverything() throws {
+    let outline = HerdrOutline(try fixtureSnapshot())
+
+    let none = outline.filtered(by: "zzz-nothing")
+    #expect(none.workspaces.isEmpty)
+    #expect(none.needingInput.isEmpty)
+    #expect(outline.filtered(by: "") == outline)
+    #expect(outline.filtered(by: " \n ") == outline)
+}

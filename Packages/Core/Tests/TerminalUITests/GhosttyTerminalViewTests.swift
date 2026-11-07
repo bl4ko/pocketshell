@@ -380,6 +380,24 @@
             #expect(view.committedCaret?.style == .block)
         }
 
+        @Test func hardwareSpecialKeysReachTheHost() {
+            let view = makeGhostty()
+            func press(_ code: UIKeyboardHIDUsage, _ input: String) -> [UInt8]? {
+                view.encode(
+                    keyCode: code, modifierFlags: [], characters: input, charactersIgnoringModifiers: input,
+                    action: .press)
+            }
+            #expect(press(.keyboardLeftArrow, UIKeyCommand.inputLeftArrow) == Array("\u{1b}[D".utf8))
+            #expect(press(.keyboardUpArrow, UIKeyCommand.inputUpArrow) == Array("\u{1b}[A".utf8))
+            #expect(press(.keyboardEscape, UIKeyCommand.inputEscape) == [0x1b])
+            #expect(press(.keyboardHome, UIKeyCommand.inputHome) == Array("\u{1b}[H".utf8))
+            #expect(press(.keyboardDeleteForward, UIKeyCommand.inputDelete) == Array("\u{1b}[3~".utf8))
+            #expect(press(.keyboardF1, UIKeyCommand.f1) == Array("\u{1b}OP".utf8))
+            #expect(press(.keyboardA, "a") == nil)
+            view.feed(Data("\u{1b}[?1h".utf8))
+            #expect(press(.keyboardLeftArrow, UIKeyCommand.inputLeftArrow) == Array("\u{1b}OD".utf8))
+        }
+
         @Test func keyRepeatMatchesHardwareRates() {
             let view = makeGhostty()
             #expect(view.keyRepeatDelay == 0.3)

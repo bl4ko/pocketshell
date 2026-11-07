@@ -688,39 +688,49 @@
             super.pressesCancelled(presses, with: event)
         }
 
-        private func modifiers(of key: UIKey) -> VTModifiers {
+        private func modifiers(of flags: UIKeyModifierFlags) -> VTModifiers {
             var result: VTModifiers = []
-            if key.modifierFlags.contains(.shift) { result.insert(.shift) }
-            if key.modifierFlags.contains(.control) { result.insert(.control) }
-            if key.modifierFlags.contains(.alternate) { result.insert(.alt) }
-            if key.modifierFlags.contains(.command) { result.insert(.command) }
+            if flags.contains(.shift) { result.insert(.shift) }
+            if flags.contains(.control) { result.insert(.control) }
+            if flags.contains(.alternate) { result.insert(.alt) }
+            if flags.contains(.command) { result.insert(.command) }
             return result
         }
 
         func encode(_ key: UIKey, action: VTKeyAction) -> [UInt8]? {
-            let modifiers = modifiers(of: key)
-            guard !modifiers.contains(.command), let vtKey = VTKey(hidUsage: key.keyCode.rawValue) else { return nil }
+            encode(
+                keyCode: key.keyCode, modifierFlags: key.modifierFlags, characters: key.characters,
+                charactersIgnoringModifiers: key.charactersIgnoringModifiers, action: action)
+        }
+
+        func encode(
+            keyCode: UIKeyboardHIDUsage, modifierFlags: UIKeyModifierFlags, characters: String,
+            charactersIgnoringModifiers: String, action: VTKeyAction
+        ) -> [UInt8]? {
+            let modifiers = modifiers(of: modifierFlags)
+            guard !modifiers.contains(.command), let vtKey = VTKey(hidUsage: keyCode.rawValue) else { return nil }
             if vtKey.isModifier {
                 return terminal.kittyKeyboardFlags & 0b1000 != 0
                     ? terminal.encodeKey(vtKey, modifiers: modifiers, action: action) : nil
             }
-            if key.keyCode == .keyboardPageUp || key.keyCode == .keyboardPageDown, !terminal.applicationCursor,
+            if keyCode == .keyboardPageUp || keyCode == .keyboardPageDown, !terminal.applicationCursor,
                 terminal.kittyKeyboardFlags == 0, !terminal.isAlternateScreen
             {
                 if action != .release {
-                    scrollViewport(up: key.keyCode == .keyboardPageUp ? terminal.rows : -terminal.rows)
+                    scrollViewport(up: keyCode == .keyboardPageUp ? terminal.rows : -terminal.rows)
                 }
                 return []
             }
+            let special = charactersIgnoringModifiers.hasPrefix("UIKeyInput")
             let functional =
-                key.characters.isEmpty
-                || key.charactersIgnoringModifiers.unicodeScalars.contains {
+                characters.isEmpty || special
+                || charactersIgnoringModifiers.unicodeScalars.contains {
                     $0.value < 0x20 || $0.value == 0x7f || (0xF700...0xF8FF).contains($0.value)
                 }
             let modified = modifiers.contains(.control) || modifiers.contains(.alt)
             guard functional || modified || terminal.kittyKeyboardFlags & 0b1000 != 0 else { return nil }
-            let unshifted = key.charactersIgnoringModifiers.lowercased().first
-            let text = modifiers.contains(.control) ? nil : (functional ? nil : key.characters)
+            let unshifted = special ? nil : charactersIgnoringModifiers.lowercased().first
+            let text = modifiers.contains(.control) ? nil : (functional ? nil : characters)
             let bytes = terminal.encodeKey(
                 vtKey, modifiers: modifiers, text: text, unshifted: unshifted, action: action)
             return action == .release || !bytes.isEmpty ? bytes : nil

@@ -99,6 +99,7 @@
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let view else { return }
+            stopMomentum()
             noteUserPresence()
             let point = gesture.location(in: view)
             let focused = view.isFirstResponder
@@ -303,6 +304,7 @@
             #endif
             switch gesture.state {
             case .began:
+                stopMomentum()
                 scrollTracker = PanScrollTracker(step: Double(view.lineHeight))
             case .changed:
                 let delta = gesture.translation(in: view).y
@@ -316,9 +318,55 @@
                 let (row, col) = view.cell(at: gesture.location(in: view))
                 view.sendMouse(
                     button: lines > 0 ? .wheelUp : .wheelDown, action: .press, col: col, row: row, count: abs(lines))
+            #if !targetEnvironment(macCatalyst)
+                case .ended:
+                    guard !view.mouseReportingActive else { return }
+                    startMomentum(velocity: Double(gesture.velocity(in: view).y))
+            #endif
             default:
                 break
             }
+        }
+
+        private var momentum: ScrollMomentum?
+        private var momentumOffset: Int?
+        private var momentumLink: CADisplayLink?
+
+        private func startMomentum(velocity: Double) {
+            let coast = ScrollMomentum(velocity: velocity)
+            guard let view, coast.isActive else { return }
+            momentum = coast
+            momentumOffset = view.terminal.scrollbar.offset
+            guard momentumLink == nil else { return }
+            let link = CADisplayLink(target: self, selector: #selector(momentumTick(_:)))
+            link.add(to: .main, forMode: .common)
+            momentumLink = link
+        }
+
+        func stopMomentum() {
+            momentum = nil
+            momentumOffset = nil
+            momentumLink?.invalidate()
+            momentumLink = nil
+        }
+
+        @objc private func momentumTick(_ link: CADisplayLink) {
+            stepMomentum(by: link.targetTimestamp - link.timestamp)
+        }
+
+        func stepMomentum(by seconds: Double) {
+            guard let view, var coast = momentum, coast.isActive,
+                view.terminal.scrollbar.offset == momentumOffset
+            else {
+                stopMomentum()
+                return
+            }
+            let lines = scrollTracker.lines(for: coast.advance(by: seconds))
+            momentum = coast
+            guard lines != 0 else { return }
+            view.scrollViewport(up: lines)
+            let offset = view.terminal.scrollbar.offset
+            if offset == momentumOffset { stopMomentum() } else { momentumOffset = offset }
         }
 
         private func forwardSelectionDrag(_ gesture: UIPanGestureRecognizer) {

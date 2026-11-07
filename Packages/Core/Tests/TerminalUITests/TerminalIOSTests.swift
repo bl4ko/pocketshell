@@ -71,6 +71,60 @@
             }
         }
 
+        private final class FlickPan: UIPanGestureRecognizer {
+            var forced = UIGestureRecognizer.State.possible
+            var speed = CGPoint.zero
+            override var state: UIGestureRecognizer.State {
+                get { forced }
+                set { forced = newValue }
+            }
+            override func velocity(in view: UIView?) -> CGPoint { speed }
+        }
+
+        @MainActor
+        @Test func flickedScrollbackKeepsCoastingAfterTheFingerLifts() {
+            let bridge = TerminalBridge()
+            let view = makeTerminal()
+            let coordinator = gestures(view, bridge)
+            view.feed(Data((0..<200).map { "line \($0)" }.joined(separator: "\r\n").utf8))
+            let pan = FlickPan()
+            view.addGestureRecognizer(pan)
+            pan.forced = .began
+            coordinator.handleScrollPan(pan)
+            pan.forced = .ended
+            pan.speed = CGPoint(x: 0, y: 3000)
+            coordinator.handleScrollPan(pan)
+            #expect(view.scrolledToBottom)
+            for _ in 0..<10 { coordinator.stepMomentum(by: 1.0 / 60) }
+            #expect(!view.scrolledToBottom)
+            let coasted = view.terminal.scrollbar.offset
+            pan.forced = .began
+            coordinator.handleScrollPan(pan)
+            coordinator.stepMomentum(by: 1.0 / 60)
+            #expect(view.terminal.scrollbar.offset == coasted)
+        }
+
+        @MainActor
+        @Test func typingDuringAFlickStopsTheCoast() {
+            let bridge = TerminalBridge()
+            let view = makeTerminal()
+            let coordinator = gestures(view, bridge)
+            view.feed(Data((0..<200).map { "line \($0)" }.joined(separator: "\r\n").utf8))
+            let pan = FlickPan()
+            view.addGestureRecognizer(pan)
+            pan.forced = .began
+            coordinator.handleScrollPan(pan)
+            pan.forced = .ended
+            pan.speed = CGPoint(x: 0, y: 3000)
+            coordinator.handleScrollPan(pan)
+            for _ in 0..<5 { coordinator.stepMomentum(by: 1.0 / 60) }
+            #expect(!view.scrolledToBottom)
+            view.send(Data("x".utf8))
+            #expect(view.scrolledToBottom)
+            for _ in 0..<5 { coordinator.stepMomentum(by: 1.0 / 60) }
+            #expect(view.scrolledToBottom)
+        }
+
         private func key(_ label: String) -> ToolbarKey {
             ToolbarKey(label: label, action: .sequence(label))
         }

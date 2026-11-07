@@ -60,6 +60,7 @@
         var document = TextInputDocument()
         var floatingCursor: CGPoint?
         weak var textInputDelegate: UITextInputDelegate?
+        let progressBar = TerminalProgressBar()
 
         private(set) var font: UIFont
 
@@ -81,6 +82,8 @@
             terminal.onWrite = { [weak self] bytes in self?.onSend?(Data(bytes)) }
             terminal.onTitle = { [weak self] title in self?.onTitle?(title) }
             terminal.onClipboard = { [weak self] text in self?.writePasteboard(text) }
+            terminal.onProgress = { [weak self] progress in self?.progressBar.apply(progress) }
+            addSubview(progressBar)
             rebuildRenderer()
         }
 
@@ -180,6 +183,7 @@
                 accessibilityLabel = "Terminal resize count: \(resizeCount)"
             }
             previousSize = bounds.size
+            progressBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 2)
             updateScrollAccessibility()
             setNeedsRender()
         }

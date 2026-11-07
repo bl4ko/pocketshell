@@ -141,6 +141,30 @@
             #expect(gestures.openLink(at: point(view, col: 27, row: 0)))
         }
 
+        @Test func linkTapOpensTheHyperlinkTargetBehindLabelText() {
+            let view = makeGhostty()
+            let gestures = GhosttyGestureCoordinator(bridge: TerminalBridge(), view: view)
+            view.feed(Data("see \u{1b}]8;;https://example.com/pr/7\u{1b}\\PR #7\u{1b}]8;;\u{1b}\\ now".utf8))
+            #expect(gestures.link(at: point(view, col: 5, row: 0)) == URL(string: "https://example.com/pr/7"))
+            #expect(gestures.link(at: point(view, col: 1, row: 0)) == nil)
+        }
+
+        @Test func progressReportsDrawABarAlongTheTop() {
+            let view = makeGhostty()
+            #expect(view.progressBar.isHidden)
+            view.feed(Data("\u{1b}]9;4;1;40\u{07}".utf8))
+            #expect(!view.progressBar.isHidden)
+            #expect(view.progressBar.fraction == 0.4)
+            #expect(view.progressBar.frame == CGRect(x: 0, y: 0, width: 400, height: 2))
+            view.feed(Data("\u{1b}]9;4;2\u{07}".utf8))
+            #expect(view.progressBar.fraction == 0.4)
+            #expect(view.progressBar.color == .systemRed)
+            view.feed(Data("\u{1b}]9;4;3\u{07}".utf8))
+            #expect(view.progressBar.fraction == nil)
+            view.feed(Data("\u{1b}]9;4;0\u{07}".utf8))
+            #expect(view.progressBar.isHidden)
+        }
+
         @Test func scrollingUpdatesAccessibilityPosition() {
             let view = makeGhostty()
             view.feed(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))

@@ -98,6 +98,18 @@ struct VTTerminalStateTests {
         #expect(!String(decoding: replies, as: UTF8.self).contains("OK"))
     }
 
+    @Test func reportsProgress() {
+        let terminal = VTTerminal(cols: 10, rows: 3)
+        var reports: [VTProgress] = []
+        terminal.onProgress = { reports.append($0) }
+        terminal.feed("\u{1b}]9;4;1;40\u{07}\u{1b}]9;4;3\u{07}\u{1b}]9;4;2\u{07}\u{1b}]9;4;0\u{07}")
+        #expect(
+            reports == [
+                VTProgress(state: .set, percent: 40), VTProgress(state: .indeterminate, percent: nil),
+                VTProgress(state: .error, percent: nil), VTProgress(state: .remove, percent: nil),
+            ])
+    }
+
     @Test func answersDeviceQueries() {
         let terminal = VTTerminal(cols: 10, rows: 3)
         var replies: [UInt8] = []

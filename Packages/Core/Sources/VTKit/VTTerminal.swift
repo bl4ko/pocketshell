@@ -70,6 +70,24 @@ public enum VTMouseAction: Sendable {
     case motion
 }
 
+public enum VTProgressState: Sendable {
+    case remove
+    case set
+    case error
+    case indeterminate
+    case pause
+}
+
+public struct VTProgress: Equatable, Sendable {
+    public var state: VTProgressState
+    public var percent: Int?
+
+    public init(state: VTProgressState, percent: Int?) {
+        self.state = state
+        self.percent = percent
+    }
+}
+
 public struct VTScrollbar: Equatable, Sendable {
     public var total: Int
     public var offset: Int
@@ -84,6 +102,7 @@ public final class VTTerminal {
     public var onTitle: ((String) -> Void)?
     public var onClipboard: ((String) -> Void)?
     public var onBell: (() -> Void)?
+    public var onProgress: ((VTProgress) -> Void)?
 
     public private(set) var cols: Int
     public private(set) var rows: Int
@@ -172,6 +191,21 @@ public final class VTTerminal {
         }
         ghostty_terminal_set(
             handle, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, unsafeBitCast(clipboard, to: UnsafeRawPointer.self))
+        let progress: GhosttyTerminalProgressReportFn = { _, userdata, report in
+            guard let userdata, let report = report?.pointee else { return }
+            let state: VTProgressState =
+                switch report.state {
+                case GHOSTTY_TERMINAL_PROGRESS_STATE_SET: .set
+                case GHOSTTY_TERMINAL_PROGRESS_STATE_ERROR: .error
+                case GHOSTTY_TERMINAL_PROGRESS_STATE_INDETERMINATE: .indeterminate
+                case GHOSTTY_TERMINAL_PROGRESS_STATE_PAUSE: .pause
+                default: .remove
+                }
+            Unmanaged<VTTerminal>.fromOpaque(userdata).takeUnretainedValue().onProgress?(
+                VTProgress(state: state, percent: report.progress < 0 ? nil : Int(report.progress)))
+        }
+        ghostty_terminal_set(
+            handle, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, unsafeBitCast(progress, to: UnsafeRawPointer.self))
     }
 
     static func string(_ value: GhosttyString) -> String {

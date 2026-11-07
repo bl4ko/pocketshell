@@ -98,12 +98,18 @@
             guard gesture.state == .ended, let view else { return }
             noteUserPresence()
             let point = gesture.location(in: view)
+            let focused = view.isFirstResponder
             if view.tapRaisesKeyboard(at: point) {
                 _ = view.becomeFirstResponder()
             }
             if view.selectionActive, !bridge.selectMode {
                 view.clearSelection()
             }
+            #if !targetEnvironment(macCatalyst)
+                if focused, !bridge.selectMode, view.isNearCaret(point) {
+                    view.showEditMenu(at: point)
+                }
+            #endif
             sendMouseClick(at: point)
         }
 

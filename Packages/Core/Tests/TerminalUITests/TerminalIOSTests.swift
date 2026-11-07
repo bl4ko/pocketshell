@@ -359,6 +359,39 @@
         }
 
         @MainActor
+        @Test func tapOnTheCaretOffersPasteAndSelect() {
+            let (view, window) = windowedTerminal()
+            let coordinator = gestures(view, TerminalBridge())
+            view.feed(Data("$ echo hi".utf8))
+            let focusing = EndedTap()
+            focusing.point = cellPoint(view, col: 8, row: 0)
+            view.addGestureRecognizer(focusing)
+            coordinator.handleTap(focusing)
+            #expect(view.isFirstResponder)
+            #expect(view.editMenuPoint == nil)
+            let tap = EndedTap()
+            tap.point = cellPoint(view, col: 8, row: 0)
+            view.addGestureRecognizer(tap)
+            coordinator.handleTap(tap)
+            #expect(view.editMenuPoint == tap.point)
+            let distant = EndedTap()
+            distant.point = cellPoint(view, col: 30, row: 6)
+            view.addGestureRecognizer(distant)
+            view.editMenuPoint = nil
+            coordinator.handleTap(distant)
+            #expect(view.editMenuPoint == nil)
+            let select = #selector(UIResponderStandardEditActions.select(_:))
+            let paste = #selector(UIResponderStandardEditActions.paste(_:))
+            view.editMenuPoint = tap.point
+            #expect(view.canPerformAction(select, withSender: nil))
+            #expect(view.canPerformAction(paste, withSender: nil))
+            view.select(nil)
+            #expect(view.selectedText() == "hi")
+            #expect(!view.canPerformAction(select, withSender: nil))
+            withExtendedLifetime(window) {}
+        }
+
+        @MainActor
         @Test func closeKeyboardResignsTerminalAndTextField() {
             let bridge = TerminalBridge()
             let (view, window) = windowedTerminal()

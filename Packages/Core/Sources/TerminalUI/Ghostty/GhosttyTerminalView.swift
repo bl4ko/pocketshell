@@ -51,6 +51,7 @@
         private var handleGrab: (handle: SelectionHandleSide, colOffset: Int, rowOffset: Int)?
         private var selectionPivot: VTPoint?
         private var rectangularSelection = false
+        var editMenuPoint: CGPoint?
         private lazy var editMenu: UIEditMenuInteraction = {
             let interaction = UIEditMenuInteraction(delegate: nil)
             addInteraction(interaction)
@@ -455,6 +456,21 @@
             setNeedsRender()
         }
 
+        func isNearCaret(_ point: CGPoint) -> Bool {
+            terminal.updateScreen()
+            let cursor = terminal.screen.cursor
+            guard cursor.inViewport else { return false }
+            let hit = cell(at: point)
+            return abs(hit.col - (caretPaint?.col ?? cursor.col)) < 4
+                && abs(hit.row - (caretPaint?.row ?? cursor.row)) < 2
+        }
+
+        override func select(_ sender: Any?) {
+            guard let point = editMenuPoint else { return }
+            selectWord(at: point)
+            showEditMenu(at: point)
+        }
+
         override func selectAll(_ sender: Any?) {
             if let selection = terminal.selectAll() {
                 selectionPivot = selection.start
@@ -465,7 +481,7 @@
 
         func showEditMenu(at point: CGPoint) {
             #if !targetEnvironment(macCatalyst)
-                guard selectionActive else { return }
+                editMenuPoint = point
                 _ = becomeFirstResponder()
                 editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: point))
             #endif
@@ -656,6 +672,7 @@
             switch action {
             case #selector(copy(_:)): selectionActive
             case #selector(paste(_:)), #selector(selectAll(_:)): true
+            case #selector(select(_:)): !selectionActive && editMenuPoint != nil
             default: false
             }
         }

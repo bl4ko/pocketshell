@@ -736,7 +736,11 @@
             let modified = modifiers.contains(.control) || modifiers.contains(.alt)
             guard functional || modified || terminal.kittyKeyboardFlags & 0b1000 != 0 else { return nil }
             let unshifted = special ? nil : charactersIgnoringModifiers.lowercased().first
-            let text = modifiers.contains(.control) ? nil : (functional ? nil : characters)
+            let unmodified =
+                modifiers.contains(.shift) ? charactersIgnoringModifiers.uppercased() : charactersIgnoringModifiers
+            let text =
+                modifiers.contains(.control) || functional
+                ? nil : modifiers.contains(.alt) ? unmodified : characters
             let bytes = terminal.encodeKey(
                 vtKey, modifiers: modifiers, text: text, unshifted: unshifted, action: action)
             return action == .release || !bytes.isEmpty ? bytes : nil

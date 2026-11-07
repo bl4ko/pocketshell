@@ -412,6 +412,20 @@
             #expect(press(.keyboardLeftArrow, .alternate, UIKeyCommand.inputLeftArrow) == Array("\u{1b}[1;3D".utf8))
         }
 
+        @Test func optionLettersSendMetaInsteadOfTheOptionCharacter() {
+            let view = makeGhostty()
+            func press(_ code: UIKeyboardHIDUsage, _ flags: UIKeyModifierFlags, _ text: String, _ base: String)
+                -> [UInt8]?
+            {
+                view.encode(
+                    keyCode: code, modifierFlags: flags, characters: text, charactersIgnoringModifiers: base,
+                    action: .press)
+            }
+            #expect(press(.keyboardB, .alternate, "∫", "b") == Array("\u{1b}b".utf8))
+            #expect(press(.keyboardPeriod, .alternate, "≥", ".") == Array("\u{1b}.".utf8))
+            #expect(press(.keyboardB, [.alternate, .shift], "ı", "b") == Array("\u{1b}B".utf8))
+        }
+
         @Test func spacebarTrackpadMovesTheShellCursor() {
             let view = makeGhostty()
             var sent: [Data] = []

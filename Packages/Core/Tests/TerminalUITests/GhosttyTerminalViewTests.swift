@@ -209,35 +209,45 @@
             #expect(bridge.currentSize.cols == view.terminalCols)
         }
 
-        @Test func toolbarPasteUploadsAClipboardImageLikeTheEditMenu() {
+        @Test func toolbarPasteUploadsAnImageBeforeText() async {
             let bridge = TerminalBridge()
             let view = makeGhostty()
             bridge.view = view
             var sent: [Data] = []
             view.onSend = { sent.append($0) }
-            view.readPasteboard = { "text" }
-            var imageTried = 0
-            view.pasteImage = {
-                imageTried += 1
-                return true
-            }
-            bridge.paste()
-            view.paste(nil)
-            #expect(imageTried == 2)
+            let uploaded = AsyncStream.makeStream(of: Data.self)
+            bridge.imagePaste = { uploaded.continuation.yield($0) }
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }
+            bridge.paste([NSItemProvider(object: "text" as NSString), NSItemProvider(object: image)])
+            var iterator = uploaded.stream.makeAsyncIterator()
+            let jpeg = await iterator.next()
+            #expect(jpeg?.starts(with: [0xFF, 0xD8]) == true)
             #expect(sent.isEmpty)
         }
 
-        @Test func toolbarPasteSendsClipboardTextWithoutAnImage() {
+        @Test func toolbarPasteSendsTextWithoutAnImage() async {
             let bridge = TerminalBridge()
             let view = makeGhostty()
             bridge.view = view
             view.feed(Data("\u{1b}[?2004h".utf8))
+            let sent = AsyncStream.makeStream(of: Data.self)
+            view.onSend = { sent.continuation.yield($0) }
+            bridge.paste([NSItemProvider(object: "ls -la" as NSString)])
+            var iterator = sent.stream.makeAsyncIterator()
+            #expect(await iterator.next() == Data("\u{1b}[200~ls -la\u{1b}[201~".utf8))
+        }
+
+        @Test func editMenuPasteTriesAnImageFirst() {
+            let view = makeGhostty()
             var sent: [Data] = []
             view.onSend = { sent.append($0) }
-            view.readPasteboard = { "ls -la" }
+            view.readPasteboard = { "text" }
+            view.pasteImage = { true }
+            view.paste(nil)
+            #expect(sent.isEmpty)
             view.pasteImage = { false }
-            bridge.paste()
-            #expect(sent == [Data("\u{1b}[200~ls -la\u{1b}[201~".utf8)])
+            view.paste(nil)
+            #expect(sent == [Data("text".utf8)])
         }
 
         @Test func hiddenTabsReleaseTheDrawableAndRestoreItWhenShown() {

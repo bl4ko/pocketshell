@@ -628,7 +628,10 @@
         }
 
         func pasteFromClipboard() {
-            guard let text = readPasteboard() else { return }
+            readPasteboard().map(pasteText)
+        }
+
+        func pasteText(_ text: String) {
             clearSelection()
             if terminal.bracketedPaste {
                 send(Data("\u{1b}[200~".utf8) + Data(text.utf8) + Data("\u{1b}[201~".utf8))

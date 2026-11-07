@@ -2,6 +2,7 @@
     import Foundation
     import Models
     import SwiftUI
+    import UniformTypeIdentifiers
 
     public struct TerminalToolbar: View {
         private typealias Palette = ToolbarPalette
@@ -11,7 +12,7 @@
         let quickReplyOptions: [Int]
         let onKey: (ToolbarKey.Action) -> Void
         let onHideKeyboard: (() -> Void)?
-        let onPaste: (() -> Void)?
+        let onPaste: (([NSItemProvider]) -> Void)?
         let onCopy: (() -> Void)?
         let onToggleSelect: (() -> Void)?
         let onCompose: (() -> Void)?
@@ -29,7 +30,7 @@
             quickReplyOptions: [Int] = [],
             onKey: @escaping (ToolbarKey.Action) -> Void,
             onHideKeyboard: (() -> Void)? = nil,
-            onPaste: (() -> Void)? = nil,
+            onPaste: (([NSItemProvider]) -> Void)? = nil,
             onCopy: (() -> Void)? = nil,
             onToggleSelect: (() -> Void)? = nil,
             onCompose: (() -> Void)? = nil,
@@ -102,19 +103,23 @@
                         .accessibilityIdentifier("terminal.attach")
                 }
                 if let onPaste {
-                    Menu {
-                        Button("Paste") { onPaste() }
+                    Group {
+                        if selectActive {
+                            slot(icon: "selection.pin.in.out", active: true) { onCopy?() }
+                        } else {
+                            PasteButton(supportedContentTypes: [.image, .text], payloadAction: onPaste)
+                                .labelStyle(.iconOnly)
+                                .buttonBorderShape(.roundedRectangle(radius: 8))
+                                .tint(Palette.key(theme))
+                                .foregroundStyle(Palette.text(theme))
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .contextMenu {
                         if let onCopy { Button("Copy selection") { onCopy() } }
                         if let onToggleSelect {
                             Button(selectActive ? "Done selecting" : "Select text") { onToggleSelect() }
                         }
-                    } label: {
-                        slotLabel(
-                            icon: selectActive ? "selection.pin.in.out" : "doc.on.clipboard",
-                            active: selectActive
-                        )
-                    } primaryAction: {
-                        if selectActive { onCopy?() } else { onPaste() }
                     }
                     .accessibilityIdentifier("terminal.clipboard")
                 }

@@ -134,8 +134,19 @@
             return view?.screenLines().joined(separator: "\n") ?? ""
         }
 
-        public func paste() {
-            view?.paste(nil)
+        public func paste(_ providers: [NSItemProvider]) {
+            if let image = providers.first(where: { $0.canLoadObject(ofClass: UIImage.self) }),
+                pasteImage(from: image)
+            {
+                return
+            }
+            guard let provider = providers.first(where: { $0.canLoadObject(ofClass: String.self) }) else { return }
+            Task { @MainActor in
+                let text = await withCheckedContinuation { continuation in
+                    _ = provider.loadObject(ofClass: String.self) { text, _ in continuation.resume(returning: text) }
+                }
+                if let text { view?.pasteText(text) }
+            }
         }
 
         /// Sends a prompt composed outside the terminal into the live session.

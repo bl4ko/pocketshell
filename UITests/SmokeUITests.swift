@@ -1657,12 +1657,13 @@ final class SmokeUITests: XCTestCase {
         terminal.tap()
         terminal.typeText("\u{03}")
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        keepScreenshot("toolbar-paste-button")
 
         let textPath = "/tmp/psh-paste-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: textPath) }
         UIPasteboard.general.string = "printf toolbar-paste > \(textPath)"
         clipboard.tap()
-        allowPasteIfAsked()
+        assertNoPastePrompt()
         app.buttons["terminal.enter"].tap()
         let pasted = NSPredicate { _, _ in
             (try? String(contentsOfFile: textPath, encoding: .utf8)) == "toolbar-paste"
@@ -1679,7 +1680,7 @@ final class SmokeUITests: XCTestCase {
         terminal.typeText("printf '%s' ")
         let before = Set((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? [])
         clipboard.tap()
-        allowPasteIfAsked()
+        assertNoPastePrompt()
         let uploaded = NSPredicate { _, _ in
             ((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? []).contains {
                 $0.hasPrefix("psh-") && $0.hasSuffix(".jpg") && !before.contains($0)
@@ -1701,9 +1702,9 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(path.hasPrefix("/tmp/psh-") && path.hasSuffix(".jpg"), path)
     }
 
-    private func allowPasteIfAsked() {
+    private func assertNoPastePrompt() {
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow Paste"]
-        if allow.waitForExistence(timeout: 3) { allow.tap() }
+        XCTAssertFalse(allow.waitForExistence(timeout: 2), "toolbar paste must not ask for paste permission")
     }
 
     private func openHost(_ name: String) {

@@ -722,6 +722,11 @@
                 }
                 return []
             }
+            if modifiers == .alt, terminal.kittyKeyboardFlags == 0,
+                keyCode == .keyboardLeftArrow || keyCode == .keyboardRightArrow
+            {
+                return action == .release ? [] : Array((keyCode == .keyboardLeftArrow ? "\u{1b}b" : "\u{1b}f").utf8)
+            }
             let special = charactersIgnoringModifiers.hasPrefix("UIKeyInput")
             let functional =
                 characters.isEmpty || special

@@ -398,6 +398,20 @@
             #expect(press(.keyboardLeftArrow, UIKeyCommand.inputLeftArrow) == Array("\u{1b}OD".utf8))
         }
 
+        @Test func optionArrowsMoveByWordLikeTerminalApp() {
+            let view = makeGhostty()
+            func press(_ code: UIKeyboardHIDUsage, _ flags: UIKeyModifierFlags, _ name: String) -> [UInt8]? {
+                view.encode(
+                    keyCode: code, modifierFlags: flags, characters: "\u{1c}", charactersIgnoringModifiers: name,
+                    action: .press)
+            }
+            #expect(press(.keyboardLeftArrow, .alternate, UIKeyCommand.inputLeftArrow) == Array("\u{1b}b".utf8))
+            #expect(press(.keyboardRightArrow, .alternate, UIKeyCommand.inputRightArrow) == Array("\u{1b}f".utf8))
+            #expect(press(.keyboardLeftArrow, .control, UIKeyCommand.inputLeftArrow) == Array("\u{1b}[1;5D".utf8))
+            view.feed(Data("\u{1b}[>1u".utf8))
+            #expect(press(.keyboardLeftArrow, .alternate, UIKeyCommand.inputLeftArrow) == Array("\u{1b}[1;3D".utf8))
+        }
+
         @Test func spacebarTrackpadMovesTheShellCursor() {
             let view = makeGhostty()
             var sent: [Data] = []

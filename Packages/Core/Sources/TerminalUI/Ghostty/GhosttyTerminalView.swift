@@ -70,6 +70,7 @@
             super.init(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
             isAccessibilityElement = true
             accessibilityTraits.formUnion([.staticText, .causesPageTurn])
+            accessibilityTextualContext = .sourceCode
             isMultipleTouchEnabled = true
             metalLayer.pixelFormat = .bgra8Unorm
             metalLayer.framebufferOnly = true
@@ -822,6 +823,41 @@
             }
             RunLoop.main.add(timer, forMode: .common)
             keyRepeat = timer
+        }
+    }
+
+    extension GhosttyTerminalView: UIAccessibilityReadingContent {
+        func accessibilityLineNumber(for point: CGPoint) -> Int {
+            cell(at: point).row
+        }
+
+        func accessibilityContent(forLineNumber lineNumber: Int) -> String? {
+            let lines = screenLines()
+            return lines.indices.contains(lineNumber) ? lines[lineNumber] : nil
+        }
+
+        func accessibilityFrame(forLineNumber lineNumber: Int) -> CGRect {
+            let height = lineHeight
+            return UIAccessibility.convertToScreenCoordinates(
+                CGRect(x: 0, y: CGFloat(lineNumber) * height, width: bounds.width, height: height), in: self)
+        }
+
+        func accessibilityPageContent() -> String? {
+            screenLines().joined(separator: "\n")
+        }
+
+        override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
+            let page: Int
+            switch direction {
+            case .up, .previous: page = terminal.rows
+            case .down, .next: page = -terminal.rows
+            default: return false
+            }
+            let offset = terminal.scrollbar.offset
+            scrollViewport(up: page)
+            guard terminal.scrollbar.offset != offset else { return false }
+            UIAccessibility.post(notification: .pageScrolled, argument: nil)
+            return true
         }
     }
 

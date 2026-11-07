@@ -176,6 +176,23 @@
             #expect(view.accessibilityValue == "bottom")
         }
 
+        @Test func voiceOverReadsTheVisibleLinesAndPagesThroughHistory() throws {
+            let view = makeGhostty()
+            view.feed(Data((0..<100).map { "line \($0)" }.joined(separator: "\r\n").utf8))
+            let reading = try #require(view as Any as? UIAccessibilityReadingContent)
+            let rows = view.terminalRows
+            #expect(reading.accessibilityLineNumber(for: point(view, col: 0, row: 2)) == 2)
+            #expect(reading.accessibilityContent(forLineNumber: 2) == "line \(100 - rows + 2)")
+            #expect(reading.accessibilityPageContent()?.hasPrefix("line \(100 - rows)\nline \(101 - rows)") == true)
+            #expect(reading.accessibilityFrame(forLineNumber: 2).height == view.metrics!.pointHeight)
+            #expect(view.accessibilityScroll(.up))
+            #expect(view.accessibilityValue == "history")
+            #expect(reading.accessibilityContent(forLineNumber: 0) == "line \(100 - 2 * rows)")
+            #expect(view.accessibilityScroll(.down))
+            #expect(view.accessibilityValue == "bottom")
+            #expect(!view.accessibilityScroll(.down))
+        }
+
         @Test func typedOutputScrollsBackToTheBottom() {
             let view = makeGhostty()
             var sent: [Data] = []

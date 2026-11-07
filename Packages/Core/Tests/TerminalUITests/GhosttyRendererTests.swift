@@ -79,6 +79,15 @@ struct GhosttyRendererTests {
         #expect(pixel.g == 0)
     }
 
+    @Test func underlinesUseTheirOwnColor() throws {
+        let colored = cellMax(try render("\u{1b}[4;58;2;0;255;0m \u{1b}[59m "), col: 0, row: 0)
+        #expect(colored.g == 255)
+        #expect(colored.r == 0)
+        #expect(cellMax(try render("\u{1b}[4;58;5;1m "), col: 0, row: 0).r == 255)
+        #expect(cellMax(try render("\u{1b}[4;58;5;1m "), col: 0, row: 0).g == 0)
+        #expect(cellMax(try render("\u{1b}[4m "), col: 0, row: 0).g == 255)
+    }
+
     @Test func blockCaretPaintsCursorColorAndInvertsGlyph() throws {
         let result = try render("A", caret: CaretPaint(col: 1, row: 0, style: .block))
         #expect(cellMax(result, col: 1, row: 0).g == 255)

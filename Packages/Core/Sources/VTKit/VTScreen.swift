@@ -24,6 +24,7 @@ public struct VTCell: Hashable, Sendable {
     public var extra: [UInt32]?
     public var fg: VTColor?
     public var bg: VTColor?
+    public var underline: VTColor?
     public var flags: VTCellFlags = []
 
     public init() {}
@@ -167,15 +168,13 @@ extension VTTerminal {
         screen.set(cursor: cursor)
         let full = resized || dirty == GHOSTTY_RENDER_STATE_DIRTY_FULL
         guard full || dirty == GHOSTTY_RENDER_STATE_DIRTY_PARTIAL else { return false }
-        let bright = withUnsafeBytes(of: colors.palette) {
-            $0.bindMemory(to: GhosttyColorRgb.self)[8..<16].map(VTColor.init)
-        }
-        readRows(full: full, bright: bright)
+        let palette = withUnsafeBytes(of: colors.palette) { $0.bindMemory(to: GhosttyColorRgb.self).map(VTColor.init) }
+        readRows(full: full, palette: palette)
         ghostty_render_state_clean(renderStateHandle)
         return true
     }
 
-    private func readRows(full: Bool, bright: [VTColor]) {
+    private func readRows(full: Bool, palette: [VTColor]) {
         guard
             ghostty_render_state_get(renderStateHandle, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &rowIteratorHandle)
                 == GHOSTTY_SUCCESS
@@ -202,14 +201,14 @@ extension VTTerminal {
             else { continue }
             rowCells.removeAll(keepingCapacity: true)
             while ghostty_render_state_row_cells_next(rowCellsHandle) {
-                rowCells.append(readCell(&graphemes, bright: bright))
+                rowCells.append(readCell(&graphemes, palette: palette))
             }
             screen.set(
                 row: y, cells: rowCells, selection: selected ? Int(range.start_x)...Int(range.end_x) : nil)
         }
     }
 
-    private func readCell(_ graphemes: inout [UInt32], bright: [VTColor]) -> VTCell {
+    private func readCell(_ graphemes: inout [UInt32], palette: [VTColor]) -> VTCell {
         var cell = VTCell()
         var raw: GhosttyCell = 0
         ghostty_render_state_row_cells_get(rowCellsHandle, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &raw)
@@ -251,7 +250,7 @@ extension VTTerminal {
             if style.bold {
                 cell.flags.insert(.bold)
                 if style.fg_color.tag == GHOSTTY_STYLE_COLOR_PALETTE, style.fg_color.value.palette < 8 {
-                    cell.fg = bright[Int(style.fg_color.value.palette)]
+                    cell.fg = palette[Int(style.fg_color.value.palette) + 8]
                 }
             }
             if style.italic { cell.flags.insert(.italic) }
@@ -260,6 +259,11 @@ extension VTTerminal {
             if style.invisible { cell.flags.insert(.invisible) }
             if style.strikethrough { cell.flags.insert(.strikethrough) }
             if style.overline { cell.flags.insert(.overline) }
+            switch style.underline_color.tag {
+            case GHOSTTY_STYLE_COLOR_PALETTE: cell.underline = palette[Int(style.underline_color.value.palette)]
+            case GHOSTTY_STYLE_COLOR_RGB: cell.underline = VTColor(style.underline_color.value.rgb)
+            default: break
+            }
             switch style.underline {
             case 0: break
             case 2: cell.flags.insert(.doubleUnderline)

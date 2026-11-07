@@ -160,18 +160,16 @@ final class TerminalRenderer {
             }
             let thickness = Float(metrics.underlineThickness)
             let width = cw * Float(span)
+            let underline = Self.color(selected ? fg : cell.underline ?? fg, alpha: alpha)
             if cell.flags.contains(.underline) || cell.flags.contains(.curlyUnderline) {
                 let lineY = y + ch - Float(metrics.underlinePosition) - thickness
-                rowGlyphs.append(
-                    RenderInstance(rect: SIMD4(x, lineY, width, thickness), color: Self.color(fg, alpha: alpha)))
+                rowGlyphs.append(RenderInstance(rect: SIMD4(x, lineY, width, thickness), color: underline))
             }
             if cell.flags.contains(.doubleUnderline) {
                 let lineY = y + ch - Float(metrics.underlinePosition) - thickness
+                rowGlyphs.append(RenderInstance(rect: SIMD4(x, lineY, width, thickness), color: underline))
                 rowGlyphs.append(
-                    RenderInstance(rect: SIMD4(x, lineY, width, thickness), color: Self.color(fg, alpha: alpha)))
-                rowGlyphs.append(
-                    RenderInstance(
-                        rect: SIMD4(x, lineY - thickness * 2, width, thickness), color: Self.color(fg, alpha: alpha)))
+                    RenderInstance(rect: SIMD4(x, lineY - thickness * 2, width, thickness), color: underline))
             }
             if cell.flags.contains(.strikethrough) {
                 rowGlyphs.append(

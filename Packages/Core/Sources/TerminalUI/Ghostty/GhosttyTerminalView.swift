@@ -546,36 +546,69 @@
             let total = terminal.scrollbar.total
             guard total > 0 else { return false }
             let origin = findMatch?.start ?? VTPoint(col: forward ? -1 : terminal.cols, row: forward ? 0 : total - 1)
-            var row = origin.row
-            for step in 0..<total {
-                let cells = terminal.lineCells(row: row, tag: .screen)
-                var matches: [(start: Int, end: Int)] = []
-                if cells.count >= needle.count {
-                    for index in 0...(cells.count - needle.count)
-                    where (0..<needle.count).allSatisfy({ cells[index + $0].text.lowercased() == needle[$0] }) {
-                        let last = cells[index + needle.count - 1]
-                        matches.append((cells[index].col, last.col + (last.wide ? 1 : 0)))
-                    }
-                }
-                let candidates =
-                    step == 0
-                    ? matches.filter { forward ? $0.start > origin.col : $0.start < origin.col } : matches
-                if let found = forward ? candidates.first : candidates.last {
-                    let match = VTSelection(
-                        start: VTPoint(col: found.start, row: row), end: VTPoint(col: found.end, row: row))
-                    findMatch = match
-                    terminal.select(match)
-                    let viewportTop = terminal.scrollbar.offset
-                    if row < viewportTop || row >= viewportTop + terminal.rows {
-                        terminal.scroll(toRow: max(0, row - terminal.rows / 2))
-                    }
-                    updateScrollAccessibility()
-                    setNeedsRender()
+            let first = logicalLineHead(origin.row)
+            var head = first
+            repeat {
+                if let match = nextMatch(
+                    of: needle, inLineAt: head, after: head == first ? origin : nil, forward: forward)
+                {
+                    reveal(match)
                     return true
                 }
-                row = forward ? (row + 1) % total : (row - 1 + total) % total
+                head = nextLogicalLine(after: head, forward: forward, total: total)
+            } while head != first
+            guard let match = nextMatch(of: needle, inLineAt: first, after: nil, forward: forward) else { return false }
+            reveal(match)
+            return true
+        }
+
+        private func logicalLineHead(_ row: Int) -> Int {
+            var head = row
+            while head > 0, terminal.lineIsContinuation(row: head, tag: .screen) { head -= 1 }
+            return head
+        }
+
+        private func nextLogicalLine(after head: Int, forward: Bool, total: Int) -> Int {
+            guard forward else { return logicalLineHead((head - 1 + total) % total) }
+            var row = head + 1
+            while row < total, terminal.lineIsContinuation(row: row, tag: .screen) { row += 1 }
+            return row % total
+        }
+
+        private func nextMatch(of needle: [String], inLineAt head: Int, after origin: VTPoint?, forward: Bool)
+            -> VTSelection?
+        {
+            var cells: [(text: String, start: VTPoint, end: VTPoint)] = []
+            var row = head
+            repeat {
+                for cell in terminal.lineCells(row: row, tag: .screen) {
+                    let start = VTPoint(col: cell.col, row: row)
+                    cells.append(
+                        (cell.text.lowercased(), start, VTPoint(col: cell.col + (cell.wide ? 1 : 0), row: row)))
+                }
+                row += 1
+            } while row < terminal.scrollbar.total && terminal.lineIsContinuation(row: row, tag: .screen)
+            guard cells.count >= needle.count else { return nil }
+            let precedes = { (a: VTPoint, b: VTPoint) in a.row < b.row || (a.row == b.row && a.col < b.col) }
+            let matches = (0...(cells.count - needle.count))
+                .filter { index in (0..<needle.count).allSatisfy { cells[index + $0].text == needle[$0] } }
+                .map { VTSelection(start: cells[$0].start, end: cells[$0 + needle.count - 1].end) }
+                .filter { match in
+                    guard let origin else { return true }
+                    return forward ? precedes(origin, match.start) : precedes(match.start, origin)
+                }
+            return forward ? matches.first : matches.last
+        }
+
+        private func reveal(_ match: VTSelection) {
+            findMatch = match
+            terminal.select(match)
+            let viewportTop = terminal.scrollbar.offset
+            if match.start.row < viewportTop || match.end.row >= viewportTop + terminal.rows {
+                terminal.scroll(toRow: max(0, match.start.row - terminal.rows / 2))
             }
-            return false
+            updateScrollAccessibility()
+            setNeedsRender()
         }
 
         func clearFind() {

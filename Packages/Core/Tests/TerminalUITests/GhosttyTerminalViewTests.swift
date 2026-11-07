@@ -115,6 +115,16 @@
             #expect(view.selectedText() == "漢字")
         }
 
+        @Test func findMatchesAcrossASoftWrap() {
+            let view = makeGhostty()
+            view.feed(Data((String(repeating: "x", count: view.terminalCols - 3) + "needle\r\n").utf8))
+            #expect(view.find("needle", forward: true))
+            #expect(view.selectedText() == "needle")
+            view.clearFind()
+            #expect(view.find("needle", forward: false))
+            #expect(view.selectedText() == "needle")
+        }
+
         @Test func editMenuSelectAllSelectsTheWholeBuffer() {
             let view = makeGhostty()
             view.feed(Data("first\r\nsecond".utf8))

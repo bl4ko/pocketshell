@@ -49,6 +49,17 @@
         token.cancel()
     }
 
+    @MainActor
+    @Test func automaticRepliesFromOneFeedNeverReachTheHost() {
+        let bridge = TerminalBridge()
+        var sent: [Data] = []
+        bridge.sendToHost = { sent.append($0) }
+        let view = makeTerminal()
+        _ = gestures(view, bridge)
+        bridge.feed(Data("\u{1b}[c\u{1b}[>c\u{1b}[14t\u{1b}[16t\u{1b}[18t\u{1b}[19t\u{1b}[6n".utf8))
+        #expect(sent == [Data("\u{1b}[1;1R".utf8)])
+    }
+
     #if !targetEnvironment(macCatalyst)
         @MainActor
         @Test func cancelledSelectModePanEndsHandleDrag() {

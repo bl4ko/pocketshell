@@ -119,7 +119,7 @@ public final class VTTerminal {
     var mouseEvent: GhosttyMouseEvent?
     var cellPixels = (width: UInt32(8), height: UInt32(16))
     private var feeding = false
-    private var pendingReplies: [UInt8] = []
+    private var pendingReplies: [[UInt8]] = []
 
     public init(cols: Int, rows: Int, scrollbackLines: Int = 10_000) {
         var terminal: GhosttyTerminal?
@@ -160,7 +160,7 @@ public final class VTTerminal {
         let write: GhosttyTerminalWritePtyFn = { _, userdata, data, len in
             guard let userdata, let data else { return }
             let me = Unmanaged<VTTerminal>.fromOpaque(userdata).takeUnretainedValue()
-            me.pendingReplies.append(contentsOf: UnsafeBufferPointer(start: data, count: len))
+            me.pendingReplies.append(Array(UnsafeBufferPointer(start: data, count: len)))
         }
         ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_WRITE_PTY, unsafeBitCast(write, to: UnsafeRawPointer.self))
         let title: GhosttyTerminalTitleChangedFn = { _, userdata in
@@ -251,10 +251,9 @@ public final class VTTerminal {
     }
 
     private func flushReplies() {
-        guard !pendingReplies.isEmpty else { return }
         let replies = pendingReplies
         pendingReplies.removeAll()
-        onWrite?(replies)
+        replies.forEach { onWrite?($0) }
     }
 
     public func resize(cols: Int, rows: Int, cellWidth: Int = 8, cellHeight: Int = 16) {

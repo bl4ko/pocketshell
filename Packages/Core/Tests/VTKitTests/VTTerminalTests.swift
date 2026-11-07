@@ -123,13 +123,28 @@ struct VTScreenTests {
         #expect(screen.background == VTColor(r: 4, g: 5, b: 6))
         #expect(screen.cell(col: 0, row: 0).scalar == UInt32(("a" as Unicode.Scalar).value))
         #expect(screen.cell(col: 0, row: 0).fg == nil)
-        #expect(screen.cell(col: 1, row: 0).fg == VTColor(r: 1, g: 0, b: 0))
+        #expect(screen.cell(col: 1, row: 0).fg == VTColor(r: 9, g: 0, b: 0))
         #expect(screen.cell(col: 1, row: 0).flags.contains(.bold))
         #expect(screen.cell(col: 2, row: 0).flags.contains(.inverse))
         #expect(screen.cursor.col == 3)
         #expect(screen.line(0).hasPrefix("abc"))
         #expect(screen.takeDirtyRows().contains(0))
         #expect(!terminal.updateScreen())
+    }
+
+    @Test func boldBasicColorsDrawBright() {
+        let terminal = VTTerminal(cols: 10, rows: 1)
+        terminal.setColors(
+            foreground: VTColor(r: 1, g: 2, b: 3), background: VTColor(r: 4, g: 5, b: 6), cursor: nil,
+            palette: (0..<16).map { VTColor(r: UInt8($0), g: 0, b: 0) })
+        terminal.feed("\u{1b}[1;32ma\u{1b}[22mb\u{1b}[1;92mc\u{1b}[1;38;5;100md\u{1b}[1;38;2;7;8;9me")
+        terminal.updateScreen()
+        let screen = terminal.screen
+        #expect(screen.cell(col: 0, row: 0).fg == VTColor(r: 10, g: 0, b: 0))
+        #expect(screen.cell(col: 1, row: 0).fg == VTColor(r: 2, g: 0, b: 0))
+        #expect(screen.cell(col: 2, row: 0).fg == VTColor(r: 10, g: 0, b: 0))
+        #expect(screen.cell(col: 3, row: 0).fg != VTColor(r: 10, g: 0, b: 0))
+        #expect(screen.cell(col: 4, row: 0).fg == VTColor(r: 7, g: 8, b: 9))
     }
 
     @Test func onlyChangedRowsAreDirty() {

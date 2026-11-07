@@ -167,12 +167,15 @@ extension VTTerminal {
         screen.set(cursor: cursor)
         let full = resized || dirty == GHOSTTY_RENDER_STATE_DIRTY_FULL
         guard full || dirty == GHOSTTY_RENDER_STATE_DIRTY_PARTIAL else { return false }
-        readRows(full: full)
+        let bright = withUnsafeBytes(of: colors.palette) {
+            $0.bindMemory(to: GhosttyColorRgb.self)[8..<16].map(VTColor.init)
+        }
+        readRows(full: full, bright: bright)
         ghostty_render_state_clean(renderStateHandle)
         return true
     }
 
-    private func readRows(full: Bool) {
+    private func readRows(full: Bool, bright: [VTColor]) {
         guard
             ghostty_render_state_get(renderStateHandle, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &rowIteratorHandle)
                 == GHOSTTY_SUCCESS
@@ -199,14 +202,14 @@ extension VTTerminal {
             else { continue }
             rowCells.removeAll(keepingCapacity: true)
             while ghostty_render_state_row_cells_next(rowCellsHandle) {
-                rowCells.append(readCell(&graphemes))
+                rowCells.append(readCell(&graphemes, bright: bright))
             }
             screen.set(
                 row: y, cells: rowCells, selection: selected ? Int(range.start_x)...Int(range.end_x) : nil)
         }
     }
 
-    private func readCell(_ graphemes: inout [UInt32]) -> VTCell {
+    private func readCell(_ graphemes: inout [UInt32], bright: [VTColor]) -> VTCell {
         var cell = VTCell()
         var raw: GhosttyCell = 0
         ghostty_render_state_row_cells_get(rowCellsHandle, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &raw)
@@ -245,7 +248,12 @@ extension VTTerminal {
             var style = GhosttyStyle()
             style.size = MemoryLayout<GhosttyStyle>.size
             ghostty_render_state_row_cells_get(rowCellsHandle, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE, &style)
-            if style.bold { cell.flags.insert(.bold) }
+            if style.bold {
+                cell.flags.insert(.bold)
+                if style.fg_color.tag == GHOSTTY_STYLE_COLOR_PALETTE, style.fg_color.value.palette < 8 {
+                    cell.fg = bright[Int(style.fg_color.value.palette)]
+                }
+            }
             if style.italic { cell.flags.insert(.italic) }
             if style.faint { cell.flags.insert(.faint) }
             if style.inverse { cell.flags.insert(.inverse) }

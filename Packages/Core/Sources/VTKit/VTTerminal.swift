@@ -158,9 +158,7 @@ public final class VTTerminal {
             let me = Unmanaged<VTTerminal>.fromOpaque(userdata).takeUnretainedValue()
             let write = request.pointee
             var result = GHOSTTY_CLIPBOARD_WRITE_RESULT_DENIED
-            if write.location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD, write.contents_len > 0,
-                let contents = write.contents
-            {
+            if write.contents_len > 0, let contents = write.contents {
                 let items = UnsafeBufferPointer(start: contents, count: write.contents_len)
                 let text = items.first { VTTerminal.string($0.mime).hasPrefix("text/plain") } ?? items[0]
                 me.onClipboard?(VTTerminal.string(text.data))

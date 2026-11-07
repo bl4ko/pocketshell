@@ -74,6 +74,15 @@ struct VTTerminalStateTests {
         #expect(clipboard == "hi")
     }
 
+    @Test(arguments: ["", "c", "p", "s"])
+    func copiesEveryClipboardSelectionToThePasteboard(selection: String) {
+        let terminal = VTTerminal(cols: 10, rows: 3)
+        var clipboard: String?
+        terminal.onClipboard = { clipboard = $0 }
+        terminal.feed("\u{1b}]52;\(selection);aGk=\u{07}")
+        #expect(clipboard == "hi")
+    }
+
     @Test func answersDeviceQueries() {
         let terminal = VTTerminal(cols: 10, rows: 3)
         var replies: [UInt8] = []

@@ -422,6 +422,10 @@
             #expect(sent == [Data("\u{1b}OA".utf8)])
         }
 
+        @Test func keyboardOffersEveryInputMode() {
+            #expect(makeGhostty().keyboardType == .default)
+        }
+
         @Test func keyRepeatMatchesHardwareRates() {
             let view = makeGhostty()
             #expect(view.keyRepeatDelay == 0.3)

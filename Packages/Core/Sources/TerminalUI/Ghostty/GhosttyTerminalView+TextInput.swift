@@ -48,7 +48,7 @@
             set {}
         }
         var keyboardType: UIKeyboardType {
-            get { .asciiCapable }
+            get { .default }
             set {}
         }
         var keyboardAppearance: UIKeyboardAppearance {

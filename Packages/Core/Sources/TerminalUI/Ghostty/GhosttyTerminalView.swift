@@ -455,6 +455,14 @@
             setNeedsRender()
         }
 
+        override func selectAll(_ sender: Any?) {
+            if let selection = terminal.selectAll() {
+                selectionPivot = selection.start
+                rectangularSelection = false
+            }
+            setNeedsRender()
+        }
+
         func showEditMenu(at point: CGPoint) {
             #if !targetEnvironment(macCatalyst)
                 guard selectionActive else { return }
@@ -614,7 +622,7 @@
         override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
             switch action {
             case #selector(copy(_:)): selectionActive
-            case #selector(paste(_:)): true
+            case #selector(paste(_:)), #selector(selectAll(_:)): true
             default: false
             }
         }

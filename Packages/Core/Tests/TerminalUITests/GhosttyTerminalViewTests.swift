@@ -115,6 +115,15 @@
             #expect(view.selectedText() == "漢字")
         }
 
+        @Test func editMenuSelectAllSelectsTheWholeBuffer() {
+            let view = makeGhostty()
+            view.feed(Data("first\r\nsecond".utf8))
+            let selectAll = #selector(UIResponderStandardEditActions.selectAll(_:))
+            #expect(view.canPerformAction(selectAll, withSender: nil))
+            view.selectAll(nil)
+            #expect(view.selectedText() == "first\nsecond")
+        }
+
         @Test func linkTapAfterWideCharactersResolvesTheURL() {
             let view = makeGhostty()
             let gestures = GhosttyGestureCoordinator(bridge: TerminalBridge(), view: view)

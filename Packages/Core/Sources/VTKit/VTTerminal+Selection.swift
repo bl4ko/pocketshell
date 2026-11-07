@@ -79,6 +79,14 @@ extension VTTerminal {
         return selection
     }
 
+    @discardableResult
+    public func selectAll() -> VTSelection? {
+        var raw = emptySelection()
+        guard ghostty_terminal_select_all(handle, &raw) == GHOSTTY_SUCCESS else { return nil }
+        ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_SELECTION, &raw)
+        return selection
+    }
+
     public func selectionText() -> String? {
         var options = GhosttyTerminalSelectionFormatOptions()
         options.size = MemoryLayout<GhosttyTerminalSelectionFormatOptions>.size

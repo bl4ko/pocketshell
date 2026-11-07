@@ -206,6 +206,15 @@ public final class VTTerminal {
         }
         ghostty_terminal_set(
             handle, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, unsafeBitCast(progress, to: UnsafeRawPointer.self))
+        let size: GhosttyTerminalSizeFn = { _, userdata, out in
+            guard let userdata, let out else { return false }
+            let me = Unmanaged<VTTerminal>.fromOpaque(userdata).takeUnretainedValue()
+            out.pointee = GhosttySizeReportSize(
+                rows: UInt16(clamping: me.rows), columns: UInt16(clamping: me.cols), cell_width: me.cellPixels.width,
+                cell_height: me.cellPixels.height)
+            return true
+        }
+        ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_SIZE, unsafeBitCast(size, to: UnsafeRawPointer.self))
     }
 
     static func string(_ value: GhosttyString) -> String {

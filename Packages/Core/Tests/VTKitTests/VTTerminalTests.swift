@@ -110,6 +110,15 @@ struct VTTerminalStateTests {
             ])
     }
 
+    @Test func answersWindowSizeQueries() {
+        let terminal = VTTerminal(cols: 10, rows: 3)
+        terminal.resize(cols: 12, rows: 4, cellWidth: 9, cellHeight: 18)
+        var replies: [UInt8] = []
+        terminal.onWrite = { replies += $0 }
+        terminal.feed("\u{1b}[18t\u{1b}[16t\u{1b}[14t")
+        #expect(String(decoding: replies, as: UTF8.self) == "\u{1b}[8;4;12t\u{1b}[6;18;9t\u{1b}[4;72;108t")
+    }
+
     @Test func answersDeviceQueries() {
         let terminal = VTTerminal(cols: 10, rows: 3)
         var replies: [UInt8] = []

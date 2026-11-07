@@ -334,6 +334,27 @@
         }
 
         @MainActor
+        @Test func panOnASelectionHandleMovesItWithoutSelectMode() {
+            let view = makeTerminal()
+            let coordinator = gestures(view, TerminalBridge())
+            view.feed(Data("hello world".utf8))
+            view.selectWord(at: cellPoint(view, col: 8, row: 0))
+            #expect(view.selectedText() == "world")
+            let metrics = view.metrics!
+            let handle = CGPoint(x: 6 * metrics.pointWidth, y: 2)
+            let pan = ScriptedPan()
+            view.addGestureRecognizer(pan)
+            pan.moved = CGPoint(x: -2 * metrics.pointWidth, y: 0)
+            pan.point = CGPoint(x: handle.x + pan.moved.x, y: handle.y)
+            for state in [UIGestureRecognizer.State.began, .changed, .ended] {
+                pan.forced = state
+                coordinator.handleScrollPan(pan)
+            }
+            #expect(view.selectedText() == "o world")
+            #expect(!view.selectionHandleDragActive)
+        }
+
+        @MainActor
         @Test func multiplexerSelectDragIsForwardedAsMouseDrag() {
             let bridge = TerminalBridge()
             bridge.selectMode = true

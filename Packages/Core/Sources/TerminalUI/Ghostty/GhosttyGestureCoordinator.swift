@@ -298,7 +298,23 @@
                     }
                     return
                 }
+                if gesture.state == .began, view.selectionActive {
+                    let point = gesture.location(in: view)
+                    let translation = gesture.translation(in: view)
+                    view.grabSelectionHandle(at: CGPoint(x: point.x - translation.x, y: point.y - translation.y))
+                }
                 if view.selectionActive, view.selectionHandleDragActive {
+                    switch gesture.state {
+                    case .changed:
+                        view.dragSelectionHandle(to: gesture.location(in: view))
+                    case .ended:
+                        view.dragSelectionHandle(to: gesture.location(in: view))
+                        view.endSelectionHandleDrag()
+                    case .cancelled, .failed:
+                        view.endSelectionHandleDrag()
+                    default:
+                        break
+                    }
                     return
                 }
             #endif

@@ -263,3 +263,54 @@ private func fixtureSnapshot() throws -> HerdrSnapshot {
     #expect(outline.filtered(by: "") == outline)
     #expect(outline.filtered(by: " \n ") == outline)
 }
+
+private func withoutAgents(_ snapshot: HerdrSnapshot, in paneIDs: Set<String>? = nil) -> HerdrSnapshot {
+    var snapshot = snapshot
+    let cleared = { (paneID: String) in paneIDs?.contains(paneID) ?? true }
+    snapshot.agents.removeAll { cleared($0.paneID) }
+    snapshot.panes = snapshot.panes?.map { pane in
+        var pane = pane
+        if cleared(pane.paneID) { pane.agent = nil }
+        return pane
+    }
+    return snapshot
+}
+
+@Test func agentsOnlyDropsShellPanesAndTheTabsTheyLeaveEmpty() throws {
+    let outline = HerdrOutline(try fixtureSnapshot())
+    let agents = outline.agentsOnly()
+
+    #expect(outline.hasAgents)
+    #expect(agents.panes.map(\.paneID) == ["w1:p1", "w1:p3", "w2:p1", "w3:p1"])
+    #expect(agents.workspaces.map(\.workspaceID) == ["w1", "w2", "w3"])
+    #expect(agents.workspaces.first?.tabs.map(\.tabID) == ["w1:t1"])
+    #expect(agents.needingInput == outline.needingInput)
+    #expect(agents.focusedPaneID == outline.focusedPaneID)
+}
+
+@Test func agentsOnlyDropsWorkspacesWithoutAgentsAndShellsInsideAgentTabs() throws {
+    let outline = HerdrOutline(withoutAgents(try fixtureSnapshot(), in: ["w1:p3", "w2:p1"]))
+    let agents = outline.agentsOnly()
+
+    #expect(agents.workspaces.map(\.workspaceID) == ["w1", "w3"])
+    #expect(agents.workspaces.first?.tabs.map(\.tabID) == ["w1:t1"])
+    #expect(agents.workspaces.first?.tabs.first?.panes.map(\.paneID) == ["w1:p1"])
+    #expect(outline.tab(containing: "w1:p1")?.panes.count == 2)
+}
+
+@Test func agentsOnlyKeepsEveryPaneWhenNoPaneRunsAnAgent() throws {
+    let outline = HerdrOutline(withoutAgents(try fixtureSnapshot()))
+
+    #expect(!outline.hasAgents)
+    #expect(outline.panes.count == 5)
+    #expect(outline.agentsOnly() == outline)
+}
+
+@Test func searchAppliesOnTopOfTheAgentsOnlyView() throws {
+    let agents = HerdrOutline(try fixtureSnapshot()).agentsOnly()
+
+    #expect(agents.filtered(by: "build").workspaces.isEmpty)
+    #expect(agents.filtered(by: "dev").panes.map(\.paneID) == ["w1:p1", "w1:p3", "w3:p1"])
+    #expect(agents.filtered(by: "reviewer").panes.map(\.paneID) == ["w1:p3"])
+    #expect(agents.filtered(by: "~").panes.map(\.paneID) == ["w1:p1", "w1:p3"])
+}

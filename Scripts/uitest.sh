@@ -243,6 +243,8 @@ if command -v herdr >/dev/null; then
     herdr_select workspace create --label sel >/dev/null
     herdr_select pane split w1:p1 --direction right --no-focus >/dev/null
     herdr_select tab create --label second --no-focus >/dev/null
+    herdr_select tab create --label agent --no-focus >/dev/null
+    herdr_select pane report-agent --source psh-uitest --agent claude --state idle w1:p4 >/dev/null
     herdr_select pane run w1:p1 'clear; for i in $(seq 1 40); do echo LEFTPANE$i; done' >/dev/null
     herdr_select pane run w1:p2 'clear; for i in $(seq 1 40); do echo RIGHTPANE$i; done' >/dev/null
 fi

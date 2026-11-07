@@ -1545,6 +1545,12 @@ final class SmokeUITests: XCTestCase {
         let switcher = app.buttons["herdr-switcher"]
         XCTAssertTrue(switcher.waitForExistence(timeout: 5))
         switcher.tap()
+        XCTAssertTrue(app.buttons["herdr-pane-w1:p4"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["herdr-pane-w1:p1"].exists, "shell panes are hidden by default")
+        XCTAssertFalse(app.buttons["herdr-pane-w1:p3"].exists, "shell panes are hidden by default")
+        keepScreenshot("herdr-switcher-agents")
+        app.buttons["herdr-create"].tap()
+        app.descendants(matching: .any)["herdr-show-shells"].firstMatch.tap()
         let rightPane = app.buttons["herdr-pane-w1:p2"]
         XCTAssertTrue(rightPane.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["herdr-pane-w1:p1"].exists)

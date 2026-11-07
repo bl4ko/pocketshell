@@ -30,6 +30,7 @@ struct HerdrSwitcherSheet: View {
     @State private var failure: String?
     @State private var scrolledToFocus = false
     @State private var query = ""
+    @AppStorage(AppSettings.herdrShowShellsKey) private var showShells = false
 
     let controller: ConnectionController
     let hostName: String
@@ -44,7 +45,8 @@ struct HerdrSwitcherSheet: View {
         NavigationStack {
             ScrollViewReader { scroller in
                 List {
-                    if let outline = shown {
+                    if let whole = outline {
+                        let outline = shown(whole)
                         if !outline.needingInput.isEmpty {
                             Section {
                                 ForEach(outline.needingInput) { pane in
@@ -56,12 +58,13 @@ struct HerdrSwitcherSheet: View {
                             }
                         }
                         ForEach(outline.workspaces) { workspace in
+                            let wholeWorkspace = whole.workspaces.first { $0.id == workspace.id } ?? workspace
                             Section {
                                 ForEach(workspace.tabs) { tab in
-                                    tabRows(tab, in: workspace)
+                                    tabRows(tab, whole: wholeWorkspace.tabs.first { $0.id == tab.id } ?? tab)
                                 }
                             } header: {
-                                workspaceHeader(workspace)
+                                workspaceHeader(wholeWorkspace)
                             }
                         }
                     } else {
@@ -77,7 +80,9 @@ struct HerdrSwitcherSheet: View {
                 }
                 .listStyle(.insetGrouped)
                 .overlay {
-                    if let shown, shown.workspaces.isEmpty, !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    if let shown = outline.map(shown), shown.workspaces.isEmpty,
+                        !query.trimmingCharacters(in: .whitespaces).isEmpty
+                    {
                         ContentUnavailableView.search(text: query)
                     }
                 }
@@ -168,12 +173,12 @@ struct HerdrSwitcherSheet: View {
         state.snapshot.map(HerdrOutline.init)
     }
 
-    private var shown: HerdrOutline? {
-        outline?.filtered(by: query)
+    private func shown(_ outline: HerdrOutline) -> HerdrOutline {
+        (showShells ? outline : outline.agentsOnly()).filtered(by: query)
     }
 
     @ViewBuilder
-    private func tabRows(_ tab: HerdrOutline.Tab, in workspace: HerdrOutline.Workspace) -> some View {
+    private func tabRows(_ shownTab: HerdrOutline.Tab, whole tab: HerdrOutline.Tab) -> some View {
         if tab.panes.count == 1, let pane = tab.panes.first {
             let named = !Self.isDefaultLabel(tab.label)
             paneButton(
@@ -210,7 +215,7 @@ struct HerdrSwitcherSheet: View {
             .accessibilityIdentifier("herdr-tab-\(tab.tabID)")
             .accessibilityValue(tab.focused ? "focused" : "")
             .contextMenu { tabActions(tab) }
-            ForEach(tab.panes) { pane in
+            ForEach(shownTab.panes) { pane in
                 paneButton(pane, title: pane.title, detail: pane.detail, indent: true)
             }
         }
@@ -439,6 +444,13 @@ struct HerdrSwitcherSheet: View {
                     Label("New Worktree", systemImage: "arrow.triangle.branch")
                 }
                 .accessibilityIdentifier("herdr-new-worktree")
+            }
+            if outline?.hasAgents == true {
+                Divider()
+                Toggle(isOn: $showShells) {
+                    Label("Show Shells", systemImage: "terminal")
+                }
+                .accessibilityIdentifier("herdr-show-shells")
             }
         } label: {
             Image(systemName: "plus")

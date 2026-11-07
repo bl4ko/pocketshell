@@ -135,7 +135,7 @@
         }
 
         public func paste() {
-            view?.pasteFromClipboard()
+            view?.paste(nil)
         }
 
         /// Sends a prompt composed outside the terminal into the live session.

@@ -1633,6 +1633,66 @@ final class SmokeUITests: XCTestCase {
     ///
     /// A host that already has tmux or Herdr sessions shows the session picker first, so a
     /// test that wants a shell has to say so; on a host with no sessions it never appears.
+    func testTerminalClipboardButtonPastesTextAndImages() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; clipboard paste test skipped")
+        }
+        openHost("localbox")
+        let clipboard = app.buttons["terminal.clipboard"]
+        XCTAssertTrue(clipboard.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        terminal.tap()
+        terminal.typeText("\u{03}")
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+
+        let textPath = "/tmp/psh-paste-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: textPath) }
+        UIPasteboard.general.string = "printf toolbar-paste > \(textPath)"
+        clipboard.tap()
+        allowPasteIfAsked()
+        app.buttons["terminal.enter"].tap()
+        let pasted = NSPredicate { _, _ in
+            (try? String(contentsOfFile: textPath, encoding: .utf8)) == "toolbar-paste"
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: pasted, object: nil)], timeout: 10), .completed)
+
+        let capture = "/tmp/psh-paste-path-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: capture) }
+        UIPasteboard.general.image = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32)).image { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        }
+        terminal.typeText("printf '%s' ")
+        let before = Set((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? [])
+        clipboard.tap()
+        allowPasteIfAsked()
+        let uploaded = NSPredicate { _, _ in
+            ((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? []).contains {
+                $0.hasPrefix("psh-") && $0.hasSuffix(".jpg") && !before.contains($0)
+            }
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: uploaded, object: nil)], timeout: 15), .completed)
+        sleep(1)
+        terminal.typeText("> '\(capture)'\n")
+        let captured = NSPredicate { _, _ in
+            FileManager.default.contents(atPath: capture)?.isEmpty == false
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: captured, object: nil)], timeout: 10), .completed)
+        let path = try XCTUnwrap(
+            FileManager.default.contents(atPath: capture).flatMap { String(data: $0, encoding: .utf8) }
+        ).trimmingCharacters(in: .whitespaces)
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        XCTAssertTrue(path.hasPrefix("/tmp/psh-") && path.hasSuffix(".jpg"), path)
+    }
+
+    private func allowPasteIfAsked() {
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow Paste"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
+    }
+
     private func openHost(_ name: String) {
         app.staticTexts[name].firstMatch.tap()
         let shellMode = app.buttons["Shells & tmux"].firstMatch

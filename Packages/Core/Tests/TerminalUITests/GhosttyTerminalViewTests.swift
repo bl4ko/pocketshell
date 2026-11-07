@@ -209,6 +209,37 @@
             #expect(bridge.currentSize.cols == view.terminalCols)
         }
 
+        @Test func toolbarPasteUploadsAClipboardImageLikeTheEditMenu() {
+            let bridge = TerminalBridge()
+            let view = makeGhostty()
+            bridge.view = view
+            var sent: [Data] = []
+            view.onSend = { sent.append($0) }
+            view.readPasteboard = { "text" }
+            var imageTried = 0
+            view.pasteImage = {
+                imageTried += 1
+                return true
+            }
+            bridge.paste()
+            view.paste(nil)
+            #expect(imageTried == 2)
+            #expect(sent.isEmpty)
+        }
+
+        @Test func toolbarPasteSendsClipboardTextWithoutAnImage() {
+            let bridge = TerminalBridge()
+            let view = makeGhostty()
+            bridge.view = view
+            view.feed(Data("\u{1b}[?2004h".utf8))
+            var sent: [Data] = []
+            view.onSend = { sent.append($0) }
+            view.readPasteboard = { "ls -la" }
+            view.pasteImage = { false }
+            bridge.paste()
+            #expect(sent == [Data("\u{1b}[200~ls -la\u{1b}[201~".utf8)])
+        }
+
         @Test func hiddenTabsReleaseTheDrawableAndRestoreItWhenShown() {
             let bridge = TerminalBridge()
             let view = makeGhostty()

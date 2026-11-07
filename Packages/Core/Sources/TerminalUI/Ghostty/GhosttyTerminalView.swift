@@ -25,6 +25,7 @@
             }
         }
         var writePasteboard: (String) -> Void = { UIPasteboard.general.string = $0 }
+        var readPasteboard: () -> String? = { UIPasteboard.general.string }
         var keyRepeatDelay: TimeInterval = 0.3
         var keyRepeatInterval: TimeInterval = 1.0 / 30.0
         private(set) var renderCount = 0
@@ -627,7 +628,7 @@
         }
 
         func pasteFromClipboard() {
-            guard let text = UIPasteboard.general.string else { return }
+            guard let text = readPasteboard() else { return }
             clearSelection()
             if terminal.bracketedPaste {
                 send(Data("\u{1b}[200~".utf8) + Data(text.utf8) + Data("\u{1b}[201~".utf8))

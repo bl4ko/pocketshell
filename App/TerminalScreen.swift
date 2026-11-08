@@ -434,7 +434,6 @@ struct TerminalScreen: View {
                 Task { await connection.prefillComposer() }
             } else {
                 voice.stop()
-                connection.composerClosed()
             }
         }
         .onChange(of: voice.isOn) { _, on in

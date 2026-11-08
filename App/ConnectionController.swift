@@ -26,14 +26,15 @@ final class ConnectionController: ObservableObject {
     @Published private(set) var isUploadingFile = false
     // Composer state lives here, not in the view: HostTabsScreen state dies on navigation
     // and a half-written prompt must survive a trip to the session list.
-    @Published var composerVisible = false
+    @Published var composerVisible = false {
+        didSet { if oldValue, !composerVisible { discardComposerDraft() } }
+    }
     // Per host, not per tab: HostTabsScreen state (and this controller with it) dies on
     // navigation, and losing a half-written prompt on a trip to the session list is worse
     // than two tabs on one host sharing a draft.
     @Published var composerDraft = "" {
         didSet { UserDefaults.standard.set(composerDraft, forKey: Self.draftKey(host)) }
     }
-    private var composerPrefilled: String?
     var composerReplacesBox = false {
         didSet { UserDefaults.standard.set(composerReplacesBox, forKey: Self.draftKey(host) + ".replacesBox") }
     }
@@ -290,23 +291,18 @@ final class ConnectionController: ObservableObject {
         let box = await unsentPrompt()
         let prefill = ComposerPrefill.resolve(draft: composerDraft, replacesBox: composerReplacesBox, box: box)
         if composerDraft != prefill.draft { composerDraft = prefill.draft }
-        if prefill.replacesBox, prefill.draft == box?.text { composerPrefilled = prefill.draft }
         composerReplacesBox = prefill.replacesBox
     }
 
-    func composerClosed() {
-        let state = ComposerPrefill.closing(
-            draft: composerDraft, replacesBox: composerReplacesBox, prefilled: composerPrefilled)
-        composerPrefilled = nil
-        if composerDraft != state.draft { composerDraft = state.draft }
-        composerReplacesBox = state.replacesBox
+    private func discardComposerDraft() {
+        composerDraft = ""
+        composerReplacesBox = false
     }
 
     func sendComposer(_ text: String) async {
         var clear: [UInt8] = []
         if composerReplacesBox, let box = await unsentPrompt(), !box.isEmpty { clear = box.clearSequence }
         composerReplacesBox = false
-        composerPrefilled = nil
         bridge.sendComposed(text, clearing: clear)
     }
 

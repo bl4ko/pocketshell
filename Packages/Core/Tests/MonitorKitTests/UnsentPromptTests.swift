@@ -142,15 +142,3 @@ private func screen(_ name: String) throws -> [String] {
         ComposerPrefill.resolve(draft: "", replacesBox: false, box: nil)
             == ComposerPrefill(draft: "", replacesBox: false))
 }
-
-@Test func closingDropsAnUntouchedPrefillOnly() {
-    #expect(
-        ComposerPrefill.closing(draft: "box text", replacesBox: true, prefilled: "box text")
-            == ComposerPrefill(draft: "", replacesBox: false))
-    #expect(
-        ComposerPrefill.closing(draft: "box text, edited", replacesBox: true, prefilled: "box text")
-            == ComposerPrefill(draft: "box text, edited", replacesBox: true))
-    #expect(
-        ComposerPrefill.closing(draft: "mine", replacesBox: false, prefilled: "mine")
-            == ComposerPrefill(draft: "mine", replacesBox: false))
-}

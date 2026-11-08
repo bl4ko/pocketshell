@@ -212,10 +212,4 @@ public struct ComposerPrefill: Equatable, Sendable {
         if draft.isEmpty || draft == box.text { return ComposerPrefill(draft: box.text, replacesBox: true) }
         return ComposerPrefill(draft: draft, replacesBox: replacesBox)
     }
-
-    /// An untouched prefill is dropped on close: the text still sits in the agent's box.
-    public static func closing(draft: String, replacesBox: Bool, prefilled: String?) -> ComposerPrefill {
-        guard replacesBox, draft == prefilled else { return ComposerPrefill(draft: draft, replacesBox: replacesBox) }
-        return ComposerPrefill(draft: "", replacesBox: false)
-    }
 }

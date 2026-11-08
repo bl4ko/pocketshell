@@ -301,7 +301,7 @@ public enum Herdr {
         return try? JSONDecoder().decode(SnapshotEnvelope.self, from: data).result.snapshot
     }
 
-    static func commandPrefix(session: String) -> String {
+    public static func commandPrefix(session: String) -> String {
         session == "default" ? executable : "\(executable) --session \(shellQuote(session))"
     }
 

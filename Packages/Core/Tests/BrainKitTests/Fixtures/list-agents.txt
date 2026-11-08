@@ -1,0 +1,26 @@
+@@psh-tmux:%3|4101|claude|work|2|@7|api@@
+@@psh-session@@
+{"pid":4101,"sessionId":"5b3c0a52-7d1e-4c8e-9f20-1a2b3c4d5e6f","cwd":"/home/dev/src/api","status":"busy","name":"api-1"}
+@@psh-cwd@@
+/home/dev/src/api
+@@psh-screen@@
+⏺ Running the migration tests now.
+
+✻ Migrating… (12s · ↓ 1.2k tokens · esc to interrupt)
+
+────────────────────────────────────────
+>
+────────────────────────────────────────
+  ? for shortcuts
+@@psh-tmux:%9|4230|codex|work-psh-0a1b2c3d|4|@11|web|tools@@
+@@psh-cwd@@
+/home/dev/src/web
+@@psh-screen@@
+• The login test now waits for the session cookie.
+
+› Ask Codex to do anything
+
+  86% context left
+@@psh-herdr:default@@
+{"id":"cli:api:snapshot","result":{"snapshot":{"version":"0.9.0","protocol":3,"focused_workspace_id":"w1","focused_tab_id":"w1:t1","focused_pane_id":"w1:p3","workspaces":[{"workspace_id":"w1","number":1,"label":"infra","agent_status":"blocked","focused":true}],"agents":[{"agent":"codex","agent_status":"blocked","focused":true,"name":"reviewer","pane_id":"w1:p3","tab_id":"w1:t1","workspace_id":"w1","title":"Allow command?"},{"agent":"gemini","agent_status":"idle","focused":false,"pane_id":"w1:p4","tab_id":"w1:t1","workspace_id":"w1"}],"tabs":[{"tab_id":"w1:t1","workspace_id":"w1","label":"deploy","number":1}],"panes":[{"pane_id":"w1:p3","workspace_id":"w1","tab_id":"w1:t1","agent":"codex","cwd":"/home/dev/src/infra","agent_status":"blocked","focused":true}]}}}
+

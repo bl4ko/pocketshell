@@ -4,6 +4,7 @@ set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 DIR=$(mktemp -d)
 PORT=${PS_TEST_PORT:-24222}
+BRAIN_PORT=${PS_TEST_BRAIN_PORT:-24223}
 SIM=${PS_TEST_SIM:-iPhone 17}
 TMUX_SESSION="psh-uitest-$$"
 STATUS_STABLE="$TMUX_SESSION-stable"
@@ -22,6 +23,8 @@ cleanup() {
         herdr session delete "$HERDR_SELECT" >/dev/null 2>&1 || true
     fi
     kill "${WATCHDOG_PID:-}" 2>/dev/null || true
+    kill "${BRAIN_PID:-}" 2>/dev/null || true
+    pkill -f "mock-brain.py $BRAIN_PORT" 2>/dev/null || true
     kill "${SSHD_PID:-}" 2>/dev/null || true
     tmux -S "$TMUX_TMPDIR/tmux-$(id -u)/default" kill-server 2>/dev/null || true
     rm -rf "$DIR"
@@ -60,6 +63,13 @@ SCRIPT_PID=$$
 WATCHDOG_PID=$!
 for _ in $(seq 1 50); do
     nc -z 127.0.0.1 "$PORT" 2>/dev/null && break
+    sleep 0.2
+done
+
+uv run --no-project --quiet "$REPO/Scripts/mock-brain.py" "$BRAIN_PORT" psh-test-key &
+BRAIN_PID=$!
+for _ in $(seq 1 50); do
+    nc -z 127.0.0.1 "$BRAIN_PORT" 2>/dev/null && break
     sleep 0.2
 done
 
@@ -276,6 +286,8 @@ TEST_RUNNER_PS_TEST_KBSLIDE="$KBSLIDE_SESSION" \
 TEST_RUNNER_PS_TEST_ARROW_PROMPT="$DIR/arrow-prompt" \
 TEST_RUNNER_PS_TEST_HERDR_SELECT="$HERDR_SELECT" \
 TEST_RUNNER_PS_TEST_FAKE_AGENT="$DIR/fakeagent" \
+TEST_RUNNER_PS_TEST_BRAIN_URL="http://127.0.0.1:$BRAIN_PORT/v1" \
+TEST_RUNNER_PS_TEST_BRAIN_KEY="psh-test-key" \
 xcodebuild test \
   -scheme pocketshell \
   -derivedDataPath "${PS_TEST_DERIVED:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-uitest}" \

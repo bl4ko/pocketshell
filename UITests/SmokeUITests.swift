@@ -34,6 +34,11 @@ final class SmokeUITests: XCTestCase {
         if name.contains("testTerminalAttachment") {
             app.launchEnvironment["PS_UI_TEST_ATTACHMENT"] = "pocketshell-file-attachment\n"
         }
+        if name.contains("testVoiceBrain") {
+            let env = ProcessInfo.processInfo.environment
+            app.launchEnvironment["PS_UI_TEST_BRAIN_URL"] = env["PS_TEST_BRAIN_URL"]
+            app.launchEnvironment["PS_UI_TEST_BRAIN_KEY"] = env["PS_TEST_BRAIN_KEY"]
+        }
         if name.contains("testTerminalCamera") {
             app.launchEnvironment["PS_UI_TEST_CAMERA"] = "1"
         }
@@ -1429,6 +1434,38 @@ final class SmokeUITests: XCTestCase {
         // The toolbar button is the touch path for the same toggle.
         app.buttons["terminal.compose"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertFalse(field.waitForExistence(timeout: 2))
+    }
+
+    func testVoiceBrainBarShowsTheBrainReplyAndEnds() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+
+        openHost("localbox")
+        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        let brainButton = app.buttons["voice.brain"]
+        for _ in 0..<3 where !brainButton.exists {
+            app.typeKey("j", modifierFlags: .command)
+            _ = brainButton.waitForExistence(timeout: 3)
+        }
+        XCTAssertTrue(brainButton.waitForExistence(timeout: 5))
+        brainButton.tap()
+
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["voice.orb"].exists)
+        XCTAssertTrue(app.buttons["voice.mute"].exists)
+        let input = app.textFields["voice.testInput"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("what are my agents doing\n")
+
+        let caption = app.staticTexts["voice.caption"]
+        XCTAssertTrue(waitForLabel(caption, containing: "All quiet on localbox"))
+
+        app.buttons["voice.end"].tap()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: bar)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed)
     }
 
     func testJapaneseImeComposesInlineAtTheCaret() throws {

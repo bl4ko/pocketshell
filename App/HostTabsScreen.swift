@@ -1,3 +1,4 @@
+import BrainKit
 import HerdrKit
 import Models
 import MonitorKit
@@ -65,6 +66,7 @@ struct HostTabsScreen: View {
     @State private var collapsedTabGroups: Set<String> = []
     @State private var loadedCollapsedTabGroups = false
     @StateObject private var skipPermissions = SkipPermissionsFlow()
+    @StateObject private var voiceBrain = VoiceBrainSession()
 
     let host: HostConfig
     var herdrSession: String? = nil
@@ -98,7 +100,9 @@ struct HostTabsScreen: View {
                         host: host,
                         isActive: tab.id == selectedTab,
                         quickReplyOptions: tabQuickReplies[tab.id] ?? [],
-                        onQuickReply: { tabQuickReplies[tab.id] = [] }
+                        onQuickReply: { tabQuickReplies[tab.id] = [] },
+                        voiceBrain: voiceBrain,
+                        onVoiceBrain: toggleVoiceBrain
                     )
                     .opacity(tab.id == selectedTab ? 1 : 0)
                     .allowsHitTesting(tab.id == selectedTab)
@@ -284,6 +288,7 @@ struct HostTabsScreen: View {
             activeController?.nudgeTmuxSizing()
         }
         .onDisappear {
+            voiceBrain.end()
             monitor.visibleWindowKey = nil
             for tab in tabs {
                 Task {
@@ -448,6 +453,7 @@ struct HostTabsScreen: View {
 
             [voice]
             \(VoiceListener.report)
+            brain: \(voiceBrain.report)
 
             [remote tmux]
             \(remote)
@@ -523,6 +529,79 @@ struct HostTabsScreen: View {
                 windowID: tab.controller.tmuxTarget?.windowID,
                 group: tab.group
             )
+        }
+    }
+
+    private func toggleVoiceBrain() {
+        guard !voiceBrain.isOn else {
+            voiceBrain.end()
+            return
+        }
+        voiceBrain.start(
+            host: host,
+            io: AgentToolbox.IO(
+                exec: { await brainExec($0) },
+                focus: { await focusAgent($0) },
+                current: { brainTarget },
+                tmuxSession: { host.tmuxSession ?? activeController?.tmuxTarget?.session }),
+            onDictation: dictate)
+    }
+
+    private func brainExec(_ command: String) async -> String? {
+        var controllers = tabs.map(\.controller)
+        if let active = activeController {
+            controllers.removeAll { $0 === active }
+            controllers.insert(active, at: 0)
+        }
+        for controller in controllers {
+            if let output = await controller.run(command) { return output }
+        }
+        return nil
+    }
+
+    private var brainTarget: CurrentTarget? {
+        guard let controller = activeController else { return nil }
+        if let herdr = controller.herdrTarget { return CurrentTarget(herdrSession: herdr.session) }
+        guard let tmux = controller.tmuxTarget else { return nil }
+        return CurrentTarget(tmuxSession: tmux.session, windowIndex: tmux.windowIndex, windowID: tmux.windowID)
+    }
+
+    private func focusAgent(_ agent: BrainAgent) async -> Bool {
+        switch agent.location {
+        case .tmux(let session, let windowIndex, let windowID, _):
+            guard !herdrOnly else { return false }
+            openWindowInNewTab(session: session, windowIndex: windowIndex, windowID: windowID)
+            return true
+        case .herdr(let session, let paneID, _, _):
+            guard let tab = tabs.first(where: { $0.controller.herdrTarget?.session == session }) else {
+                if herdrOnly { return false }
+                openHerdrSessionInNewTab(session: session, workspaceID: nil)
+                return true
+            }
+            selectedTab = tab.id
+            guard let snapshot = await tab.controller.currentHerdrSnapshot() else { return false }
+            return await tab.controller.run(Herdr.focusCommand(session: session, paneID: paneID, in: snapshot)) != nil
+        }
+    }
+
+    private func dictate(_ phrase: String) {
+        guard let controller = activeController else { return }
+        controller.composerVisible = true
+        switch VoiceCommand.apply(phrase, to: &controller.composerDraft) {
+        case .submit(let message):
+            controller.bridge.sendComposed(message)
+        case .keys(let keys):
+            controller.bridge.processOutgoing(Data(keys.utf8))
+        case .jump(let name):
+            Task { _ = await controller.focusHerdrTab(named: name) }
+        case .nextAgent:
+            Task { _ = await controller.focusHerdrAgentNeedingInput() }
+        case .scroll(let up):
+            controller.bridge.scrollHalfPage(up: up)
+        case .closeKeyboard:
+            controller.bridge.closeKeyboard()
+        case nil:
+            break
         }
     }
 

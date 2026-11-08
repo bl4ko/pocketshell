@@ -37,6 +37,7 @@ targets:
           - SFTPKit
           - GitKit
           - VoiceKit
+          - BrainKit
       - package: Core
         products:
           - VNCKit
@@ -68,6 +69,7 @@ targets:
         BGTaskSchedulerPermittedIdentifiers:
           - com.bl4ko.pocketshell.refresh
         UIBackgroundModes:
+          - audio
           - fetch
     entitlements:
       path: App/pocketshell.entitlements

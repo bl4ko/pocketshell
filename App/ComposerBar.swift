@@ -13,6 +13,8 @@ struct ComposerBar: View {
     var voiceState: VoiceListener.State = .off
     var voiceStatus: String?
     var onVoice: (() -> Void)?
+    var voiceBrainActive = false
+    var onVoiceBrain: (() -> Void)?
     let onSend: () -> Void
     let onClose: () -> Void
     @FocusState private var focused: Bool
@@ -65,6 +67,16 @@ struct ComposerBar: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Voice input")
                 .accessibilityIdentifier("composer.voice")
+            }
+            if let onVoiceBrain {
+                Button(action: onVoiceBrain) {
+                    Image(systemName: "waveform")
+                        .font(.title2)
+                        .foregroundStyle(voiceBrainActive ? PocketshellTheme.accent : PocketshellTheme.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Voice conversation")
+                .accessibilityIdentifier("voice.brain")
             }
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")

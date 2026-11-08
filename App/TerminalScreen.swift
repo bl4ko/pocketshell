@@ -234,6 +234,7 @@ struct TerminalScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var connection: ConnectionController
     @ObservedObject private var bridge: TerminalBridge
+    @ObservedObject private var voiceBrain: VoiceBrainSession
     @StateObject private var keyboard = KeyboardObserver()
     @StateObject private var voice = VoiceListener()
     @State private var voiceNotice: String?
@@ -255,16 +256,21 @@ struct TerminalScreen: View {
     var isActive = true
     var quickReplyOptions: [Int] = []
     var onQuickReply: (() -> Void)?
+    var onVoiceBrain: (() -> Void)?
 
     init(
         connection: ConnectionController,
         host: HostConfig,
         isActive: Bool = true,
         quickReplyOptions: [Int] = [],
-        onQuickReply: (() -> Void)? = nil
+        onQuickReply: (() -> Void)? = nil,
+        voiceBrain: VoiceBrainSession,
+        onVoiceBrain: (() -> Void)? = nil
     ) {
         self.connection = connection
         self.bridge = connection.bridge
+        self.voiceBrain = voiceBrain
+        self.onVoiceBrain = onVoiceBrain
         self.host = host
         self.isActive = isActive
         self.quickReplyOptions = quickReplyOptions
@@ -297,6 +303,9 @@ struct TerminalScreen: View {
                         layout: keyboardInset.layout, shown: shownInset, slides: keyboardSlides,
                         caretSlide: connection.isMultiplexerAttached ? keyboardSlide : nil))
                 VStack(spacing: 0) {
+                    if isActive {
+                        VoiceBrainBarHost(session: voiceBrain)
+                    }
                     if connection.composerVisible {
                         ComposerBar(
                             text: $connection.composerDraft,
@@ -305,6 +314,8 @@ struct TerminalScreen: View {
                             voiceStatus: voice.isOn && voice.partial.isEmpty
                                 ? voiceNotice ?? voice.status : voice.status,
                             onVoice: voiceToggle,
+                            voiceBrainActive: voiceBrain.isOn,
+                            onVoiceBrain: voiceBrainToggle,
                             onSend: {
                                 let text = connection.composerDraft
                                 Task { await connection.sendComposer(text) }
@@ -443,11 +454,25 @@ struct TerminalScreen: View {
         #endif
     }
 
+    private var voiceBrainToggle: (() -> Void)? {
+        #if targetEnvironment(macCatalyst)
+            nil
+        #else
+            onVoiceBrain.map { start in
+                {
+                    voice.stop()
+                    start()
+                }
+            }
+        #endif
+    }
+
     private func toggleVoice() {
         guard !voice.isOn else {
             voice.stop()
             return
         }
+        voiceBrain.end()
         voiceNotice = nil
         voice.onPhrase = { handleVoice($0) }
         Task {

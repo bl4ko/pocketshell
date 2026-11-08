@@ -1579,6 +1579,59 @@ final class SmokeUITests: XCTestCase {
         waitForExpectations(timeout: 3)
     }
 
+    func testSettingsVoiceRowsSwitchSpeechProviders() {
+        app.buttons["Settings"].tap()
+        let endpoint = app.textFields["settings.brain.endpoint"]
+        for _ in 0..<4 where !endpoint.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(endpoint.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["settings.brain.model"].exists)
+        let brainKey = app.descendants(matching: .any)
+        XCTAssertTrue(brainKey["settings.brain.key"].exists || brainKey["settings.brain.key.saved"].exists)
+
+        let mouth = app.descendants(matching: .any)["settings.speech.mouth"]
+        let ears = app.descendants(matching: .any)["settings.speech.ears"]
+        let saveAudio = app.switches["settings.benchmark.saveAudio"]
+        for _ in 0..<4 where !(saveAudio.exists && saveAudio.isHittable) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(mouth.waitForExistence(timeout: 5))
+        XCTAssertTrue(ears.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["settings.speech.sonioxKey"].exists)
+        XCTAssertTrue(saveAudio.exists)
+        XCTAssertTrue(app.buttons["settings.benchmark.exportTimings"].exists)
+        XCTAssertTrue(app.buttons["settings.benchmark.exportAudio"].exists)
+
+        choose("Soniox", in: mouth)
+        XCTAssertTrue(waitForSetting(mouth, showing: "Soniox"))
+        XCTAssertTrue(waitForSetting(app.descendants(matching: .any)["settings.speech.voice"], showing: "Hazel"))
+        choose("iPhone", in: mouth)
+        XCTAssertTrue(waitForSetting(mouth, showing: "iPhone"))
+        XCTAssertTrue(
+            waitForSetting(app.descendants(matching: .any)["settings.speech.voice"], showing: "Best installed"))
+
+        choose("Soniox", in: ears)
+        XCTAssertTrue(waitForSetting(ears, showing: "Soniox"))
+        choose("iPhone", in: ears)
+        XCTAssertTrue(waitForSetting(ears, showing: "iPhone"))
+    }
+
+    private func choose(_ option: String, in picker: XCUIElement) {
+        picker.tap()
+        let item = app.buttons.matching(
+            NSPredicate(format: "label == %@ AND identifier != %@", option, picker.identifier)
+        )
+        .firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5))
+        item.tap()
+    }
+
+    private func waitForSetting(_ element: XCUIElement, showing text: String) -> Bool {
+        let predicate = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", text, text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
     func testSettingsThemeSelection() {
         app.buttons["Settings"].tap()
         let dracula = app.buttons["Dracula"]

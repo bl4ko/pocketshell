@@ -55,13 +55,6 @@ struct SettingsView: View {
     @State private var exporting = false
     @State private var importing = false
     @State private var importResult: String?
-    @AppStorage(BrainSettings.baseURLKey) private var brainURL = ""
-    @AppStorage(BrainSettings.modelKey) private var brainModel = BrainSettings.defaultModel
-    @AppStorage(BrainSettings.voiceKey) private var brainVoice = ""
-    @State private var brainKey = ""
-    @State private var brainKeySaved = PasswordVault.get(account: BrainSettings.apiKeyAccount) != nil
-    @State private var voices: [VoiceChoice] = []
-
     var body: some View {
         List {
             Section {
@@ -90,7 +83,7 @@ struct SettingsView: View {
                 )
             }
             #if !targetEnvironment(macCatalyst)
-                brainSection
+                VoiceSettingsSections(developerMode: developerMode)
             #endif
             Section {
                 TextField("https://your-worker.workers.dev", text: $pushRelayURL)
@@ -222,58 +215,6 @@ struct SettingsView: View {
             Button("OK") { importResult = nil }
         }
         .paperScreen()
-    }
-
-    private var brainSection: some View {
-        Section {
-            TextField("Base URL, for example https://…/v1", text: $brainURL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .accessibilityIdentifier("settings.brainURL")
-            SecureField(brainKeySaved ? "API key saved" : "API key", text: $brainKey)
-                .textInputAutocapitalization(.never)
-                .onSubmit(saveBrainKey)
-                .accessibilityIdentifier("settings.brainKey")
-            if !brainKey.isEmpty || brainKeySaved {
-                HStack {
-                    if !brainKey.isEmpty { Button("Save key", action: saveBrainKey) }
-                    Spacer()
-                    if brainKeySaved {
-                        Button("Remove key", role: .destructive) {
-                            PasswordVault.delete(account: BrainSettings.apiKeyAccount)
-                            brainKeySaved = false
-                        }
-                    }
-                }
-                .buttonStyle(.borderless)
-            }
-            TextField("Model", text: $brainModel)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .accessibilityIdentifier("settings.brainModel")
-            Picker("Voice", selection: $brainVoice) {
-                Text("Best installed").tag("")
-                ForEach(voices) { voice in
-                    Text(voice.label).tag(voice.id)
-                }
-            }
-            .onAppear { voices = SpeechVoices.ranked(SpeechVoices.installed()) }
-        } header: {
-            Text("Voice conversation")
-        } footer: {
-            Text(
-                "An OpenAI-compatible Chat Completions endpoint answers in voice mode. The key stays in this device's Keychain. Download premium or enhanced voices in iOS Settings, Accessibility, Spoken Content."
-            )
-        }
-    }
-
-    private func saveBrainKey() {
-        let key = brainKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        PasswordVault.set(key, account: BrainSettings.apiKeyAccount)
-        brainKey = ""
-        brainKeySaved = true
     }
 
     private var importAlertShown: Binding<Bool> {

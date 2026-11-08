@@ -1,0 +1,258 @@
+import Foundation
+import Testing
+import VoiceKit
+
+@testable import BrainKit
+
+private final class ScriptedModel: BrainModel, @unchecked Sendable {
+    private let lock = NSLock()
+    private var replies: [Result<[BrainStreamEvent], BrainError>]
+    private var received: [[ChatMessage]] = []
+    let delay: Duration
+
+    init(_ replies: [Result<[BrainStreamEvent], BrainError>], delay: Duration = .zero) {
+        self.replies = replies
+        self.delay = delay
+    }
+
+    var requests: [[ChatMessage]] { lock.withLock { received } }
+
+    func stream(_ messages: [ChatMessage], tools: [ToolDefinition]) -> AsyncThrowingStream<BrainStreamEvent, Error> {
+        let reply = lock.withLock { () -> Result<[BrainStreamEvent], BrainError> in
+            received.append(messages)
+            return replies.isEmpty ? .success([.text("Okay."), .finished("stop")]) : replies.removeFirst()
+        }
+        let delay = delay
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                switch reply {
+                case .failure(let error):
+                    continuation.finish(throwing: error)
+                case .success(let events):
+                    for event in events {
+                        if delay > .zero { try? await Task.sleep(for: delay) }
+                        if Task.isCancelled { break }
+                        continuation.yield(event)
+                    }
+                    continuation.finish()
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+private let busyScreen = "✻ Thinking… (12s · esc to interrupt)\n> \n  ? for shortcuts"
+
+@MainActor
+private final class Rig {
+    let ears = TextEars()
+    let mouth = TimedMouth(secondsPerCharacter: 0.001)
+    var commands: [String] = []
+    var unsent: String?
+    var time: TimeInterval = 0
+    let model: ScriptedModel
+    var brain: VoiceBrain!
+
+    init(_ model: ScriptedModel, store: ConversationStore? = nil, now: Date = Date()) throws {
+        self.model = model
+        let list = try fixture("list-agents.txt")
+        let toolbox = AgentToolbox(
+            io: .init(
+                exec: { [weak self] command in
+                    self?.commands.append(command)
+                    if command.contains("list-panes") { return list }
+                    if command.contains("capture-pane") { return busyScreen }
+                    return ""
+                },
+                focus: { _ in true },
+                unsentPrompt: { [weak self] agent in agent.isCurrent ? self?.unsent : nil },
+                current: { CurrentTarget(tmuxSession: "work", windowIndex: 2, windowID: "@7") }))
+        brain = VoiceBrain(
+            hostID: "host-1", hostName: "devbox", ears: ears, mouth: mouth, model: model, toolbox: toolbox,
+            store: store, pollInterval: .seconds(60), clock: { [weak self] in self?.time ?? 0 }, now: { now })
+    }
+
+    deinit {
+        MainActor.assumeIsolated { brain.end() }
+    }
+
+    func phrase(_ text: String) {
+        ears.submit(text)
+    }
+}
+
+private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> ToolCall {
+    ToolCall(id: id, name: name, arguments: arguments)
+}
+
+@MainActor
+@Test func phraseRunsToolsAndSpeaksTheReplySentenceBySentence() async throws {
+    let rig = try Rig(
+        ScriptedModel([
+            .success([.text("Hmm, let me check."), .toolCalls([call("c1", "list_agents")]), .finished("tool_calls")]),
+            .success([.text("Claude in api is busy. "), .text("Codex in web is idle."), .finished("stop")]),
+        ]))
+    await rig.brain.start()
+    #expect(rig.brain.mode == .conversing)
+    rig.phrase("what are my agents doing")
+    #expect(await eventually { rig.mouth.spoken.contains("Codex in web is idle.") })
+    #expect(rig.mouth.spoken.prefix(3) == ["Hmm, let me check.", "Claude in api is busy.", "Codex in web is idle."])
+    #expect(rig.brain.caption == VoiceBrain.Caption(.brain, "Claude in api is busy. Codex in web is idle."))
+    let second = try #require(rig.model.requests.last)
+    #expect(second.last?.role == .tool)
+    #expect(second.last?.content?.contains("Claude in api") == true)
+    #expect(rig.brain.conversation.messages.map(\.role) == [.user, .assistant, .tool, .assistant])
+    #expect(second.first?.role == .system)
+    #expect(await eventually { rig.brain.phase == .listening })
+}
+
+@MainActor
+@Test func riskyToolWaitsForASpokenYes() async throws {
+    let rig = try Rig(
+        ScriptedModel([
+            .success([.toolCalls([call("c1", "send_key", #"{"agent":"api","key":"esc"}"#)]), .finished("tool_calls")]),
+            .success([.text("Should I interrupt Claude in api?"), .finished("stop")]),
+            .success([.text("Done, I stopped it."), .finished("stop")]),
+        ]))
+    await rig.brain.start()
+    rig.phrase("stop claude")
+    #expect(await eventually { rig.mouth.spoken.contains("Should I interrupt Claude in api?") })
+    #expect(!rig.commands.contains { $0.contains("Escape") })
+    #expect(rig.brain.toolbox.gate.pending != nil)
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.phrase("yes, do it")
+    #expect(await eventually { rig.mouth.spoken.contains("Done, I stopped it.") })
+    #expect(rig.commands.contains { $0.contains("send-keys -t '%3' Escape") })
+    #expect(rig.brain.conversation.messages.contains { $0.content?.contains("The user confirmed") == true })
+}
+
+@MainActor
+@Test func anythingButYesCancelsTheHeldAction() async throws {
+    let rig = try Rig(
+        ScriptedModel([
+            .success([
+                .toolCalls([call("c1", "send_key", #"{"agent":"api","key":"ctrl_c"}"#)]), .finished("tool_calls"),
+            ]),
+            .success([.text("Should I interrupt Claude in api?"), .finished("stop")]),
+            .success([.text("Okay, I left it running."), .finished("stop")]),
+        ]))
+    await rig.brain.start()
+    rig.phrase("interrupt claude")
+    #expect(await eventually { rig.mouth.spoken.contains("Should I interrupt Claude in api?") })
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.phrase("what is it doing first")
+    #expect(await eventually { rig.mouth.spoken.contains("Okay, I left it running.") })
+    #expect(!rig.commands.contains { $0.contains("C-c") })
+    #expect(rig.brain.toolbox.gate.pending == nil)
+}
+
+@MainActor
+@Test func unreachableBrainSaysSoAndFallsBackToDictation() async throws {
+    let rig = try Rig(ScriptedModel([.failure(.unreachable("offline"))]))
+    var dictated: [String] = []
+    rig.brain.onDictation = { dictated.append($0) }
+    await rig.brain.start()
+    rig.phrase("hello there")
+    #expect(await eventually { rig.brain.mode == .dictation(BrainError.unreachable("").spoken) })
+    #expect(rig.mouth.spoken.contains { $0.hasPrefix("I can't reach the brain right now.") })
+    rig.phrase("echo hi send")
+    #expect(dictated == ["echo hi send"])
+}
+
+@MainActor
+@Test func userSpeechBargesInAndCancelsTheReply() async throws {
+    let words = (1...30).map { BrainStreamEvent.text("Sentence \($0). ") }
+    let rig = try Rig(
+        ScriptedModel(
+            [.success(words + [.finished("stop")]), .success([.text("Sure, Codex."), .finished("stop")])],
+            delay: .milliseconds(30)))
+    await rig.brain.start()
+    rig.phrase("tell me everything")
+    #expect(await eventually { rig.mouth.spoken.contains("Sentence 2.") })
+    rig.phrase("wait, what about codex")
+    #expect(await eventually { rig.mouth.spoken.contains("Sure, Codex.") })
+    #expect(!rig.mouth.spoken.contains("Sentence 30."))
+    let users = rig.brain.conversation.messages.filter { $0.role == .user }.compactMap(\.content)
+    #expect(users == ["tell me everything", "wait, what about codex"])
+    let partial = try #require(rig.brain.conversation.messages.first { $0.role == .assistant })
+    #expect(partial.content?.hasPrefix("Sentence 1.") == true)
+}
+
+@MainActor
+@Test func agentEventsAreAnnouncedAfterSilence() async throws {
+    let rig = try Rig(ScriptedModel([]))
+    await rig.brain.start()
+    #expect(await eventually { !rig.brain.toolbox.agents.isEmpty })
+    try await Task.sleep(for: .milliseconds(50))
+    let agents = HostAgents.parse(try fixture("list-agents.txt"))
+    var finished = agents
+    finished[0].status = .idle
+    rig.brain.noteAgents(agents)
+    rig.brain.noteAgents(finished)
+    rig.brain.noteAgents(finished)
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(rig.mouth.spoken.isEmpty)
+    rig.time = 2
+    #expect(await eventually { rig.mouth.spoken == ["Claude in api finished."] })
+    #expect(rig.brain.conversation.messages.last?.content == "Claude in api finished.")
+}
+
+@MainActor
+@Test func unsentPromptInTheCurrentAgentIsMentionedAtStart() async throws {
+    let rig = try Rig(ScriptedModel([.success([.text("Claude has an unsent prompt."), .finished("stop")])]))
+    rig.unsent = "refactor the auth"
+    await rig.brain.start()
+    #expect(await eventually { rig.mouth.spoken.contains("Claude has an unsent prompt.") })
+    let note = try #require(rig.model.requests.first?.last?.content)
+    #expect(note.contains("Claude in api has an unsent prompt"))
+    #expect(note.contains("refactor the auth"))
+}
+
+@MainActor
+@Test func spokenStopEndsVoiceMode() async throws {
+    let rig = try Rig(ScriptedModel([]))
+    var ended = false
+    rig.brain.onEnded = { ended = true }
+    await rig.brain.start()
+    rig.phrase("okay stop voice mode")
+    #expect(rig.brain.mode == .off)
+    #expect(ended)
+    #expect(!rig.ears.running)
+    #expect(rig.model.requests.isEmpty)
+}
+
+@MainActor
+@Test func restartWithinAnHourContinuesTheConversation() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("brain-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = ConversationStore(directory: directory)
+    let start = Date()
+    let first = try Rig(ScriptedModel([.success([.text("Hi."), .finished("stop")])]), store: store, now: start)
+    await first.brain.start()
+    first.phrase("hello")
+    #expect(await eventually { first.brain.phase == .listening && first.brain.conversation.messages.count == 2 })
+    first.brain.end()
+    let again = try Rig(ScriptedModel([]), store: store, now: start.addingTimeInterval(1200))
+    await again.brain.start()
+    #expect(again.brain.conversation.messages.count == 2)
+    again.brain.end()
+    let later = try Rig(ScriptedModel([]), store: store, now: start.addingTimeInterval(7200))
+    await later.brain.start()
+    #expect(later.brain.conversation.messages.isEmpty)
+}
+
+@MainActor
+@Test func missingConfigurationGoesStraightToDictation() async throws {
+    let ears = TextEars()
+    let mouth = TimedMouth(secondsPerCharacter: 0)
+    let brain = VoiceBrain(
+        hostID: "h", hostName: "devbox", ears: ears, mouth: mouth, model: nil,
+        toolbox: AgentToolbox(io: .init(exec: { _ in nil }, focus: { _ in false })))
+    var dictated: [String] = []
+    brain.onDictation = { dictated.append($0) }
+    await brain.start()
+    #expect(brain.mode == .dictation(BrainError.notConfigured.spoken))
+    ears.submit("hello")
+    #expect(dictated == ["hello"])
+}

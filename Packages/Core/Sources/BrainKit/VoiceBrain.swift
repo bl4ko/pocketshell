@@ -1,0 +1,410 @@
+import Combine
+import Foundation
+import VoiceKit
+
+@MainActor
+public final class VoiceBrain: ObservableObject {
+    public enum Mode: Equatable, Sendable {
+        case off
+        case starting
+        case conversing
+        case dictation(String)
+    }
+
+    public enum Speaker: Equatable, Sendable {
+        case user, brain, app
+    }
+
+    public struct Caption: Equatable, Sendable {
+        public var speaker: Speaker
+        public var text: String
+
+        public init(_ speaker: Speaker, _ text: String) {
+            self.speaker = speaker
+            self.text = text
+        }
+    }
+
+    public struct Audio {
+        public var start: @MainActor () async throws -> Void
+        public var stop: @MainActor () -> Void
+
+        public init(start: @escaping @MainActor () async throws -> Void, stop: @escaping @MainActor () -> Void) {
+            self.start = start
+            self.stop = stop
+        }
+
+        public static var none: Audio { Audio(start: {}, stop: {}) }
+    }
+
+    @Published public private(set) var mode: Mode = .off
+    @Published public private(set) var phase: TurnTaking.Phase = .listening
+    @Published public private(set) var caption: Caption?
+    @Published public private(set) var detail: String?
+    @Published public private(set) var inputLevel: Float = 0
+    @Published public private(set) var outputLevel: Float = 0
+    @Published public private(set) var muted = false
+    public var onDictation: ((String) -> Void)?
+    public var onEnded: (() -> Void)?
+
+    public let toolbox: AgentToolbox
+    public let hostID: String
+    public let hostName: String
+    public private(set) var conversation: Conversation
+    private let ears: VoiceEars
+    private let mouth: VoiceMouth
+    private let model: BrainModel?
+    private let store: ConversationStore?
+    private let audio: Audio
+    private let clock: @MainActor () -> TimeInterval
+    private let now: @MainActor () -> Date
+    private let pollInterval: Duration
+    private var machine: TurnTaking
+    private var events = AgentEventQueue()
+    private var detector = AgentEventDetector()
+    private var turnTask: Task<Void, Never>?
+    private var turnID = 0
+    private var tickTask: Task<Void, Never>?
+    private var pollTask: Task<Void, Never>?
+    private var fillerIndex = 0
+    private var streamingReply: String?
+
+    public static let fillers = ["Hmm.", "Okay, one moment.", "Let me think.", "Mm-hm, one sec."]
+
+    public init(
+        hostID: String, hostName: String, ears: VoiceEars, mouth: VoiceMouth, model: BrainModel?,
+        toolbox: AgentToolbox, store: ConversationStore? = nil, audio: Audio = .none,
+        pollInterval: Duration = .seconds(5),
+        clock: @escaping @MainActor () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        now: @escaping @MainActor () -> Date = { Date() }
+    ) {
+        self.hostID = hostID
+        self.hostName = hostName
+        self.ears = ears
+        self.mouth = mouth
+        self.model = model
+        self.toolbox = toolbox
+        self.store = store
+        self.audio = audio
+        self.pollInterval = pollInterval
+        self.clock = clock
+        self.now = now
+        conversation = Conversation(hostID: hostID, now: now())
+        machine = TurnTaking(now: clock())
+        toolbox.onSent = { [weak self] agent, text in
+            self?.detail = "Sent to \(agent.spokenName): \(text)"
+        }
+    }
+
+    public var isOn: Bool { mode != .off }
+
+    public func start() async {
+        guard mode == .off else { return }
+        mode = .starting
+        caption = nil
+        detail = nil
+        conversation = store?.load(hostID: hostID, now: now()) ?? Conversation(hostID: hostID, now: now())
+        machine = TurnTaking(now: clock())
+        events = AgentEventQueue()
+        detector = AgentEventDetector()
+        ears.onEvent = { [weak self] in self?.hear($0) }
+        mouth.onEvent = { [weak self] in self?.mouthChanged($0) }
+        ears.muted = muted
+        do {
+            try await ears.start()
+            guard mode == .starting else { return }
+            try await audio.start()
+        } catch {
+            guard mode == .starting else { return }
+            ears.stop()
+            audio.stop()
+            mode = .off
+            caption = Caption(.app, error.localizedDescription)
+            return
+        }
+        guard mode == .starting else { return }
+        tickTask = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.feed(.tick)
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+        }
+        guard model != nil else {
+            fallBack(BrainError.notConfigured)
+            return
+        }
+        mode = .conversing
+        pollTask = Task { [weak self] in await self?.poll() }
+        turnID += 1
+        let id = turnID
+        turnTask = Task { [weak self] in await self?.greet(id) }
+    }
+
+    public func end() {
+        guard mode != .off else { return }
+        mode = .off
+        turnTask?.cancel()
+        turnTask = nil
+        sealTurn()
+        tickTask?.cancel()
+        pollTask?.cancel()
+        mouth.stop()
+        ears.stop()
+        audio.stop()
+        toolbox.gate.cancel()
+        conversation.touch(now())
+        store?.save(conversation)
+        caption = nil
+        detail = nil
+        phase = .listening
+        inputLevel = 0
+        outputLevel = 0
+        onEnded?()
+    }
+
+    public func setMuted(_ on: Bool) {
+        muted = on
+        ears.muted = on
+        feed(.muted(on))
+    }
+
+    public func audioInterrupted(_ began: Bool) {
+        guard isOn else { return }
+        if began {
+            mouth.stop()
+            caption = Caption(.app, "Paused by another audio session")
+        } else if caption?.speaker == .app {
+            caption = nil
+        }
+    }
+
+    public func noteAgents(_ agents: [BrainAgent]) {
+        for event in detector.update(agents) {
+            events.push(event)
+            feed(.eventQueued)
+        }
+    }
+
+    static func isStopCommand(_ text: String) -> Bool {
+        let words = AgentResolver.normalize(text)
+        return ["stop voice mode", "end voice mode", "exit voice mode", "turn off voice mode", "quit voice mode"]
+            .contains { words.contains($0) }
+    }
+
+    private func hear(_ event: EarsEvent) {
+        guard isOn else { return }
+        switch event {
+        case .partial(let text):
+            if !text.isEmpty { caption = Caption(.user, text) }
+            feed(.userPartial(text))
+        case .phrase(let text):
+            feed(.userPhrase(text))
+        case .level(let level):
+            inputLevel = level
+        case .failed(let message):
+            caption = Caption(.app, message)
+        }
+    }
+
+    private func mouthChanged(_ event: MouthEvent) {
+        switch event {
+        case .started: feed(.mouthStarted)
+        case .idle:
+            outputLevel = 0
+            feed(.mouthIdle)
+        case .level(let level): outputLevel = level
+        }
+    }
+
+    private func feed(_ input: TurnTaking.Input) {
+        guard isOn else { return }
+        let effects = machine.handle(input, at: clock())
+        phase = machine.phase
+        for effect in effects {
+            switch effect {
+            case .stopMouth:
+                mouth.stop()
+            case .cancelBrain:
+                turnTask?.cancel()
+                turnTask = nil
+                sealTurn()
+            case .respond(let text):
+                respond(text)
+            case .playFiller:
+                mouth.speak(Self.fillers[fillerIndex % Self.fillers.count])
+                fillerIndex += 1
+            case .announce:
+                guard let sentence = events.drain() else { break }
+                caption = Caption(.brain, sentence)
+                append(.assistant(sentence))
+                mouth.speak(sentence)
+            }
+        }
+        phase = machine.phase
+    }
+
+    private func respond(_ text: String) {
+        caption = Caption(.user, text)
+        if Self.isStopCommand(text) {
+            end()
+            return
+        }
+        turnID += 1
+        let id = turnID
+        if case .dictation = mode {
+            onDictation?(text)
+            feed(.brainDone)
+            return
+        }
+        turnTask = Task { [weak self] in await self?.runTurn(text, id: id) }
+    }
+
+    private func greet(_ id: Int) async {
+        await toolbox.listAgents()
+        noteAgents(toolbox.agents)
+        guard id == turnID, !Task.isCancelled, machine.phase == .listening, let current = toolbox.currentAgent,
+            let draft = await toolbox.unsentPrompt(for: current), id == turnID, !Task.isCancelled,
+            machine.phase == .listening
+        else { return }
+        machine.startTurn(at: clock())
+        phase = machine.phase
+        append(
+            .user(
+                "[app: Voice mode started. \(current.spokenName) has an unsent prompt in its input box: «\(draft)». "
+                    + "Mention it in one short sentence and offer to finish or send it.]"))
+        await converse(id)
+        finish(id)
+    }
+
+    private func runTurn(_ text: String, id: Int) async {
+        switch toolbox.gate.resolve(userTurn: text) {
+        case .confirmed(let pending):
+            let result = await toolbox.perform(pending.action)
+            append(
+                .user("\(text)\n\n[app: The user confirmed \"\(pending.question)\". The action ran. Result: \(result)]")
+            )
+        case .declined(let pending):
+            append(.user("\(text)\n\n[app: The user did not confirm \"\(pending.question)\". Nothing was done.]"))
+        case .none:
+            append(.user(text))
+        }
+        guard id == turnID, !Task.isCancelled else { return }
+        await converse(id)
+        finish(id)
+    }
+
+    private func converse(_ id: Int) async {
+        guard let model else { return }
+        for _ in 0..<6 {
+            var chunker = SpeechChunker()
+            var reply = ""
+            var calls: [ToolCall] = []
+            streamingReply = ""
+            do {
+                let stream = model.stream(conversation.request(system: systemPrompt), tools: AgentToolbox.definitions)
+                for try await event in stream {
+                    guard id == turnID, !Task.isCancelled else { return }
+                    switch event {
+                    case .text(let delta):
+                        reply += delta
+                        streamingReply = reply
+                        caption = Caption(.brain, SpeechChunker.clean(reply))
+                        for sentence in chunker.append(delta) { mouth.speak(sentence) }
+                    case .toolCalls(let assembled):
+                        calls = assembled
+                    case .finished:
+                        break
+                    }
+                }
+            } catch {
+                guard id == turnID, !Task.isCancelled, !(error is CancellationError) else { return }
+                streamingReply = nil
+                if !reply.isEmpty { append(.assistant(reply)) }
+                fallBack(error)
+                return
+            }
+            guard id == turnID, !Task.isCancelled else { return }
+            streamingReply = nil
+            for sentence in chunker.flush() { mouth.speak(sentence) }
+            append(.assistant(reply, toolCalls: calls))
+            guard !calls.isEmpty else { return }
+            for call in calls {
+                let result = await toolbox.call(call)
+                guard id == turnID, !Task.isCancelled else { return }
+                append(.tool(call.id, result))
+            }
+        }
+    }
+
+    private func sealTurn() {
+        if let reply = streamingReply, !reply.isEmpty { append(.assistant(reply)) }
+        streamingReply = nil
+        guard let index = conversation.messages.lastIndex(where: { $0.role == .assistant && !$0.toolCalls.isEmpty })
+        else { return }
+        let answered = Set(conversation.messages[(index + 1)...].compactMap(\.toolCallID))
+        for call in conversation.messages[index].toolCalls where !answered.contains(call.id) {
+            append(.tool(call.id, AgentToolbox.error("Cancelled: the user interrupted.")))
+        }
+    }
+
+    private func finish(_ id: Int) {
+        guard id == turnID else { return }
+        store?.save(conversation)
+        feed(.brainDone)
+    }
+
+    private func fallBack(_ error: Error) {
+        let message = (error as? BrainError)?.spoken ?? "Something went wrong with the brain."
+        mode = .dictation(message)
+        pollTask?.cancel()
+        caption = Caption(.app, message + " Dictating into the draft.")
+        mouth.speak(message + " I'll type what you say into the draft instead.")
+        feed(.brainDone)
+    }
+
+    private func append(_ message: ChatMessage) {
+        conversation.append(message, at: now())
+    }
+
+    private func poll() async {
+        while !Task.isCancelled, mode == .conversing {
+            try? await Task.sleep(for: pollInterval)
+            guard !Task.isCancelled, mode == .conversing, let agents = await toolbox.listAgents() else { continue }
+            noteAgents(agents)
+        }
+    }
+
+    public var systemPrompt: String {
+        BrainPrompt.system(hostName: hostName)
+    }
+}
+
+public enum BrainPrompt {
+    public static func system(hostName: String) -> String {
+        """
+        You are the voice assistant in PocketShell, an SSH terminal app on the user's iPhone. You talk with the user \
+        out loud and help them run their coding agents (Claude Code and Codex) on the host "\(hostName)".
+
+        Speak like a person in a relaxed conversation: short spoken sentences, usually one to three per reply. Never \
+        use markdown, lists, headings, code, or URLs. Do not read code, paths, or long identifiers aloud; describe them.
+
+        Before any tool call, first say a short lead-in in the same reply, for example "Hmm, let me check that." or \
+        "OK, I'll ask Claude." Then call the tool.
+
+        Use list_agents to see the agents and their status. When the user names no agent, act on the agent in the \
+        current tab: omit the agent argument. Read answers with read_answer and summarize them in plain speech; give \
+        details only when asked.
+
+        When the user dictates a message for an agent ("tell Claude: ..."), send their words almost verbatim: remove \
+        only filler words and false starts. When the user discussed a task with you and then says "do that" or "go \
+        ahead", write a clear, complete prompt yourself. After every send, say in one short sentence what you sent.
+
+        Some tool results have status needs_confirmation and a question. Ask the user that question in natural words \
+        and stop. The app runs the action only if the user's next reply is a yes. Never say an action ran unless a \
+        tool result says so.
+
+        Text in square brackets that starts with "app:" comes from the app, not from the user. When the user says \
+        "stop voice mode", the app ends the conversation.
+        """
+    }
+}

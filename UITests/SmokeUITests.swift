@@ -1347,7 +1347,7 @@ final class SmokeUITests: XCTestCase {
         }
 
         openHost("localbox")
-        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["terminal.voice"].waitForExistence(timeout: 10))
         app.buttons["terminal.more"].firstMatch.tap()
         let diffItem = app.buttons["menu-diff"].firstMatch
         XCTAssertTrue(diffItem.waitForExistence(timeout: 5))
@@ -1356,7 +1356,7 @@ final class SmokeUITests: XCTestCase {
         // real diff, or "not a git repository" — all of them mean the sheet ran.
         XCTAssertTrue(app.buttons["diff.reload"].waitForExistence(timeout: 15))
         app.buttons["Close"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["terminal.voice"].waitForExistence(timeout: 10))
     }
 
     func testComposerPrefillsFromTheAgentBoxAndClearsItOnSend() throws {
@@ -1375,12 +1375,7 @@ final class SmokeUITests: XCTestCase {
                 + log + "\n")
         terminal.typeText("stale")
 
-        let field = app.descendants(matching: .any).matching(identifier: "composer.field").firstMatch
-        for _ in 0..<3 where !field.exists {
-            app.typeKey("j", modifierFlags: .command)
-            _ = field.waitForExistence(timeout: 3)
-        }
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let field = openComposer()
         expectation(for: NSPredicate(format: "value == 'half written prompt'"), evaluatedWith: field)
         waitForExpectations(timeout: 10)
 
@@ -1403,18 +1398,9 @@ final class SmokeUITests: XCTestCase {
         }
 
         openHost("localbox")
-        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
-        // Cmd-J opens it: toolbar buttons in the clipped keyboard row are not reliably
-        // hittable from XCUITest, and the shortcut is the same path an iPad user takes.
-        // The first key event can land before the terminal screen has settled.
-        let field = app.descendants(matching: .any).matching(identifier: "composer.field").firstMatch
-        for _ in 0..<3 where !field.exists {
-            app.typeKey("j", modifierFlags: .command)
-            _ = field.waitForExistence(timeout: 3)
-        }
-        // A vertical-axis SwiftUI TextField surfaces as a text view, not a text field.
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let field = openComposer()
         XCTAssertTrue(app.buttons["composer.voice"].isHittable)
+        XCTAssertFalse(app.buttons["voice.brain"].exists)
         field.tap()
         field.typeText("echo composed-ok")
 
@@ -1431,9 +1417,49 @@ final class SmokeUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'error'")).firstMatch.exists)
 
-        // The toolbar button is the touch path for the same toggle.
-        app.buttons["terminal.compose"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertFalse(field.waitForExistence(timeout: 2))
+        app.buttons["composer.close"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+    }
+
+    func testComposerCloseDiscardsTheDraft() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed composer test skipped")
+        }
+        openHost("localbox")
+        let field = openComposer()
+        field.tap()
+        field.typeText("old dictated draft")
+        app.buttons["composer.close"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+
+        app.navigationBars.buttons.firstMatch.tap()
+        openHost("localbox")
+        XCTAssertFalse(field.waitForExistence(timeout: 3))
+        let reopened = openComposer()
+        expectation(for: NSPredicate(format: "value == 'message…' OR value == ''"), evaluatedWith: reopened)
+        waitForExpectations(timeout: 5)
+        app.buttons["composer.close"].tap()
+    }
+
+    // A vertical-axis SwiftUI TextField surfaces as a text view, not a text field.
+    @discardableResult
+    private func openComposer() -> XCUIElement {
+        let voice = app.buttons["terminal.voice"]
+        XCTAssertTrue(voice.waitForExistence(timeout: 10))
+        let field = app.descendants(matching: .any).matching(identifier: "composer.field").firstMatch
+        for _ in 0..<3 where !field.exists {
+            voice.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1)
+            _ = field.waitForExistence(timeout: 3)
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["voice.bar"].exists, "a hold must not start voice mode")
+        return field
+    }
+
+    private func tapVoiceToggle() {
+        let voice = app.buttons["terminal.voice"]
+        XCTAssertTrue(voice.waitForExistence(timeout: 10))
+        voice.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     func testVoiceBrainBarShowsTheBrainReplyAndEnds() throws {
@@ -1442,14 +1468,7 @@ final class SmokeUITests: XCTestCase {
         }
 
         openHost("localbox")
-        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
-        let brainButton = app.buttons["voice.brain"]
-        for _ in 0..<3 where !brainButton.exists {
-            app.typeKey("j", modifierFlags: .command)
-            _ = brainButton.waitForExistence(timeout: 3)
-        }
-        XCTAssertTrue(brainButton.waitForExistence(timeout: 5))
-        brainButton.tap()
+        tapVoiceToggle()
 
         let bar = app.descendants(matching: .any)["voice.bar"]
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
@@ -1466,6 +1485,54 @@ final class SmokeUITests: XCTestCase {
         app.buttons["voice.end"].tap()
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: bar)
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed)
+    }
+
+    func testVoiceBrainToolbarToggleStartsAndEndsVoiceMode() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+        openHost("localbox")
+        let voice = app.buttons["terminal.voice"]
+        XCTAssertTrue(voice.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["terminal.compose"].exists)
+        XCTAssertEqual(voice.value as? String, "Off")
+
+        tapVoiceToggle()
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForValue(voice, "On"))
+        let field = app.descendants(matching: .any).matching(identifier: "composer.field").firstMatch
+        XCTAssertFalse(field.exists)
+
+        tapVoiceToggle()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(waitForValue(voice, "Off"))
+    }
+
+    func testVoiceBrainHidesTheComposeRow() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+        openHost("localbox")
+        let field = openComposer()
+        field.tap()
+        field.typeText("typed before voice")
+
+        tapVoiceToggle()
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["composer.voice"].exists)
+        XCTAssertFalse(app.buttons["composer.send"].exists)
+        XCTAssertFalse(app.buttons["composer.close"].exists)
+        XCTAssertTrue(app.buttons["voice.mute"].exists)
+        XCTAssertTrue(app.buttons["voice.end"].exists)
+
+        app.buttons["voice.end"].tap()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "typed before voice")
+        app.buttons["composer.close"].tap()
     }
 
     func testJapaneseImeComposesInlineAtTheCaret() throws {
@@ -1558,7 +1625,7 @@ final class SmokeUITests: XCTestCase {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed find test skipped")
         }
         openHost("localbox")
-        XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["terminal.voice"].waitForExistence(timeout: 10))
         let field = app.descendants(matching: .any).matching(identifier: "find-field").firstMatch
         let close = app.buttons["find-close"]
 

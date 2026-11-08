@@ -16,12 +16,13 @@
         let onPaste: (([NSItemProvider]) -> Void)?
         let onCopy: (() -> Void)?
         let onToggleSelect: (() -> Void)?
+        let onVoice: (() -> Void)?
         let onCompose: (() -> Void)?
         let onAttach: (() -> Void)?
         let onCamera: (() -> Void)?
         let uploadingFile: Bool
         let selectActive: Bool
-        let composeActive: Bool
+        let voiceActive: Bool
         let shortcutsActive: Bool
         let onShortcuts: (ShortcutCategory?) -> Void
         @State private var clipboardMenu = false
@@ -36,12 +37,13 @@
             onPaste: (([NSItemProvider]) -> Void)? = nil,
             onCopy: (() -> Void)? = nil,
             onToggleSelect: (() -> Void)? = nil,
+            onVoice: (() -> Void)? = nil,
             onCompose: (() -> Void)? = nil,
             onAttach: (() -> Void)? = nil,
             onCamera: (() -> Void)? = nil,
             uploadingFile: Bool = false,
             selectActive: Bool = false,
-            composeActive: Bool = false,
+            voiceActive: Bool = false,
             shortcutsActive: Bool = false,
             onShortcuts: @escaping (ShortcutCategory?) -> Void
         ) {
@@ -54,12 +56,13 @@
             self.onPaste = onPaste
             self.onCopy = onCopy
             self.onToggleSelect = onToggleSelect
+            self.onVoice = onVoice
             self.onCompose = onCompose
             self.onAttach = onAttach
             self.onCamera = onCamera
             self.uploadingFile = uploadingFile
             self.selectActive = selectActive
-            self.composeActive = composeActive
+            self.voiceActive = voiceActive
             self.shortcutsActive = shortcutsActive
             self.onShortcuts = onShortcuts
         }
@@ -129,9 +132,17 @@
                     }
                     .accessibilityIdentifier("terminal.clipboard")
                 }
-                if let onCompose {
-                    slot(icon: "text.bubble", active: composeActive) { onCompose() }
-                        .accessibilityIdentifier("terminal.compose")
+                if let onVoice {
+                    slotLabel(icon: "waveform", active: voiceActive)
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: onVoice)
+                        .onLongPressGesture(minimumDuration: 0.5) { onCompose?() }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel("Voice mode")
+                        .accessibilityValue(voiceActive ? "On" : "Off")
+                        .accessibilityHint(onCompose == nil ? "" : "Hold to write a message")
+                        .accessibilityAction(named: "Write a message") { onCompose?() }
+                        .accessibilityIdentifier("terminal.voice")
                 }
                 if let onHideKeyboard {
                     slot(icon: KeyboardToggle.icon(keyboardVisible: keyboardVisible)) { onHideKeyboard() }

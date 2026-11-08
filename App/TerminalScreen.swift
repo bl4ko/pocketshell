@@ -238,6 +238,7 @@ struct TerminalScreen: View {
     @StateObject private var keyboard = KeyboardObserver()
     @StateObject private var voice = VoiceListener()
     @State private var voiceNotice: String?
+    @State private var voiceModeOn = false
     @State private var testKeyboardHeight: CGFloat = UITestFlags.keyboardResize ? 300 : 0
     @State private var keyboardInset = KeyboardInset()
     @State private var shownInset: CGFloat = 0
@@ -306,7 +307,7 @@ struct TerminalScreen: View {
                     if isActive {
                         VoiceBrainBarHost(session: voiceBrain)
                     }
-                    if connection.composerVisible {
+                    if connection.composerVisible, !voiceModeOn {
                         ComposerBar(
                             text: $connection.composerDraft,
                             theme: TerminalTheme.named(themeName),
@@ -314,8 +315,6 @@ struct TerminalScreen: View {
                             voiceStatus: voice.isOn && voice.partial.isEmpty
                                 ? voiceNotice ?? voice.status : voice.status,
                             onVoice: voiceToggle,
-                            voiceBrainActive: voiceBrain.isOn,
-                            onVoiceBrain: voiceBrainToggle,
                             onSend: {
                                 let text = connection.composerDraft
                                 Task { await connection.sendComposer(text) }
@@ -345,11 +344,10 @@ struct TerminalScreen: View {
                             onPaste: { connection.bridge.paste($0) },
                             onCopy: { connection.bridge.copySelection() },
                             onToggleSelect: { connection.bridge.toggleSelectMode() },
+                            onVoice: voiceBrainToggle,
                             onCompose: {
-                                connection.composerVisible.toggle()
-                                if !connection.composerVisible {
-                                    connection.bridge.setTerminalFocused(true)
-                                }
+                                voiceBrain.end()
+                                connection.composerVisible = true
                             },
                             onAttach: {
                                 let env = ProcessInfo.processInfo.environment
@@ -364,7 +362,7 @@ struct TerminalScreen: View {
                             onCamera: cameraAction,
                             uploadingFile: connection.isUploadingFile,
                             selectActive: connection.bridge.selectMode,
-                            composeActive: connection.composerVisible,
+                            voiceActive: voiceModeOn,
                             shortcutsActive: bridge.shortcutsActive,
                             onShortcuts: { bridge.toggleShortcuts(category: $0) }
                         )
@@ -436,6 +434,7 @@ struct TerminalScreen: View {
                 voice.stop()
             }
         }
+        .onReceive(voiceBrain.isOnChanges) { voiceModeOn = $0 }
         .onChange(of: voice.isOn) { _, on in
             UIApplication.shared.isIdleTimerDisabled = on
         }

@@ -1,6 +1,17 @@
 import BrainKit
+import Combine
 import SwiftUI
 import VoiceKit
+
+extension VoiceBrainSession {
+    var isOnChanges: AnyPublisher<Bool, Never> {
+        $brain
+            .map { brain in brain?.$mode.map { $0 != .off }.eraseToAnyPublisher() ?? Just(false).eraseToAnyPublisher() }
+            .switchToLatest()
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
+}
 
 struct VoiceBrainBarHost: View {
     @ObservedObject var session: VoiceBrainSession

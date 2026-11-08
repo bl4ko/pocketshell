@@ -1,0 +1,30 @@
+claude --dangerously-skip-permissions
+┌──(user)-[~/code/demo]
+└─$ claude --dangerously-skip-permissions
+ ▐▛███▛█   Claude Code v2.1.317
+▝▜██████▀  Opus 5.5 with high effort · API Usage Billing
+ ▝▝   ▝▝   ~/code/demo
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ refactor the composer
+
+  keep the draft per host
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ctx: --  [Opus 5.5]  ~/code/demo
+  ⏵⏵ bypass permissions on (shift+tab to cycle)
+                                                            ✔ Update installed · Restart to update
+                                                                            ctrl+g to edit in Nvim
+
+
+
+
+
+
+
+
+
+
+
+
+

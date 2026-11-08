@@ -76,7 +76,9 @@ let package = Package(
             ], swiftSettings: strict),
         .testTarget(name: "ModelsTests", dependencies: ["Models"], swiftSettings: strict),
         .testTarget(name: "LockKitTests", dependencies: ["LockKit"], swiftSettings: strict),
-        .testTarget(name: "MonitorKitTests", dependencies: ["MonitorKit"], swiftSettings: strict),
+        .testTarget(
+            name: "MonitorKitTests", dependencies: ["MonitorKit"], resources: [.copy("Fixtures")], swiftSettings: strict
+        ),
         .testTarget(name: "SFTPKitTests", dependencies: ["SFTPKit"], swiftSettings: strict),
         .testTarget(name: "GitKitTests", dependencies: ["GitKit"], swiftSettings: strict),
         .testTarget(

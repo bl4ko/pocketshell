@@ -1,0 +1,40 @@
+claude
+┌──(user)-[~/code/demo]
+└─$ claude
+ ▐▛███▛█   Claude Code v2.1.317
+▝▜██████▀  Opus 5.5 with high effort · API Usage Billing
+ ▝▝   ▝▝   ~/code/demo
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ please look at the reconnect state machine and explain why the backoff never resets after a
+  successful handshake, then propose a minimal fix with a regression test that fails before the
+  change and passes after it
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ctx: --  [Opus 5.5]  ~/code/demo
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                                            ✔ Update installed · Restart to update
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

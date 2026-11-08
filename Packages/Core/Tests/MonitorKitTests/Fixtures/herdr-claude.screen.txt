@@ -1,0 +1,13 @@
+┌──(user)-[~/code/demo]
+└─$ claude
+ ▐▛███▛█   Claude Code v2.1.317
+▝▜██████▀  Opus 5.5 with high effort · API Usage Billing
+ ▝▝   ▝▝   ~/code/demo
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ herdr pane text for the parser
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ctx: --  [Opus 5.5]  ~/code/demo
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                                                         ✔ Update installed · Restart to update

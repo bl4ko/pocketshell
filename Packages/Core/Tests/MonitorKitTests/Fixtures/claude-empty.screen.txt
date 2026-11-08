@@ -1,0 +1,30 @@
+claude --dangerously-skip-permissions
+┌──(user)-[~/code/demo]
+└─$ claude --dangerously-skip-permissions
+ ▐▛███▛█   Claude Code v2.1.317
+▝▜██████▀  Opus 5.5 with high effort · API Usage Billing
+ ▝▝   ▝▝   ~/code/demo
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ctx: --  [Opus 5.5]  ~/code/demo
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents
+                                                            ✔ Update installed · Restart to update
+                                                                      Ctrl+Y to paste deleted text
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

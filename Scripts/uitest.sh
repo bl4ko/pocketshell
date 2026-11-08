@@ -264,6 +264,9 @@ if ! xcrun simctl list devices available | grep -q "$SIM ("; then
     SIM=$(xcrun simctl list devices available | sed -n 's/^ *\(iPhone[^(]*[^ (]\) *(.*/\1/p' | head -1)
     echo "PS_TEST_SIM not available, using: $SIM"
 fi
+UDID=$(xcrun simctl list devices available | sed -n "s/^ *$SIM (\([0-9A-F-]*\)).*/\1/p" | head -1)
+DEST="id=$UDID"
+[ -n "${PS_TEST_SIM_OS:-}" ] && DEST="platform=iOS Simulator,name=$SIM,OS=$PS_TEST_SIM_OS"
 xcrun simctl boot "$SIM" 2>/dev/null || true
 # Extra keyboards for the IME test; SpringBoard only reads the list at launch.
 xcrun simctl spawn "$SIM" defaults write -g AppleKeyboards -array \
@@ -291,5 +294,5 @@ TEST_RUNNER_PS_TEST_BRAIN_KEY="psh-test-key" \
 xcodebuild test \
   -scheme pocketshell \
   -derivedDataPath "${PS_TEST_DERIVED:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-uitest}" \
-  -destination "platform=iOS Simulator,name=$SIM${PS_TEST_SIM_OS:+,OS=$PS_TEST_SIM_OS}" \
+  -destination "$DEST" \
   "$@"

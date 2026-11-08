@@ -4,7 +4,8 @@ set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 SIM=${PS_TEST_SIM:-iPhone 17 Pro}
 BUILD=${PS_BUILD_DIR:-$REPO/DerivedData}
-DEST="platform=iOS Simulator,name=$SIM"
+UDID=$(xcrun simctl list devices available | sed -n "s/^ *$SIM (\([0-9A-F-]*\)).*/\1/p" | head -1)
+DEST="id=$UDID"
 cd "$REPO"
 
 xcodegen generate

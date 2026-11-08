@@ -1668,7 +1668,7 @@ final class SmokeUITests: XCTestCase {
         let textPath = "/tmp/psh-paste-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: textPath) }
         UIPasteboard.general.string = "printf toolbar-paste > \(textPath)"
-        clipboard.tap()
+        clipboard.press(forDuration: 0.25)
         assertNoPastePrompt()
         app.buttons["terminal.enter"].tap()
         let pasted = NSPredicate { _, _ in
@@ -1685,7 +1685,7 @@ final class SmokeUITests: XCTestCase {
         }
         terminal.typeText("printf '%s' ")
         let before = Set((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? [])
-        clipboard.tap()
+        clipboard.press(forDuration: 0.25)
         assertNoPastePrompt()
         let uploaded = NSPredicate { _, _ in
             ((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? []).contains {
@@ -1706,6 +1706,46 @@ final class SmokeUITests: XCTestCase {
         ).trimmingCharacters(in: .whitespaces)
         defer { try? FileManager.default.removeItem(atPath: path) }
         XCTAssertTrue(path.hasPrefix("/tmp/psh-") && path.hasSuffix(".jpg"), path)
+
+        let uploads = Set((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? [])
+        clipboard.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["Select text"].waitForExistence(timeout: 5))
+        assertNoPastePrompt()
+        app.buttons["Copy selection"].tap()
+        sleep(2)
+        XCTAssertEqual(
+            Set((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? []).filter {
+                $0.hasPrefix("psh-") && $0.hasSuffix(".jpg")
+            },
+            uploads.filter { $0.hasPrefix("psh-") && $0.hasSuffix(".jpg") },
+            "a long press must open the menu without pasting")
+    }
+
+    func testTerminalEditMenuPasteDoesNotPrompt() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; edit menu paste test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText("clear\n")
+        sleep(1)
+        let path = "/tmp/psh-edit-paste-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        UIPasteboard.general.string = "printf edit-paste > \(path)"
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.02)).doubleTap()
+        let paste = app.menuItems["Paste"].firstMatch
+        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        paste.tap()
+        assertNoPastePrompt()
+        app.buttons["terminal.enter"].tap()
+        let pasted = NSPredicate { _, _ in
+            (try? String(contentsOfFile: path, encoding: .utf8)) == "edit-paste"
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: pasted, object: nil)], timeout: 10), .completed)
     }
 
     private func assertNoPastePrompt() {

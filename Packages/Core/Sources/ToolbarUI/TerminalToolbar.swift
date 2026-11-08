@@ -23,6 +23,7 @@
         let composeActive: Bool
         let shortcutsActive: Bool
         let onShortcuts: (ShortcutCategory?) -> Void
+        @State private var clipboardMenu = false
 
         public init(
             theme: TerminalTheme = .pocketshell,
@@ -115,7 +116,9 @@
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .contextMenu {
+                    // .contextMenu breaks the secure paste: its press effect drops the authentication and iOS prompts.
+                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in clipboardMenu = true })
+                    .confirmationDialog("Clipboard", isPresented: $clipboardMenu) {
                         if let onCopy { Button("Copy selection") { onCopy() } }
                         if let onToggleSelect {
                             Button(selectActive ? "Done selecting" : "Select text") { onToggleSelect() }

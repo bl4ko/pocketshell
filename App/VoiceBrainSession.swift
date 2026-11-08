@@ -31,7 +31,6 @@ enum BrainSettings {
 @MainActor
 final class VoiceBrainSession: ObservableObject {
     @Published private(set) var brain: VoiceBrain?
-    var unsentPrompt: @MainActor (BrainAgent) async -> String? = { _ in nil }
     private(set) var testEars: TextEars?
     private var audio: DuplexAudio?
 
@@ -45,7 +44,10 @@ final class VoiceBrainSession: ObservableObject {
     func start(host: HostConfig, io: AgentToolbox.IO, onDictation: @escaping (String) -> Void) {
         guard !isOn else { return }
         var io = io
-        io.unsentPrompt = { [weak self] agent in await self?.unsentPrompt(agent) }
+        let exec = io.exec
+        io.unsentPrompt = { agent in
+            await exec(AgentControl.boxCommand(agent)).flatMap(AgentControl.unsentPrompt(fromBox:))
+        }
         let ears: VoiceEars
         let mouth: VoiceMouth
         let lifecycle: VoiceBrain.Audio

@@ -221,3 +221,23 @@ import Testing
         #expect(answer.last == "The migration is in place and all 42 tests pass.")
     }
 #endif
+
+@Test func readsTheUnsentPromptFromAnAgentBox() {
+    let rule = String(repeating: "─", count: 40)
+    let box = "\(rule)\n\u{276F}\u{00A0}fix the paste test\n\(rule)\n"
+    #expect(AgentControl.unsentPrompt(fromBox: box) == "fix the paste test")
+    let placeholder = "\(rule)\n\u{276F}\u{00A0}\u{1b}[2mTry \"refactor this\"\u{1b}[0m\n\(rule)\n"
+    #expect(AgentControl.unsentPrompt(fromBox: placeholder) == nil)
+    #expect(AgentControl.unsentPrompt(fromBox: "$ ls\nfile\n") == nil)
+}
+
+@Test func readsTheBoxWithColorsSoFaintPlaceholdersDrop() {
+    let tmux = BrainAgent(
+        kind: .claude, name: "api", location: .tmux(session: "s", windowIndex: 1, windowID: "@1", paneID: "%3"),
+        status: .idle)
+    #expect(AgentControl.boxCommand(tmux).hasSuffix("capture-pane -p -e -t '%3'"))
+    let herdr = BrainAgent(
+        kind: .claude, name: "api", location: .herdr(session: "h", paneID: "w1:p3", tabID: "t", workspaceID: "w"),
+        status: .idle)
+    #expect(AgentControl.boxCommand(herdr).contains("--format ansi"))
+}

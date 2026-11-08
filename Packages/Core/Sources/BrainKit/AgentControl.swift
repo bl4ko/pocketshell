@@ -66,6 +66,21 @@ public enum AgentControl {
         }
     }
 
+    public static func boxCommand(_ agent: BrainAgent) -> String {
+        switch agent.location {
+        case .tmux(_, _, _, let pane):
+            return "\(tmux) capture-pane -p -e -t \(HostAgents.shellQuote(pane))"
+        case .herdr(let session, let pane, _, _):
+            return Herdr.paneReadCommand(session: session, paneID: pane)
+        }
+    }
+
+    public static func unsentPrompt(fromBox output: String) -> String? {
+        guard let box = UnsentPrompt.read(screenLines: UnsentPrompt.plainLines(ansi: output)), !box.text.isEmpty
+        else { return nil }
+        return box.text
+    }
+
     public static func exitCommand(_ agent: BrainAgent) -> String {
         let key = keyCommand(agent, key: .ctrlC)
         return "\(key); sleep 0.3; \(key)"

@@ -102,6 +102,17 @@ import Testing
     #expect(AgentControl.herdrFailure(#"{"result":{"ok":true}}"#) == nil)
 }
 
+@Test func checkedCommandsReportTheirExitStatus() async throws {
+    let wrapped = AgentControl.checked("echo out; exit 3")
+    #expect(wrapped.hasPrefix("( echo out; exit 3 ) 2>&1;"))
+    #expect(AgentControl.splitExit("out\n@@psh-exit:3@@") == ("out", 3))
+    #expect(AgentControl.splitExit("fine") == ("fine", 0))
+    #if os(macOS)
+        let output = try await run(AgentControl.checked("echo out; exit 4"), environment: [:])
+        #expect(AgentControl.splitExit(output) == ("out", 4))
+    #endif
+}
+
 @Test func optionDigitsComeFromNumbersWordsOrLabels() {
     let screen = "Which database?\n❯ 1. Postgres\n  2. SQLite\nEnter to select"
     #expect(AgentControl.optionDigit("2", screen: nil) == "2")
@@ -135,27 +146,39 @@ import Testing
 
     @Test(.enabled(if: hasTmux()))
     func listScriptFindsAgentsInPrivateTmuxPanesAndReadsTheirTranscript() async throws {
-        let home = URL(fileURLWithPath: "/tmp/psh-brain-\(UUID().uuidString.prefix(8))")
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "psh-brain-\(UUID().uuidString.prefix(8))")
+        let environment = [
+            "HOME": home.path, "TMUX_TMPDIR": home.appendingPathComponent("tmux").path, "TMPDIR": home.path,
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+        ]
+        do {
+            try await listAndReadAgents(home: home, environment: environment)
+        } catch {
+            await tearDown(home: home, environment: environment)
+            throw error
+        }
+        await tearDown(home: home, environment: environment)
+    }
+
+    private func tearDown(home: URL, environment: [String: String]) async {
+        _ = try? await run("tmux kill-server; pkill -f '\(home.path)/bin/'; true", environment: environment)
+        try? FileManager.default.removeItem(at: home)
+    }
+
+    private func listAndReadAgents(home: URL, environment: [String: String]) async throws {
         let fake = home.appendingPathComponent("bin")
         let project = home.appendingPathComponent("src/api")
         try FileManager.default.createDirectory(at: fake, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(
             at: home.appendingPathComponent("tmux"), withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: home) }
-        let agentScript = "#!/bin/sh\nprintf 'Hello from the agent\\n\\n? for shortcuts\\n'\nsleep 60\n"
+        let agentScript =
+            "#!/bin/sh\nprintf 'Hello from the agent\\n\\n? for shortcuts\\n'\nwhile :; do sleep 1; done\n"
         for name in ["claude", "codex"] {
             let url = fake.appendingPathComponent(name)
             try agentScript.write(to: url, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-        }
-        let environment = [
-            "HOME": home.path, "TMUX_TMPDIR": home.appendingPathComponent("tmux").path,
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
-        ]
-        defer {
-            _ = try? Process.run(
-                URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", "TMUX_TMPDIR='\(home.path)/tmux' tmux kill-server"])
         }
         _ = try await run(
             "tmux new-session -d -s brainwork -n api -c '\(project.path)' '\(fake.path)/claude --resume x'"

@@ -139,7 +139,14 @@ public final class AgentToolbox {
         case .start:
             return Self.error("unreachable")
         }
-        guard let output = await io.exec(command) else { return Self.error("The host is not connected.") }
+        guard let raw = await io.exec(AgentControl.checked(command)) else {
+            return Self.error("The host is not connected.")
+        }
+        let (output, status) = AgentControl.splitExit(raw)
+        if status != 0 {
+            let detail = output.trimmingCharacters(in: .whitespacesAndNewlines).suffix(200)
+            return Self.error("The command failed with status \(status). \(detail)")
+        }
         if case .herdr = agent.location, let failure = AgentControl.herdrFailure(output) {
             return Self.error(failure)
         }

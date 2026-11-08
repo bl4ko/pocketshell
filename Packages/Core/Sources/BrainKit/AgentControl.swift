@@ -91,6 +91,18 @@ public enum AgentControl {
         }
     }
 
+    public static func checked(_ command: String) -> String {
+        "( \(command) ) 2>&1; printf '\\n@@psh-exit:%s@@' \"$?\""
+    }
+
+    public static func splitExit(_ output: String) -> (output: String, status: Int) {
+        guard let range = output.range(of: "\n@@psh-exit:", options: .backwards),
+            let status = Int(output[range.upperBound...].prefix { $0.isNumber })
+        else { return (output, 0) }
+        let body = output[..<range.lowerBound]
+        return (String(body.hasSuffix("\n") ? body.dropLast() : body), status)
+    }
+
     public static func herdrFailure(_ output: String) -> String? {
         guard output.contains("\"error\"") || output.contains("\"code\"") else { return nil }
         if let range = output.range(of: "\"message\":\"([^\"]*)\"", options: .regularExpression) {

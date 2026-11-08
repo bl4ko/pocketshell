@@ -12,6 +12,7 @@
         let quickReplyOptions: [Int]
         let onKey: (ToolbarKey.Action) -> Void
         let onHideKeyboard: (() -> Void)?
+        let keyboardVisible: Bool
         let onPaste: (([NSItemProvider]) -> Void)?
         let onCopy: (() -> Void)?
         let onToggleSelect: (() -> Void)?
@@ -31,6 +32,7 @@
             quickReplyOptions: [Int] = [],
             onKey: @escaping (ToolbarKey.Action) -> Void,
             onHideKeyboard: (() -> Void)? = nil,
+            keyboardVisible: Bool = true,
             onPaste: (([NSItemProvider]) -> Void)? = nil,
             onCopy: (() -> Void)? = nil,
             onToggleSelect: (() -> Void)? = nil,
@@ -48,6 +50,7 @@
             self.quickReplyOptions = quickReplyOptions
             self.onKey = onKey
             self.onHideKeyboard = onHideKeyboard
+            self.keyboardVisible = keyboardVisible
             self.onPaste = onPaste
             self.onCopy = onCopy
             self.onToggleSelect = onToggleSelect
@@ -131,7 +134,8 @@
                         .accessibilityIdentifier("terminal.compose")
                 }
                 if let onHideKeyboard {
-                    slot(icon: "keyboard.chevron.compact.down") { onHideKeyboard() }
+                    slot(icon: KeyboardToggle.icon(keyboardVisible: keyboardVisible)) { onHideKeyboard() }
+                        .accessibilityLabel(keyboardVisible ? "Hide keyboard" : "Show keyboard")
                         .accessibilityIdentifier("terminal.keyboard")
                 }
             }
@@ -221,3 +225,9 @@
         }
     }
 #endif
+
+enum KeyboardToggle {
+    static func icon(keyboardVisible: Bool) -> String {
+        keyboardVisible ? "keyboard.chevron.compact.down" : "keyboard"
+    }
+}

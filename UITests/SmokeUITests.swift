@@ -283,6 +283,31 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(terminal.label, resizes, "the keyboard resized the tmux terminal")
     }
 
+    func testTerminalKeyboardButtonShowsKeyboardState() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; keyboard button test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        let keyboardButton = app.buttons["terminal.keyboard"]
+        let keyboard = app.keyboards.element
+        if keyboard.exists {
+            keyboardButton.tap()
+            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+        }
+        let labelled = { (label: String) in
+            XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", label), object: keyboardButton)
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [labelled("Show keyboard")], timeout: 5), .completed)
+        keyboardButton.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertEqual(XCTWaiter.wait(for: [labelled("Hide keyboard")], timeout: 5), .completed)
+        keyboardButton.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(XCTWaiter.wait(for: [labelled("Show keyboard")], timeout: 5), .completed)
+    }
+
     func testTerminalTapInMouseReportingAppKeepsKeyboardHidden() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; mouse tap test skipped")

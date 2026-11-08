@@ -327,6 +327,7 @@ struct TerminalScreen: View {
                                     testKeyboardHeight = testKeyboardHeight == 0 ? 300 : 0
                                 }
                             },
+                            keyboardVisible: keyboardHeight > 0,
                             onPaste: { connection.bridge.paste($0) },
                             onCopy: { connection.bridge.copySelection() },
                             onToggleSelect: { connection.bridge.toggleSelectMode() },

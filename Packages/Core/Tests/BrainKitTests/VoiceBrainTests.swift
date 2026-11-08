@@ -54,7 +54,10 @@ private final class Rig {
     let model: ScriptedModel
     var brain: VoiceBrain!
 
-    init(_ model: ScriptedModel, store: ConversationStore? = nil, now: Date = Date()) throws {
+    init(
+        _ model: ScriptedModel, store: ConversationStore? = nil, now: Date = Date(),
+        clock: (@MainActor @Sendable () -> TimeInterval)? = nil
+    ) throws {
         self.model = model
         let list = try fixture("list-agents.txt")
         let toolbox = AgentToolbox(
@@ -70,7 +73,7 @@ private final class Rig {
                 current: { CurrentTarget(tmuxSession: "work", windowIndex: 2, windowID: "@7") }))
         brain = VoiceBrain(
             hostID: "host-1", hostName: "devbox", ears: ears, mouth: mouth, model: model, toolbox: toolbox,
-            store: store, pollInterval: .seconds(60), clock: { [weak self] in self?.time ?? 0 }, now: { now })
+            store: store, pollInterval: .seconds(60), clock: clock ?? { [weak self] in self?.time ?? 0 }, now: { now })
     }
 
     deinit {
@@ -255,4 +258,65 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     #expect(brain.mode == .dictation(BrainError.notConfigured.spoken))
     ears.submit("hello")
     #expect(dictated == ["hello"])
+}
+
+@MainActor
+@Test func turnTimingMeasuresFromTheEndOfSpeechToTextTokenAudioAndDone() async throws {
+    let uptime: @MainActor @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    let rig = try Rig(
+        ScriptedModel([.success([.text("Claude is idle."), .finished("stop")])], delay: .milliseconds(80)),
+        clock: uptime)
+    var turns: [UserTurn] = []
+    var timings: [TurnTiming] = []
+    rig.brain.providers = BenchmarkProviders(ears: "soniox:stt-rt-v6", mouth: "iphone", model: "gpt-test")
+    rig.brain.onUserTurn = { turns.append($0) }
+    rig.brain.onTurnTimed = { timings.append($0) }
+    await rig.brain.start()
+    #expect(await eventually { rig.brain.phase == .listening })
+    let end = uptime() - 0.3
+    rig.ears.onEvent?(.spoken(start: end - 1.2, end: end))
+    rig.phrase("what is claude doing")
+    #expect(await eventually { timings.count == 1 })
+    let timing = try #require(timings.first)
+    #expect(turns.count == 1)
+    #expect(turns.first?.speechEnd == end)
+    #expect(turns.first?.speechStart == end - 1.2)
+    #expect(timing.text == "what is claude doing")
+    #expect(timing.providers.ears == "soniox:stt-rt-v6")
+    #expect((250...600).contains(timing.sttMs))
+    let token = try #require(timing.firstTokenMs)
+    let audio = try #require(timing.firstAudioMs)
+    #expect(token >= timing.sttMs + 70)
+    #expect(audio >= token)
+    #expect(timing.totalMs >= audio)
+    #expect(rig.brain.lastTiming == timing)
+
+    rig.phrase("and codex")
+    #expect(await eventually { timings.count == 2 })
+    #expect(timings[1].sttMs == 0)
+}
+
+@Test func benchmarkCSVQuotesTextAndLeavesMissingTimesEmpty() throws {
+    let timing = TurnTiming(
+        turn: 7, date: Date(timeIntervalSince1970: 0),
+        providers: BenchmarkProviders(ears: "iphone", mouth: "soniox:tts-rt-v2:Hazel", model: "gpt-test"),
+        text: "say \"hi\", then stop", sttMs: 310, firstTokenMs: 900, firstAudioMs: nil, totalMs: 4200)
+    #expect(
+        BenchmarkCSV.row(timing)
+            == #"7,1970-01-01T00:00:00Z,iphone,soniox:tts-rt-v2:Hazel,gpt-test,310,900,,4200,"say ""hi"", then stop""#)
+    #expect(BenchmarkCSV.header.split(separator: ",").count == 10)
+    #expect(timing.summary == "STT 310 ms · first token 900 ms · first audio – · total 4.2 s")
+
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("bench-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let log = BenchmarkLog(directory: directory)
+    log.append(timing)
+    log.append(timing)
+    let lines = try String(contentsOf: log.csvURL, encoding: .utf8).split(separator: "\n")
+    #expect(lines.count == 3)
+    #expect(lines.first.map(String.init) == BenchmarkCSV.header)
+    #expect(log.last == timing)
+    log.clear()
+    #expect(!log.hasTimings)
+    #expect(log.last == nil)
 }

@@ -8,6 +8,7 @@
         public enum Event: Equatable, Sendable {
             case partial(String)
             case phrase(String)
+            case spoken(start: TimeInterval, end: TimeInterval)
         }
 
         public let events: AsyncThrowingStream<Event, Error>
@@ -18,6 +19,7 @@
         private let input: AsyncStream<AnalyzerInput>.Continuation
         private let lock = NSLock()
         private var converter: AVAudioConverter?
+        private let timeline: AudioTimeline
 
         public static func make(
             contextualStrings: [String], installing: @escaping @Sendable () -> Void = {}
@@ -53,6 +55,7 @@
             }
             let (audio, input) = AsyncStream<AnalyzerInput>.makeStream()
             let (events, sink) = AsyncThrowingStream<Event, Error>.makeStream()
+            let timeline = AudioTimeline()
             let analyzer = SpeechAnalyzer(
                 modules: [module], options: .init(priority: .userInitiated, modelRetention: .lingering))
             let context = AnalysisContext()
@@ -64,6 +67,12 @@
                 do {
                     for try await result in module.results {
                         let words = String(text(result).characters).trimmingCharacters(in: .whitespacesAndNewlines)
+                        if result.isFinal, !words.isEmpty, result.range.duration.seconds > 0 {
+                            sink.yield(
+                                .spoken(
+                                    start: timeline.uptime(atAudioSecond: result.range.start.seconds),
+                                    end: timeline.uptime(atAudioSecond: result.range.end.seconds)))
+                        }
                         sink.yield(
                             result.isFinal && !words.isEmpty ? .phrase(words) : .partial(result.isFinal ? "" : words))
                     }
@@ -78,6 +87,7 @@
             self.format = format
             self.analyzer = analyzer
             self.input = input
+            self.timeline = timeline
         }
 
         public func append(_ buffer: AVAudioPCMBuffer) {
@@ -100,7 +110,10 @@
                     status.pointee = .haveData
                     return buffer
                 }
-                if error == nil, out.frameLength > 0 { input.yield(AnalyzerInput(buffer: out)) }
+                if error == nil, out.frameLength > 0 {
+                    timeline.advance(seconds: Double(out.frameLength) / format.sampleRate)
+                    input.yield(AnalyzerInput(buffer: out))
+                }
             }
         }
 

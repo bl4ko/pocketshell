@@ -44,8 +44,12 @@ public final class VoiceBrain: ObservableObject {
     @Published public private(set) var inputLevel: Float = 0
     @Published public private(set) var outputLevel: Float = 0
     @Published public private(set) var muted = false
+    @Published public private(set) var lastTiming: TurnTiming?
     public var onDictation: ((String) -> Void)?
     public var onEnded: (() -> Void)?
+    public var onUserTurn: ((UserTurn) -> Void)?
+    public var onTurnTimed: ((TurnTiming) -> Void)?
+    public var providers = BenchmarkProviders(ears: "", mouth: "", model: "")
 
     public let toolbox: AgentToolbox
     public let hostID: String
@@ -68,6 +72,9 @@ public final class VoiceBrain: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var fillerIndex = 0
     private var streamingReply: String?
+    private var heard: (at: TimeInterval, start: TimeInterval?, end: TimeInterval?)?
+    private var spoken: (start: TimeInterval, end: TimeInterval)?
+    private var timing: TurnClock?
 
     public static let fillers = ["Hmm.", "Okay, one moment.", "Let me think.", "Mm-hm, one sec."]
 
@@ -156,10 +163,15 @@ public final class VoiceBrain: ObservableObject {
         store?.save(conversation)
         caption = nil
         detail = nil
+        timing = nil
         phase = .listening
         inputLevel = 0
         outputLevel = 0
         onEnded?()
+    }
+
+    public func notice(_ text: String) {
+        detail = text
     }
 
     public func setMuted(_ on: Bool) {
@@ -198,7 +210,12 @@ public final class VoiceBrain: ObservableObject {
             if !text.isEmpty { caption = Caption(.user, text) }
             feed(.userPartial(text))
         case .phrase(let text):
+            heard = (clock(), spoken?.start, spoken?.end)
+            spoken = nil
             feed(.userPhrase(text))
+            heard = nil
+        case .spoken(let start, let end):
+            spoken = (start, end)
         case .level(let level):
             inputLevel = level
         case .failed(let message):
@@ -209,9 +226,12 @@ public final class VoiceBrain: ObservableObject {
     private func mouthChanged(_ event: MouthEvent) {
         switch event {
         case .started: feed(.mouthStarted)
+        case .playing(let text):
+            if timing?.firstAudio == nil, !Self.fillers.contains(text) { timing?.firstAudio = clock() }
         case .idle:
             outputLevel = 0
             feed(.mouthIdle)
+            completeTiming()
         case .level(let level): outputLevel = level
         }
     }
@@ -227,6 +247,7 @@ public final class VoiceBrain: ObservableObject {
             case .cancelBrain:
                 turnTask?.cancel()
                 turnTask = nil
+                timing = nil
                 sealTurn()
             case .respond(let text):
                 respond(text)
@@ -256,6 +277,11 @@ public final class VoiceBrain: ObservableObject {
             feed(.brainDone)
             return
         }
+        let at = heard?.at ?? clock()
+        let end = heard?.end ?? at
+        timing = TurnClock(turn: id, text: text, speechEnd: end, phrase: at)
+        onUserTurn?(
+            UserTurn(turn: id, text: text, speechStart: heard?.start, speechEnd: end, providers: providers))
         turnTask = Task { [weak self] in await self?.runTurn(text, id: id) }
     }
 
@@ -304,6 +330,7 @@ public final class VoiceBrain: ObservableObject {
                 let stream = model.stream(conversation.request(system: systemPrompt), tools: AgentToolbox.definitions)
                 for try await event in stream {
                     guard id == turnID, !Task.isCancelled else { return }
+                    if timing?.turn == id, timing?.firstToken == nil { timing?.firstToken = clock() }
                     switch event {
                     case .text(let delta):
                         reply += delta
@@ -351,10 +378,21 @@ public final class VoiceBrain: ObservableObject {
         guard id == turnID else { return }
         store?.save(conversation)
         feed(.brainDone)
+        if timing?.turn == id { timing?.brainDone = true }
+        completeTiming()
+    }
+
+    private func completeTiming() {
+        guard let clockState = timing, clockState.brainDone, !mouth.isSpeaking else { return }
+        timing = nil
+        let result = clockState.timing(done: clock(), date: now(), providers: providers)
+        lastTiming = result
+        onTurnTimed?(result)
     }
 
     private func fallBack(_ error: Error) {
         let message = (error as? BrainError)?.spoken ?? "Something went wrong with the brain."
+        timing = nil
         mode = .dictation(message)
         pollTask?.cancel()
         caption = Caption(.app, message + " Dictating into the draft.")

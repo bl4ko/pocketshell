@@ -35,6 +35,7 @@
             }
             let line = audio.line
             let state = state
+            let announced = LockedFlag()
             let finished: @Sendable () -> Void = { [weak self] in
                 Task { @MainActor in self?.drained(generation) }
             }
@@ -49,8 +50,13 @@
                     if state.bufferPlayed(generation) { finished() }
                 }
                 if !scheduled, state.bufferPlayed(generation) { finished() }
-                let level = Self.level(pcm)
-                Task { @MainActor in self?.onEvent?(.level(level)) }
+                let level = PCM.level(pcm)
+                let first = !announced.on
+                announced.on = true
+                Task { @MainActor in
+                    if first { self?.onEvent?(.playing(text)) }
+                    self?.onEvent?(.level(level))
+                }
             }
         }
 
@@ -67,21 +73,6 @@
             guard state.isIdle(generation), isSpeaking else { return }
             isSpeaking = false
             onEvent?(.idle)
-        }
-
-        nonisolated private static func level(_ buffer: AVAudioPCMBuffer) -> Float {
-            let frames = Int(buffer.frameLength)
-            guard frames > 0 else { return 0 }
-            var sum: Float = 0
-            if let samples = buffer.floatChannelData?[0] {
-                for frame in 0..<frames { sum += samples[frame] * samples[frame] }
-            } else if let samples = buffer.int16ChannelData?[0] {
-                for frame in 0..<frames {
-                    let value = Float(samples[frame]) / Float(Int16.max)
-                    sum += value * value
-                }
-            }
-            return min(1, (sum / Float(frames)).squareRoot() * 5)
         }
     }
 
@@ -180,6 +171,7 @@
                         switch event {
                         case .partial(let text): self?.onEvent?(.partial(text))
                         case .phrase(let text): self?.onEvent?(.phrase(text))
+                        case .spoken(let start, let end): self?.onEvent?(.spoken(start: start, end: end))
                         }
                     }
                 } catch {

@@ -3,7 +3,7 @@
     import Foundation
 
     @MainActor
-    public final class DuplexAudio {
+    public final class DuplexAudio: MicrophoneSource {
         public var onInputLevel: ((Float) -> Void)?
         public var onInterruption: ((Bool) -> Void)?
         public private(set) var running = false
@@ -29,6 +29,10 @@
             tap.sink = sink
         }
 
+        public func setRecorder(_ recorder: (@Sendable (AVAudioPCMBuffer) -> Void)?) {
+            tap.recorder = recorder
+        }
+
         public func start() throws {
             guard !running else { return }
             let session = AVAudioSession.sharedInstance()
@@ -48,6 +52,7 @@
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
             tap.sink = nil
+            tap.recorder = nil
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
 
@@ -135,6 +140,7 @@
     final class MicrophoneTap: @unchecked Sendable {
         private let lock = NSLock()
         private var target: (@Sendable (AVAudioPCMBuffer) -> Void)?
+        private var recording: (@Sendable (AVAudioPCMBuffer) -> Void)?
         private var count = 0
 
         var sink: (@Sendable (AVAudioPCMBuffer) -> Void)? {
@@ -142,12 +148,19 @@
             set { lock.withLock { target = newValue } }
         }
 
+        var recorder: (@Sendable (AVAudioPCMBuffer) -> Void)? {
+            get { lock.withLock { recording } }
+            set { lock.withLock { recording = newValue } }
+        }
+
         func append(_ buffer: AVAudioPCMBuffer) -> Float? {
-            let (sink, index) = lock.withLock { () -> ((@Sendable (AVAudioPCMBuffer) -> Void)?, Int) in
+            let (sink, recorder, index) = lock.withLock {
+                () -> ((@Sendable (AVAudioPCMBuffer) -> Void)?, (@Sendable (AVAudioPCMBuffer) -> Void)?, Int) in
                 count += 1
-                return (target, count)
+                return (target, recording, count)
             }
             sink?(buffer)
+            recorder?(buffer)
             guard index % 3 == 0, let samples = buffer.floatChannelData?[0] else { return nil }
             var peak: Float = 0
             for frame in 0..<Int(buffer.frameLength) { peak = max(peak, abs(samples[frame])) }
@@ -155,7 +168,7 @@
         }
     }
 
-    public final class PlaybackLine: @unchecked Sendable {
+    public final class PlaybackLine: AudioLine, @unchecked Sendable {
         public let player: AVAudioPlayerNode
         public let format: AVAudioFormat
         private let lock = NSLock()

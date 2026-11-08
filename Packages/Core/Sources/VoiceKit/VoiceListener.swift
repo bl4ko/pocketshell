@@ -149,6 +149,8 @@
                             if self.generation == generation { self.partial = "" }
                             self.phrases += 1
                             self.onPhrase?(text)
+                        case .spoken:
+                            break
                         }
                     }
                 } catch {

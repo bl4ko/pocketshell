@@ -39,10 +39,10 @@ private func voice(_ id: String, _ language: String, _ quality: VoiceChoice.Qual
     mouth.speak("one")
     mouth.speak("two")
     while mouth.isSpeaking { try await Task.sleep(for: .milliseconds(5)) }
-    #expect(events == [.started, .idle])
+    #expect(events == [.started, .playing("one"), .playing("two"), .idle])
     mouth.speak("three")
     mouth.stop()
-    #expect(events == [.started, .idle, .started, .idle])
+    #expect(events.filter { $0 == .started || $0 == .idle } == [.started, .idle, .started, .idle])
     #expect(mouth.spoken == ["one", "two", "three"])
 }
 

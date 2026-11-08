@@ -17,13 +17,15 @@
         let collected = Task {
             var phrases: [String] = []
             var partials = 0
+            var spans: [ClosedRange<TimeInterval>] = []
             for try await event in stream.events {
                 switch event {
                 case .phrase(let text): phrases.append(text)
                 case .partial: partials += 1
+                case .spoken(let start, let end): spans.append(start...end)
                 }
             }
-            return (phrases, partials)
+            return (phrases, partials, spans)
         }
         while file.framePosition < file.length {
             let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 1024))
@@ -31,8 +33,10 @@
             stream.append(buffer)
         }
         await stream.finish()
-        let (phrases, partials) = try await collected.value
+        let (phrases, partials, spans) = try await collected.value
         #expect(partials > 0)
+        #expect(spans.count == phrases.count)
+        #expect(spans.allSatisfy { $0.upperBound <= ProcessInfo.processInfo.systemUptime + 0.5 })
         var draft = ""
         let actions = phrases.compactMap { VoiceCommand.apply($0, to: &draft) }
         guard case .submit(let message) = try #require(actions.last) else {

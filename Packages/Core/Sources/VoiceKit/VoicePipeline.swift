@@ -3,12 +3,14 @@ import Foundation
 public enum EarsEvent: Equatable, Sendable {
     case partial(String)
     case phrase(String)
+    case spoken(start: TimeInterval, end: TimeInterval)
     case level(Float)
     case failed(String)
 }
 
 public enum MouthEvent: Equatable, Sendable {
     case started
+    case playing(String)
     case idle
     case level(Float)
 }
@@ -74,6 +76,7 @@ public final class TimedMouth: VoiceMouth {
         task = Task { [weak self] in
             while let self, !self.queue.isEmpty {
                 let next = self.queue.removeFirst()
+                self.onEvent?(.playing(next))
                 let seconds = min(1.5, Double(next.count) * self.secondsPerCharacter)
                 try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { return }

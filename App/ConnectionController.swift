@@ -33,6 +33,10 @@ final class ConnectionController: ObservableObject {
     @Published var composerDraft = "" {
         didSet { UserDefaults.standard.set(composerDraft, forKey: Self.draftKey(host)) }
     }
+    private var composerPrefilled: String?
+    var composerReplacesBox = false {
+        didSet { UserDefaults.standard.set(composerReplacesBox, forKey: Self.draftKey(host) + ".replacesBox") }
+    }
 
     private static func draftKey(_ host: HostConfig) -> String {
         "pocketshell.composerDraft.\(host.id.uuidString)"
@@ -72,6 +76,7 @@ final class ConnectionController: ObservableObject {
         self.knownHosts = knownHosts
         self.hops = hops
         composerDraft = UserDefaults.standard.string(forKey: Self.draftKey(host)) ?? ""
+        composerReplacesBox = UserDefaults.standard.bool(forKey: Self.draftKey(host) + ".replacesBox")
         composerVisible = !composerDraft.isEmpty
     }
 
@@ -268,6 +273,41 @@ final class ConnectionController: ObservableObject {
         pendingShell = .herdr(session: session, workspaceID: snapshot.focusedWorkspaceID)
         if herdr.snapshot != snapshot { herdr.snapshot = snapshot }
         return snapshot
+    }
+
+    func unsentPrompt() async -> UnsentPrompt? {
+        guard isHerdrAttached else {
+            return UnsentPrompt.read(screenLines: bridge.promptLines(), columns: bridge.currentSize.cols)
+        }
+        guard let snapshot = await currentHerdrSnapshot(),
+            let paneID = snapshot.focusedPaneID ?? snapshot.agents.first(where: \.focused)?.paneID,
+            let output = await herdrExec({ Herdr.paneReadCommand(session: $0, paneID: paneID) })
+        else { return nil }
+        return UnsentPrompt.read(screenLines: UnsentPrompt.plainLines(ansi: output))
+    }
+
+    func prefillComposer() async {
+        let box = await unsentPrompt()
+        let prefill = ComposerPrefill.resolve(draft: composerDraft, replacesBox: composerReplacesBox, box: box)
+        if composerDraft != prefill.draft { composerDraft = prefill.draft }
+        if prefill.replacesBox, prefill.draft == box?.text { composerPrefilled = prefill.draft }
+        composerReplacesBox = prefill.replacesBox
+    }
+
+    func composerClosed() {
+        let state = ComposerPrefill.closing(
+            draft: composerDraft, replacesBox: composerReplacesBox, prefilled: composerPrefilled)
+        composerPrefilled = nil
+        if composerDraft != state.draft { composerDraft = state.draft }
+        composerReplacesBox = state.replacesBox
+    }
+
+    func sendComposer(_ text: String) async {
+        var clear: [UInt8] = []
+        if composerReplacesBox, let box = await unsentPrompt(), !box.isEmpty { clear = box.clearSequence }
+        composerReplacesBox = false
+        composerPrefilled = nil
+        bridge.sendComposed(text, clearing: clear)
     }
 
     func herdrExec(_ command: (String) -> String) async -> String? {

@@ -255,6 +255,27 @@
             #expect(sent == [Data("\u{1b}[<0;3;4M".utf8), Data("\u{1b}[<0;3;4m".utf8)])
         }
 
+        @Test func promptLinesHideFaintPlaceholders() {
+            let bridge = TerminalBridge()
+            let view = makeGhostty()
+            bridge.view = view
+            bridge.feed(Data("\u{276F}\u{A0}\u{1b}[2mTry \"fix lint errors\"\u{1b}[22m\r\nreal".utf8))
+            #expect(
+                bridge.promptLines().prefix(2).map { $0.trimmingCharacters(in: .whitespaces) } == ["\u{276F}", "real"])
+            #expect(bridge.visibleText().contains("Try"))
+        }
+
+        @Test func composedSendClearsTheBoxInTheSameWrite() {
+            let bridge = TerminalBridge()
+            let view = makeGhostty()
+            bridge.view = view
+            bridge.feed(Data("\u{1b}[?2004h".utf8))
+            var sent: [Data] = []
+            bridge.sendToHost = { sent.append($0) }
+            bridge.sendComposed("hi", clearing: [0x0B, 0x15])
+            #expect(sent == [Data([0x0B, 0x15]) + Data("\u{1b}[200~hi\u{1b}[201~\r".utf8)])
+        }
+
         @Test func bridgeRoutesThroughTheGhosttyEngine() {
             let bridge = TerminalBridge()
             let view = makeGhostty()

@@ -249,3 +249,9 @@ private func snapshot(
         #expect(output == "31704\n")
     }
 #endif
+
+@Test func readsTheVisiblePaneWithStyles() {
+    #expect(
+        Herdr.paneReadCommand(session: "work", paneID: "w1:p2")
+            .hasSuffix("herdr --session 'work' pane read 'w1:p2' --source visible --format ansi"))
+}

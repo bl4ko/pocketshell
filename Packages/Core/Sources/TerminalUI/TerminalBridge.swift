@@ -134,6 +134,12 @@
             return view?.screenLines().joined(separator: "\n") ?? ""
         }
 
+        public func promptLines() -> [String] {
+            flushTask?.cancel()
+            flushPending()
+            return view?.promptLines() ?? []
+        }
+
         public func paste(_ providers: [NSItemProvider]) {
             if let image = providers.first(where: { $0.canLoadObject(ofClass: UIImage.self) }),
                 pasteImage(from: image)
@@ -150,13 +156,13 @@
         }
 
         /// Sends a prompt composed outside the terminal into the live session.
-        public func sendComposed(_ text: String) {
+        public func sendComposed(_ text: String, clearing clear: [UInt8] = []) {
             let payload = ComposerMessage.payload(
                 text,
                 bracketedPaste: view?.bracketedPasteMode == true
             )
             guard !payload.isEmpty else { return }
-            processOutgoing(Data(payload.utf8))
+            processOutgoing(Data(clear) + Data(payload.utf8))
         }
 
         public func sendPasted(_ text: String) {

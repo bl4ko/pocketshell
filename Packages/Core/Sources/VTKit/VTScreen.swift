@@ -86,6 +86,18 @@ public final class VTScreen {
         return text
     }
 
+    public func lines(hidingFaint: Bool) -> [String] {
+        (0..<rows).map { row in
+            var text = ""
+            for col in 0..<cols {
+                let cell = cells[row * cols + col]
+                if cell.flags.contains(.spacer) { continue }
+                text += hidingFaint && cell.flags.contains(.faint) ? " " : cell.text
+            }
+            return text
+        }
+    }
+
     func resize(cols: Int, rows: Int) {
         guard cols != self.cols || rows != self.rows else { return }
         self.cols = cols

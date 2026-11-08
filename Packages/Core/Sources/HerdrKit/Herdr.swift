@@ -251,6 +251,10 @@ public enum Herdr {
             + " | sed -n 's/.*\"shell_pid\":\\([0-9][0-9]*\\).*/\\1/p'"
     }
 
+    public static func paneReadCommand(session: String, paneID: String) -> String {
+        "\(commandPrefix(session: session)) pane read \(shellQuote(paneID)) --source visible --format ansi"
+    }
+
     public static func parseFocusedPaneID(_ output: String) -> String? {
         decode(FocusEnvelope.self, from: output)?.result.snapshot.focusedPaneID
     }

@@ -1354,6 +1354,44 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["terminal.compose"].waitForExistence(timeout: 10))
     }
 
+    func testComposerPrefillsFromTheAgentBoxAndClearsItOnSend() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; sshd-backed composer test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        let log = "/tmp/psh-unsent-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: log) }
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText(
+            #"r=$(printf '\342\224\200%.0s' $(seq 1 30)); clear; printf '%s\n\342\235\257 half written prompt\n%s\n' $r $r; cat > "#
+                + log + "\n")
+        terminal.typeText("stale")
+
+        let field = app.descendants(matching: .any).matching(identifier: "composer.field").firstMatch
+        for _ in 0..<3 where !field.exists {
+            app.typeKey("j", modifierFlags: .command)
+            _ = field.waitForExistence(timeout: 3)
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "value == 'half written prompt'"), evaluatedWith: field)
+        waitForExpectations(timeout: 10)
+
+        app.buttons["composer.send"].tap()
+        let written = NSPredicate { _, _ in
+            (try? String(contentsOfFile: log, encoding: .utf8)) == "half written prompt\n"
+        }
+        let result = XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(predicate: written, object: nil)], timeout: 10)
+        XCTAssertEqual(
+            result, .completed,
+            "the box must be cleared before the draft: \((try? String(contentsOfFile: log, encoding: .utf8)) ?? "nil")")
+        app.buttons["composer.close"].tap()
+        terminal.typeText("\u{03}")
+    }
+
     func testComposerSendsAPromptAndKeepsTheDraftAcrossNavigation() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed composer test skipped")

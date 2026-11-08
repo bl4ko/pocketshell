@@ -244,6 +244,10 @@
             terminal.lines(tag: .viewport)
         }
 
+        func promptLines() -> [String] {
+            terminal.screen.lines(hidingFaint: true)
+        }
+
         func wrappedRows() -> [Bool] {
             (0..<terminal.rows).map { terminal.lineIsContinuation(row: $0, tag: .viewport) }
         }

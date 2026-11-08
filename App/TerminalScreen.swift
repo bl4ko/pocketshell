@@ -305,7 +305,10 @@ struct TerminalScreen: View {
                             voiceStatus: voice.isOn && voice.partial.isEmpty
                                 ? voiceNotice ?? voice.status : voice.status,
                             onVoice: voiceToggle,
-                            onSend: { connection.bridge.sendComposed(connection.composerDraft) },
+                            onSend: {
+                                let text = connection.composerDraft
+                                Task { await connection.sendComposer(text) }
+                            },
                             onClose: {
                                 connection.composerVisible = false
                                 connection.bridge.setTerminalFocused(true)
@@ -416,7 +419,12 @@ struct TerminalScreen: View {
             if !active { voice.stop() }
         }
         .onChange(of: connection.composerVisible) { _, visible in
-            if !visible { voice.stop() }
+            if visible {
+                Task { await connection.prefillComposer() }
+            } else {
+                voice.stop()
+                connection.composerClosed()
+            }
         }
         .onChange(of: voice.isOn) { _, on in
             UIApplication.shared.isIdleTimerDisabled = on
@@ -443,6 +451,7 @@ struct TerminalScreen: View {
         voiceNotice = nil
         voice.onPhrase = { handleVoice($0) }
         Task {
+            await connection.prefillComposer()
             voice.contextualStrings = await connection.herdrTabNames()
             await voice.start()
         }
@@ -452,7 +461,7 @@ struct TerminalScreen: View {
         voiceNotice = nil
         switch VoiceCommand.apply(phrase, to: &connection.composerDraft) {
         case .submit(let message):
-            connection.bridge.sendComposed(message)
+            Task { await connection.sendComposer(message) }
         case .keys(let keys):
             connection.bridge.processOutgoing(Data(keys.utf8))
         case .jump(let name):

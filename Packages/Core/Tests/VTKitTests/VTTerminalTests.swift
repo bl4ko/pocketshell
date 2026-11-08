@@ -150,6 +150,16 @@ struct VTTerminalStateTests {
 }
 
 struct VTScreenTests {
+    @Test func blanksFaintCellsForPlainLines() {
+        let terminal = VTTerminal(cols: 20, rows: 2)
+        terminal.feed("\u{276F} \u{1b}[2mTry this\u{1b}[22m\r\nreal \u{1b}[2mghost")
+        #expect(terminal.updateScreen())
+        let lines = terminal.screen.lines(hidingFaint: true)
+        #expect(lines[0].hasPrefix("\u{276F}          "))
+        #expect(lines[1].hasPrefix("real      "))
+        #expect(terminal.screen.lines(hidingFaint: false)[0].hasPrefix("\u{276F} Try this"))
+    }
+
     @Test func snapshotsCellsColorsAndCursor() {
         let terminal = VTTerminal(cols: 10, rows: 3)
         terminal.setColors(

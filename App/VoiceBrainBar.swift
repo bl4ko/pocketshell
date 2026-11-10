@@ -87,7 +87,10 @@ struct VoiceBrainFullView: View {
     let onCollapse: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
+        let caption = VoiceBrainText.caption(brain)
+        let lines = Transcript.lines(brain.conversation.messages, live: caption)
+        let orb: CGFloat = lines.isEmpty ? 220 : 120
+        VStack(spacing: 20) {
             HStack {
                 Button(action: onCollapse) {
                     Image(systemName: "chevron.down")
@@ -103,31 +106,67 @@ struct VoiceBrainFullView: View {
                 Spacer()
                 Color.clear.frame(width: 28, height: 28)
             }
-            Spacer()
+            if lines.isEmpty { Spacer(minLength: 0) }
             VoiceOrb(phase: brain.phase, input: brain.inputLevel, output: brain.outputLevel, muted: brain.muted)
-                .frame(width: 220, height: 220)
+                .frame(width: orb, height: orb)
                 .onTapGesture(perform: onCollapse)
                 .accessibilityIdentifier("voice.orb.large")
-            Text(VoiceBrainText.caption(brain))
-                .font(.title3)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(PocketshellTheme.ink)
-                .lineLimit(6)
-                .accessibilityIdentifier("voice.caption.full")
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        ForEach(lines) { line in
+                            TranscriptRow(line: line)
+                        }
+                        Text(caption)
+                            .font(.title3)
+                            .multilineTextAlignment(lines.isEmpty ? .center : .leading)
+                            .foregroundStyle(PocketshellTheme.ink)
+                            .frame(maxWidth: .infinity, alignment: lines.isEmpty ? .center : .leading)
+                            .accessibilityIdentifier("voice.caption.full")
+                            .id(Self.live)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollIndicators(.hidden)
+                .onAppear { proxy.scrollTo(Self.live, anchor: .bottom) }
+                .onChange(of: lines.count) { proxy.scrollTo(Self.live, anchor: .bottom) }
+                .onChange(of: caption) { proxy.scrollTo(Self.live, anchor: .bottom) }
+            }
             if let detail = brain.detail {
                 Text(detail)
                     .font(.callout)
                     .foregroundStyle(PocketshellTheme.secondary)
                     .multilineTextAlignment(.center)
-                    .lineLimit(8)
+                    .lineLimit(4)
                     .accessibilityIdentifier("voice.detail")
             }
-            Spacer()
             VoiceBrainControls(brain: brain, compact: false)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(PocketshellTheme.paper)
+        .animation(.easeOut(duration: 0.2), value: lines.isEmpty)
+    }
+
+    private static let live = "live"
+}
+
+private struct TranscriptRow: View {
+    let line: TranscriptLine
+
+    var body: some View {
+        let user = line.speaker == .user
+        Text(line.text)
+            .font(.body)
+            .foregroundStyle(PocketshellTheme.secondary)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, user ? 12 : 0)
+            .padding(.vertical, user ? 8 : 0)
+            .background(user ? PocketshellTheme.surface : .clear, in: RoundedRectangle(cornerRadius: 14))
+            .frame(maxWidth: .infinity, alignment: user ? .trailing : .leading)
+            .padding(.leading, user ? 40 : 0)
+            .accessibilityLabel((user ? "You: " : "Assistant: ") + line.text)
+            .accessibilityIdentifier("voice.transcript.line")
     }
 }
 

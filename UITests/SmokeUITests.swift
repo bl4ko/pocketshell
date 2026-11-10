@@ -1490,6 +1490,44 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed)
     }
 
+    func testVoiceBrainFullViewShowsTheTranscript() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+
+        openHost("localbox")
+        tapVoiceToggle()
+
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let input = app.textFields["voice.testInput"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("what are my agents doing\n")
+        XCTAssertTrue(waitForLabel(app.staticTexts["voice.caption"], containing: "All quiet on localbox"))
+
+        app.descendants(matching: .any)["voice.orb"].tap()
+        let caption = app.staticTexts["voice.caption.full"]
+        XCTAssertTrue(caption.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(caption, containing: "All quiet on localbox"))
+        XCTAssertTrue(app.descendants(matching: .any)["voice.orb.large"].exists)
+        let lines = app.staticTexts.matching(identifier: "voice.transcript.line")
+        XCTAssertGreaterThanOrEqual(lines.count, 2)
+        XCTAssertEqual(lines.element(boundBy: lines.count - 2).label, "You: what are my agents doing")
+        XCTAssertEqual(lines.element(boundBy: lines.count - 1).label, "Assistant: Hmm, let me check.")
+        XCTAssertTrue(lines.element(boundBy: lines.count - 1).isHittable, "the newest turn is scrolled into view")
+        XCTAssertTrue(caption.isHittable)
+        XCTAssertFalse(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS '\"agents\"' OR label CONTAINS '[app:'"))
+                .firstMatch.exists, "tool results and app notes stay out of the transcript")
+
+        app.buttons["voice.collapse"].tap()
+        XCTAssertTrue(app.staticTexts["voice.caption"].waitForExistence(timeout: 5))
+        app.buttons["voice.end"].tap()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: bar)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed)
+    }
+
     func testVoiceBrainToolbarToggleStartsAndEndsVoiceMode() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
             throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")

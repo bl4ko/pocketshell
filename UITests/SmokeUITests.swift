@@ -962,6 +962,9 @@ final class SmokeUITests: XCTestCase {
         let sessionRow = app.descendants(matching: .any)["tmux-session-\(session)"]
         XCTAssertTrue(app.navigationBars["Switcher"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.searchFields["Search tabs, sessions, windows"].waitForExistence(timeout: 5))
+        XCTAssertLessThan(
+            app.navigationBars["Switcher"].firstMatch.frame.minY, app.frame.height * 0.25,
+            "the switcher opens expanded")
         let cards = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH 'switcher-tab-'"))
         let secondCard = cards.element(boundBy: 1)
@@ -1898,6 +1901,8 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(switcher.waitForExistence(timeout: 5))
         switcher.tap()
         XCTAssertTrue(app.buttons["herdr-pane-w1:p4"].waitForExistence(timeout: 10))
+        XCTAssertLessThan(
+            app.buttons["herdr-switcher-done"].frame.minY, app.frame.height * 0.25, "the switcher opens expanded")
         XCTAssertFalse(app.buttons["herdr-pane-w1:p1"].exists, "shell panes are hidden by default")
         XCTAssertFalse(app.buttons["herdr-pane-w1:p3"].exists, "shell panes are hidden by default")
         keepScreenshot("herdr-switcher-agents")

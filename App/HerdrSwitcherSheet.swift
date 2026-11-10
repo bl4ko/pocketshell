@@ -30,6 +30,7 @@ struct HerdrSwitcherSheet: View {
     @State private var failure: String?
     @State private var scrolledToFocus = false
     @State private var query = ""
+    @State private var detent = PresentationDetent.large
     @AppStorage(AppSettings.herdrShowShellsKey) private var showShells = false
 
     let controller: ConnectionController
@@ -164,7 +165,7 @@ struct HerdrSwitcherSheet: View {
                 Text(failure ?? "")
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .paperScreen()
     }

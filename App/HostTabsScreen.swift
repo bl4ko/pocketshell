@@ -1225,6 +1225,7 @@ struct TmuxJumpSheet: View {
     @State private var killTarget: KillTarget?
     @State private var query = ""
     @State private var searchPresented = false
+    @State private var detent = PresentationDetent.large
     @AppStorage(AppSettings.tmuxTabsExpandedKey) private var tabsExpanded = true
 
     let controller: ConnectionController?
@@ -1385,7 +1386,7 @@ struct TmuxJumpSheet: View {
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Search tabs, sessions, windows"
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.medium, .large], selection: $detent)
             .presentationDragIndicator(.visible)
             .task {
                 await load()

@@ -1579,6 +1579,38 @@ final class SmokeUITests: XCTestCase {
         app.buttons["composer.close"].tap()
     }
 
+    func testVoiceBrainKeepsAnsweringAfterTheAppWasInTheBackground() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+        openHost("localbox")
+        tapVoiceToggle()
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(app.staticTexts["voice.caption"], containing: "Listening"))
+
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
+        let hold = ProcessInfo.processInfo.environment["PS_TEST_BACKGROUND_HOLD"].flatMap(Double.init) ?? 3
+        Thread.sleep(forTimeInterval: hold)
+        let island = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        island.name = "voice-mode-in-background"
+        island.lifetime = .keepAlways
+        add(island)
+        app.activate()
+
+        XCTAssertTrue(bar.waitForExistence(timeout: 10), "going to the background must not end voice mode")
+        XCTAssertTrue(waitForValue(app.buttons["terminal.voice"], "On"))
+        let input = app.textFields["voice.testInput"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("what are my agents doing\n")
+        XCTAssertTrue(waitForLabel(app.staticTexts["voice.caption"], containing: "All quiet on localbox"))
+
+        app.buttons["voice.end"].tap()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+    }
+
     func testJapaneseImeComposesInlineAtTheCaret() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed IME test skipped")

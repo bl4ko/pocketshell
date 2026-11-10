@@ -234,6 +234,49 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
 }
 
 @MainActor
+@Test func audioInterruptionCutsTheReplyHoldsAnnouncementsAndResumes() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Claude in api is busy. Codex in web is idle."), .finished("stop")]),
+            .success([.text("Okay."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("what are my agents doing")
+    #expect(await eventually { rig.mouth.finishes == 1 && rig.spoken.count == 2 })
+    let reply = try #require(rig.mouth.reply)
+    rig.mouth.hear("Claude in api ", reply: reply)
+
+    rig.brain.audioInterrupted(true)
+    #expect(rig.brain.interrupted)
+    #expect(rig.mouth.stops >= 1)
+    #expect(rig.brain.phase == .listening)
+    #expect(rig.brain.caption == VoiceBrain.Caption(.app, VoiceBrain.pausedCaption))
+    #expect(rig.spoken.map(\.content) == ["what are my agents doing", "Claude in api…"])
+
+    let agents = HostAgents.parse(try fixture("list-agents.txt"))
+    var finished = agents
+    finished[0].status = .idle
+    rig.brain.noteAgents(agents)
+    rig.brain.noteAgents(finished)
+    rig.brain.noteAgents(finished)
+    rig.ears.phrase("words nobody said")
+    rig.time = 60
+    try await Task.sleep(for: .milliseconds(400))
+    #expect(rig.mouth.spoken.isEmpty)
+    #expect(rig.model.requests.count == 1)
+    #expect(rig.brain.caption == VoiceBrain.Caption(.app, VoiceBrain.pausedCaption))
+
+    rig.brain.audioInterrupted(false)
+    #expect(!rig.brain.interrupted)
+    #expect(rig.brain.caption == nil)
+    rig.time = 62
+    #expect(await eventually { rig.mouth.spoken == ["Claude in api finished."] })
+    rig.mouth.settle()
+    rig.ears.phrase("thanks")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    #expect(rig.brain.isOn)
+}
+
+@MainActor
 @Test func agentEventsAreAnnouncedAfterSilence() async throws {
     let rig = try Rig(ScriptedModel([]))
     await rig.brain.start()

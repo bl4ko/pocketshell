@@ -96,3 +96,26 @@ import Testing
     _ = machine.handle(.userPhrase("one"), at: 1)
     #expect(machine.handle(.userPhrase("two"), at: 1.2) == [.stopMouth, .cancelBrain, .respond("two")])
 }
+
+@Test func audioInterruptionCancelsTheReplyAndHoldsAnnouncementsUntilItEnds() {
+    var machine = TurnTaking(now: 0)
+    _ = machine.handle(.userPhrase("what is codex doing"), at: 1)
+    _ = machine.handle(.mouthStarted, at: 1.5)
+    #expect(machine.handle(.interrupted(true), at: 2) == [.stopMouth, .cancelBrain])
+    #expect(machine.phase == .listening)
+    #expect(machine.handle(.eventQueued, at: 3).isEmpty)
+    #expect(machine.handle(.tick, at: 60).isEmpty)
+    #expect(machine.handle(.userPhrase("late words"), at: 61).isEmpty)
+    #expect(machine.handle(.userPartial("late"), at: 61).isEmpty)
+    #expect(machine.phase == .listening)
+    #expect(machine.handle(.interrupted(false), at: 100).isEmpty)
+    #expect(machine.handle(.tick, at: 101).isEmpty)
+    #expect(machine.handle(.tick, at: 101.5) == [.announce])
+}
+
+@Test func audioInterruptionWhileListeningCancelsNothing() {
+    var machine = TurnTaking(now: 0)
+    #expect(machine.handle(.interrupted(true), at: 1).isEmpty)
+    #expect(machine.handle(.interrupted(false), at: 2).isEmpty)
+    #expect(machine.handle(.userPhrase("hello"), at: 3) == [.respond("hello")])
+}

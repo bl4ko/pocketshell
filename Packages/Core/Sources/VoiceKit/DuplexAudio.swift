@@ -1,6 +1,7 @@
 #if os(iOS)
     @preconcurrency import AVFoundation
     import Foundation
+    import UIKit
 
     @MainActor
     public final class DuplexAudio: MicrophoneSource {
@@ -12,6 +13,7 @@
         private var engine = AVAudioEngine()
         private var observers: [NSObjectProtocol] = []
         private var restarts = 0
+        private var recovery = AudioRecovery()
 
         public init() {
             line = PlaybackLine(player: AVAudioPlayerNode())
@@ -22,7 +24,7 @@
             let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }
             let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.portName)" }
             return "running=\(running) engine=\(engine.isRunning) vp=\(engine.inputNode.isVoiceProcessingEnabled)"
-                + " restarts=\(restarts) in=\(inputs.joined(separator: ",")) out=\(outputs.joined(separator: ","))"
+                + " paused=\(recovery.paused) restarts=\(restarts) in=\(inputs.joined(separator: ",")) out=\(outputs.joined(separator: ","))"
         }
 
         public func setSink(_ sink: (@Sendable (AVAudioPCMBuffer) -> Void)?) {
@@ -40,6 +42,7 @@
             try session.setActive(true)
             try build()
             running = true
+            recovery = AudioRecovery()
             observe()
         }
 
@@ -73,8 +76,8 @@
             }
         }
 
-        private func rebuild(fresh: Bool) {
-            guard running else { return }
+        private func rebuild(fresh: Bool) -> Bool {
+            guard running else { return false }
             restarts += 1
             line.stop()
             engine.inputNode.removeTap(onBus: 0)
@@ -86,8 +89,24 @@
             do {
                 try AVAudioSession.sharedInstance().setActive(true)
                 try build()
+                return true
             } catch {
+                return false
+            }
+        }
+
+        private func recover(_ event: AudioRecovery.Event) {
+            guard running else { return }
+            switch recovery.handle(event, engineRunning: engine.isRunning) {
+            case .none:
+                break
+            case .pause:
+                line.stop()
                 onInterruption?(true)
+            case .restart:
+                recover(.restarted(rebuild(fresh: false)))
+            case .resumed:
+                onInterruption?(false)
             }
         }
 
@@ -96,28 +115,31 @@
             observers.append(
                 center.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) {
                     [weak self] _ in
-                    MainActor.assumeIsolated { self?.rebuild(fresh: false) }
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.recover(.restarted(self.rebuild(fresh: false)))
+                    }
                 })
             observers.append(
                 center.addObserver(
                     forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
                 ) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.rebuild(fresh: true) }
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.recover(.restarted(self.rebuild(fresh: true)))
+                    }
                 })
             observers.append(
                 center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) {
                     [weak self] note in
                     let raw = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.uintValue ?? 0
                     let began = AVAudioSession.InterruptionType(rawValue: raw) == .began
-                    MainActor.assumeIsolated {
-                        guard let self else { return }
-                        if began {
-                            self.line.stop()
-                        } else {
-                            self.rebuild(fresh: false)
-                        }
-                        self.onInterruption?(began)
-                    }
+                    MainActor.assumeIsolated { self?.recover(began ? .interruptionBegan : .interruptionEnded) }
+                })
+            observers.append(
+                center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) {
+                    [weak self] _ in
+                    MainActor.assumeIsolated { self?.recover(.appActive) }
                 })
         }
 

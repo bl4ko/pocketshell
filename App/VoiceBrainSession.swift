@@ -2,6 +2,7 @@ import BrainKit
 import Foundation
 import KeyKit
 import Models
+import SSHKit
 import VoiceKit
 
 #if os(iOS)
@@ -85,6 +86,13 @@ final class VoiceBrainSession: ObservableObject {
     private(set) var testEars: TextEars?
     private var audio: AnyObject?
     private var report_: () -> String = { "-" }
+    static let execDeadline = 20.0
+
+    static func bounded(
+        _ exec: @escaping @MainActor (String) async -> String?, seconds: Double = execDeadline
+    ) -> @MainActor (String) async -> String? {
+        { command in try? await withDeadline(seconds: seconds) { await exec(command) } }
+    }
 
     var isOn: Bool { brain?.isOn == true }
 
@@ -98,7 +106,8 @@ final class VoiceBrainSession: ObservableObject {
     func start(host: HostConfig, io: AgentToolbox.IO, onDictation: @escaping (String) -> Void) {
         guard !isOn else { return }
         var io = io
-        let exec = io.exec
+        let exec = Self.bounded(io.exec)
+        io.exec = exec
         io.unsentPrompt = { agent in
             await exec(AgentControl.boxCommand(agent)).flatMap(AgentControl.unsentPrompt(fromBox:))
         }

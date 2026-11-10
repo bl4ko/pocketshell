@@ -44,6 +44,7 @@ public final class VoiceBrain: ObservableObject {
     @Published public private(set) var inputLevel: Float = 0
     @Published public private(set) var outputLevel: Float = 0
     @Published public private(set) var muted = false
+    @Published public private(set) var interrupted = false
     @Published public private(set) var lastTiming: TurnTiming?
     public var onDictation: ((String) -> Void)?
     public var onEnded: (() -> Void)?
@@ -91,6 +92,7 @@ public final class VoiceBrain: ObservableObject {
         var appended = false
     }
 
+    public static let pausedCaption = "Paused by another audio session"
     public static let fillers = ["Hmm.", "One moment.", "Let me think."]
 
     public init(
@@ -137,6 +139,7 @@ public final class VoiceBrain: ObservableObject {
         partialSince = nil
         mouthQuiet = -.infinity
         agentSegment = false
+        interrupted = false
         ears.onEvent = { [weak self] in self?.hear($0) }
         mouth.onEvent = { [weak self] in self?.mouthChanged($0) }
         ears.muted = muted
@@ -189,6 +192,7 @@ public final class VoiceBrain: ObservableObject {
         caption = nil
         detail = nil
         timing = nil
+        interrupted = false
         phase = .listening
         inputLevel = 0
         outputLevel = 0
@@ -206,11 +210,13 @@ public final class VoiceBrain: ObservableObject {
     }
 
     public func audioInterrupted(_ began: Bool) {
-        guard isOn else { return }
+        guard isOn, began != interrupted else { return }
+        interrupted = began
+        feed(.interrupted(began))
         if began {
             mouth.stop()
-            caption = Caption(.app, "Paused by another audio session")
-        } else if caption?.speaker == .app {
+            caption = Caption(.app, Self.pausedCaption)
+        } else if caption == Caption(.app, Self.pausedCaption) {
             caption = nil
         }
     }
@@ -230,6 +236,12 @@ public final class VoiceBrain: ObservableObject {
 
     private func hear(_ event: EarsEvent) {
         guard isOn else { return }
+        switch event {
+        case .partial, .phrase:
+            if interrupted { return }
+        default:
+            break
+        }
         switch event {
         case .partial(let text):
             if text.isEmpty {
@@ -361,7 +373,7 @@ public final class VoiceBrain: ObservableObject {
         noteAgents(toolbox.agents)
         guard id == turnID, !Task.isCancelled, machine.phase == .listening, let current = toolbox.currentAgent,
             let draft = await toolbox.unsentPrompt(for: current), id == turnID, !Task.isCancelled,
-            machine.phase == .listening
+            machine.phase == .listening, !interrupted
         else { return }
         machine.startTurn(at: clock())
         phase = machine.phase

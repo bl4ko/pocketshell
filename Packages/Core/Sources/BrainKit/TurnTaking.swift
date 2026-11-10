@@ -17,6 +17,7 @@ public struct TurnTaking: Equatable, Sendable {
         case eventQueued
         case tick
         case muted(Bool)
+        case interrupted(Bool)
     }
 
     public enum Effect: Equatable, Sendable {
@@ -32,6 +33,7 @@ public struct TurnTaking: Equatable, Sendable {
 
     public private(set) var phase: Phase = .listening
     public private(set) var muted = false
+    public private(set) var interrupted = false
     private var lastActivity: TimeInterval
     private var thinkingSince: TimeInterval = 0
     private var audioStarted = false
@@ -47,7 +49,7 @@ public struct TurnTaking: Equatable, Sendable {
     public mutating func handle(_ input: Input, at now: TimeInterval) -> [Effect] {
         switch input {
         case .userPartial(let text):
-            guard !muted else { return [] }
+            guard !muted, !interrupted else { return [] }
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 if phase == .userSpeaking { phase = .listening }
                 lastActivity = now
@@ -67,7 +69,9 @@ public struct TurnTaking: Equatable, Sendable {
                 return [.stopMouth, .cancelBrain]
             }
         case .userPhrase(let text):
-            guard !muted, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+            guard !muted, !interrupted, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return []
+            }
             var effects: [Effect] = []
             if phase == .thinking || phase == .speaking || mouthBusy { effects = [.stopMouth, .cancelBrain] }
             phase = .thinking
@@ -111,6 +115,15 @@ public struct TurnTaking: Equatable, Sendable {
                 lastActivity = now
             }
             return []
+        case .interrupted(let on):
+            interrupted = on
+            lastActivity = now
+            guard on else { return [] }
+            let busy = phase == .thinking || phase == .speaking || mouthBusy
+            phase = .listening
+            brainDone = true
+            mouthBusy = false
+            return busy ? [.stopMouth, .cancelBrain] : []
         }
     }
 
@@ -123,9 +136,9 @@ public struct TurnTaking: Equatable, Sendable {
     }
 
     private mutating func announceIfQuiet(_ now: TimeInterval) -> [Effect] {
-        guard eventsPending, phase == .listening, !mouthBusy, now - lastActivity >= Self.proactiveSilence else {
-            return []
-        }
+        guard eventsPending, !interrupted, phase == .listening, !mouthBusy,
+            now - lastActivity >= Self.proactiveSilence
+        else { return [] }
         eventsPending = false
         brainDone = true
         return [.announce]

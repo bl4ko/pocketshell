@@ -14,7 +14,7 @@ enum BrainSettings {
     static let modelKey = "pocketshell.brainModel"
     static let voiceKey = "pocketshell.brainVoice"
     static let apiKeyAccount = "pocketshell.brain.apiKey"
-    static let defaultModel = "gpt-6-luna"
+    static let defaultModel = "claude-opus-5-5"
     static let earsKey = "pocketshell.speechEars"
     static let mouthKey = "pocketshell.speechMouth"
     static let sonioxVoiceKey = "pocketshell.sonioxVoice"

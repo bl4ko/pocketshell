@@ -158,7 +158,8 @@ import Testing
     let missing = SpeechSelection.resolve(ears: "soniox", mouth: "", hasSonioxKey: false)
     #expect(missing.ears == .iphone)
     #expect(missing.mouth == .iphone)
-    #expect(missing.notice != nil)
+    #expect(missing.notice == "No Soniox key, using on-device speech")
+    #expect(SpeechProvider.allCases.map(\.label) == ["On device", "Soniox"])
 }
 
 @Test func resamplerTurnsMicrophoneFloatsInto16kHzSignedPCM() throws {

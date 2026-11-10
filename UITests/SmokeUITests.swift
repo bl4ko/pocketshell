@@ -1721,15 +1721,15 @@ final class SmokeUITests: XCTestCase {
         choose("Soniox", in: mouth)
         XCTAssertTrue(waitForSetting(mouth, showing: "Soniox"))
         XCTAssertTrue(waitForSetting(app.descendants(matching: .any)["settings.speech.voice"], showing: "Hazel"))
-        choose("iPhone", in: mouth)
-        XCTAssertTrue(waitForSetting(mouth, showing: "iPhone"))
+        choose("On device", in: mouth)
+        XCTAssertTrue(waitForSetting(mouth, showing: "On device"))
         XCTAssertTrue(
             waitForSetting(app.descendants(matching: .any)["settings.speech.voice"], showing: "Best installed"))
 
         choose("Soniox", in: ears)
         XCTAssertTrue(waitForSetting(ears, showing: "Soniox"))
-        choose("iPhone", in: ears)
-        XCTAssertTrue(waitForSetting(ears, showing: "iPhone"))
+        choose("On device", in: ears)
+        XCTAssertTrue(waitForSetting(ears, showing: "On device"))
     }
 
     func testSettingsBrainModelListsAndChecksModels() throws {
@@ -1845,7 +1845,7 @@ final class SmokeUITests: XCTestCase {
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(waitForSetting(voice, showing: "Hazel"))
 
-        choose("iPhone", in: mouth)
+        choose("On device", in: mouth)
         XCTAssertTrue(waitForSetting(voice, showing: "Best installed"))
         voice.tap()
         let best = app.buttons["voices.row.best"]

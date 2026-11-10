@@ -108,8 +108,8 @@ struct VoiceSettingsSections: View {
         } footer: {
             Text(
                 mouth.wrappedValue == .soniox || ears.wrappedValue == .soniox
-                    ? "Soniox streams audio to soniox.com and bills per use. Without a key, iPhone speech is used."
-                    : "iPhone speech runs on this device. Add voices in iOS Settings, Accessibility, Spoken Content.")
+                    ? "Soniox streams audio to soniox.com and bills per use. Without a key, on-device speech is used."
+                    : "On-device speech needs no key. Add voices in Settings, Accessibility, Spoken Content.")
         }
     }
 

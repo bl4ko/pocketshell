@@ -8,7 +8,7 @@ public enum SpeechProvider: String, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .iphone: "iPhone"
+        case .iphone: "On device"
         case .soniox: "Soniox"
         }
     }
@@ -35,7 +35,7 @@ public struct SpeechSelection: Equatable, Sendable {
         guard !hasSonioxKey, wantedEars == .soniox || wantedMouth == .soniox else {
             return SpeechSelection(ears: wantedEars, mouth: wantedMouth)
         }
-        return SpeechSelection(ears: .iphone, mouth: .iphone, notice: "No Soniox key, using iPhone speech")
+        return SpeechSelection(ears: .iphone, mouth: .iphone, notice: "No Soniox key, using on-device speech")
     }
 }
 
@@ -103,7 +103,7 @@ public final class FallbackMouth: VoiceMouth {
         fallingBack = true
         failedAt = clock()
         if error.kind == .auth { disabled = true }
-        onNotice?(error.notice + ", using iPhone voice")
+        onNotice?(error.notice + ", using on-device voice")
         for (index, item) in unspoken.enumerated() {
             guard let reply = item.reply else {
                 fallback.speak(item.text)
@@ -182,7 +182,7 @@ public final class FallbackEars: VoiceEars {
         guard running, !usingFallback else { return }
         usingFallback = true
         primary.stop()
-        onNotice?(message + ", using iPhone speech recognition")
+        onNotice?(message + ", using on-device speech recognition")
         let fallback = makeFallback()
         fallback.onEvent = { [weak self] in self?.onEvent?($0) }
         fallback.muted = muted

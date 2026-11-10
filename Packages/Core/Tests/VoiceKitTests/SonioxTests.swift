@@ -40,7 +40,7 @@ import Testing
     #expect(error.kind == .auth)
 }
 
-@Test func sonioxStartRequestAsksForEnglishPCMWithEndpointDetection() {
+@Test func sonioxStartRequestAsksForEnglishPCMWithEndpointDetectionAndAgentText() {
     let config = json(.text(SonioxSTT.start(terms: ["Claude", "Herdr"])))
     #expect(config["model"] as? String == "stt-rt-v6")
     #expect(config["audio_format"] as? String == "pcm_s16le")
@@ -48,8 +48,14 @@ import Testing
     #expect(config["num_channels"] as? Int == 1)
     #expect(config["language_hints"] as? [String] == ["en"])
     #expect(config["enable_endpoint_detection"] as? Bool == true)
+    #expect(config["enable_agent_text_input"] as? Bool == true)
     #expect((config["context"] as? [String: Any])?["terms"] as? [String] == ["Claude", "Herdr"])
     #expect(config["api_key"] == nil)
+    let text = json(.text(SonioxSTT.agentText("two near", end: false)))
+    #expect(text["type"] as? String == "agent_text")
+    #expect(text["text"] as? String == "two near")
+    #expect(text["end_of_segment"] as? Bool == false)
+    #expect(json(.text(SonioxSTT.agentText("", end: true)))["end_of_segment"] as? Bool == true)
 }
 
 @Test func sonioxTTSRequestsAskForPCMWithTimestampsAndStreamText() {
@@ -584,6 +590,13 @@ final class ScriptedEars: VoiceEars {
     let span = try #require(spoken.first)
     #expect(abs(span.lowerBound - (500 - 2 + 0.42)) < 0.05)
     #expect(abs(span.upperBound - (500 - 2 + 1.52)) < 0.05)
+
+    ears.agentSaid("Claude is ", end: false)
+    ears.agentSaid("", end: true)
+    #expect(await eventually { socket.sentJSON.filter { $0["type"] as? String == "agent_text" }.count == 2 })
+    let said = socket.sentJSON.filter { $0["type"] as? String == "agent_text" }
+    #expect(said.map { $0["text"] as? String } == ["Claude is ", ""])
+    #expect(said.map { $0["end_of_segment"] as? Bool } == [false, true])
 
     ears.muted = true
     #expect(await eventually { socket.sentJSON.contains { $0["type"] as? String == "finalize" } })

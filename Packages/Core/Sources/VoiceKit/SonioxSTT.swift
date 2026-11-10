@@ -14,9 +14,14 @@ public enum SonioxSTT {
             "num_channels": 1,
             "language_hints": ["en"],
             "enable_endpoint_detection": true,
+            "enable_agent_text_input": true,
         ]
         if !terms.isEmpty { config["context"] = ["terms": terms] }
         return SonioxJSON.string(config)
+    }
+
+    public static func agentText(_ text: String, end: Bool) -> String {
+        SonioxJSON.string(["type": "agent_text", "text": text, "end_of_segment": end])
     }
 }
 

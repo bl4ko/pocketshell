@@ -82,6 +82,10 @@
             teardown()
         }
 
+        public func agentSaid(_ text: String, end: Bool) {
+            outbox?.yield(.text(SonioxSTT.agentText(text, end: end)))
+        }
+
         private func receive(_ socket: SonioxSocket) async {
             var transcript = SonioxTranscript()
             while true {

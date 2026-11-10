@@ -80,6 +80,10 @@ public final class VoiceBrain: ObservableObject {
     private var turnActive = false
     private var turnText: String?
     private var carry: String?
+    private var echo = EchoGuard()
+    private var partialSince: TimeInterval?
+    private var mouthQuiet: TimeInterval? = -.infinity
+    private var agentSegment = false
 
     private struct Reply {
         let id: Int
@@ -129,6 +133,10 @@ public final class VoiceBrain: ObservableObject {
         turnActive = false
         turnText = nil
         carry = nil
+        echo = EchoGuard()
+        partialSince = nil
+        mouthQuiet = -.infinity
+        agentSegment = false
         ears.onEvent = { [weak self] in self?.hear($0) }
         mouth.onEvent = { [weak self] in self?.mouthChanged($0) }
         ears.muted = muted
@@ -171,6 +179,7 @@ public final class VoiceBrain: ObservableObject {
         tickTask?.cancel()
         pollTask?.cancel()
         mouth.stop()
+        endAgentSegment()
         ears.stop()
         audio.stop()
         toolbox.gate.cancel()
@@ -222,11 +231,23 @@ public final class VoiceBrain: ObservableObject {
         guard isOn else { return }
         switch event {
         case .partial(let text):
-            if !text.isEmpty { caption = Caption(.user, text) }
+            if text.isEmpty {
+                partialSince = nil
+            } else {
+                if partialSince == nil { partialSince = clock() }
+                if isEcho(text, since: partialSince, until: clock() - 1) { break }
+                caption = Caption(.user, text)
+            }
             feed(.userPartial(text))
         case .phrase(let text):
             let span = spoken
             spoken = nil
+            let echoed = isEcho(text, since: span?.start ?? partialSince, until: span?.end ?? clock() - 2)
+            partialSince = nil
+            guard !echoed else {
+                feed(.userPartial(""))
+                break
+            }
             heard = (clock(), span?.start, span?.end)
             feed(.userPhrase(text))
             heard = nil
@@ -239,24 +260,44 @@ public final class VoiceBrain: ObservableObject {
         }
     }
 
+    private func isEcho(_ text: String, since: TimeInterval?, until: TimeInterval) -> Bool {
+        if let mouthQuiet, until > mouthQuiet + 0.3 { return false }
+        return echo.matches(text, since: (since ?? clock()) - 2)
+    }
+
     private func mouthChanged(_ event: MouthEvent) {
         switch event {
         case .started:
+            mouthQuiet = nil
             feed(.mouthStarted)
-        case .upcoming:
-            break
+        case .upcoming(let text):
+            agentSegment = true
+            ears.agentSaid(text, end: false)
         case .heard(let text, let reply):
+            echo.heard(text, at: clock())
             guard let index = replies.firstIndex(where: { $0.id == reply }) else { break }
             replies[index].heard += text
             caption = Caption(.brain, replies[index].heard.trimmingCharacters(in: .whitespacesAndNewlines))
             if timing?.firstAudio == nil { timing?.firstAudio = clock() }
         case .idle:
+            mouthQuiet = clock()
             outputLevel = 0
             feed(.mouthIdle)
-            if !turnActive { replies = [] }
+            if !turnActive { settleTurn() }
             completeTiming()
         case .level(let level): outputLevel = level
         }
+    }
+
+    private func settleTurn() {
+        replies = []
+        endAgentSegment()
+    }
+
+    private func endAgentSegment() {
+        guard agentSegment else { return }
+        agentSegment = false
+        ears.agentSaid("", end: true)
     }
 
     private func feed(_ input: TurnTaking.Input) {
@@ -273,6 +314,7 @@ public final class VoiceBrain: ObservableObject {
             switch effect {
             case .stopMouth:
                 mouth.stop()
+                endAgentSegment()
             case .cancelBrain:
                 break
             case .respond(let text):
@@ -453,7 +495,7 @@ public final class VoiceBrain: ObservableObject {
         store?.save(conversation)
         feed(.brainDone)
         if timing?.turn == id { timing?.brainDone = true }
-        if !mouth.isSpeaking { replies = [] }
+        if !mouth.isSpeaking { settleTurn() }
         completeTiming()
     }
 

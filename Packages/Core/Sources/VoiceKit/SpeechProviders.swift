@@ -174,6 +174,10 @@ public final class FallbackEars: VoiceEars {
         active.stop()
     }
 
+    public func agentSaid(_ text: String, end: Bool) {
+        active.agentSaid(text, end: end)
+    }
+
     private func switchToFallback(_ message: String) async {
         guard running, !usingFallback else { return }
         usingFallback = true

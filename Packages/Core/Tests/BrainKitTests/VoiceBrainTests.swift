@@ -437,6 +437,78 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
         ])
 }
 
+@MainActor
+@Test func echoOfTheMouthIsNotABargeInButNewWordsAre() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Claude in api is busy running tests."), .finished("stop")]),
+            .success([.text("Okay."), .finished("stop")]),
+        ]))
+    rig.time = 100
+    rig.ears.phrase("what is claude doing")
+    #expect(await eventually { rig.mouth.finishes == 1 })
+    let reply = try #require(rig.mouth.reply)
+    rig.mouth.hear("Claude in api is busy ", reply: reply)
+    rig.time = 101
+    rig.ears.partial("in API is busy")
+    #expect(rig.mouth.stops == 0)
+    #expect(rig.brain.phase == .speaking)
+    #expect(rig.brain.caption?.speaker == .brain)
+    rig.ears.phrase("Claude in API is busy.", start: 100.2, end: 100.9)
+    #expect(rig.mouth.stops == 0)
+    #expect(rig.model.requests.count == 1)
+    rig.mouth.hear("running tests.", reply: reply)
+    rig.mouth.settle()
+    rig.time = 101.5
+    rig.ears.phrase("running tests", start: 100.9, end: 101.1)
+    #expect(rig.model.requests.count == 1)
+    #expect(rig.brain.phase == .listening)
+
+    rig.time = 103
+    rig.ears.phrase("is busy running tests", start: 102, end: 102.8)
+    #expect(await eventually { rig.model.requests.count == 2 })
+    #expect(rig.spoken.last { $0.role == .user }?.content == "is busy running tests")
+}
+
+@MainActor
+@Test func aNewWordWhileTheMouthSpeaksStopsItAtOnce() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([.success([.text("Claude in api is busy running tests."), .finished("stop")])]))
+    rig.ears.phrase("what is claude doing")
+    #expect(await eventually { rig.mouth.finishes == 1 })
+    rig.mouth.hear("Claude in api is busy ", reply: rig.mouth.reply)
+    rig.ears.partial("is busy stop")
+    #expect(rig.mouth.stops == 1)
+    #expect(rig.brain.phase == .userSpeaking)
+    #expect(rig.brain.caption == VoiceBrain.Caption(.user, "is busy stop"))
+}
+
+@MainActor
+@Test func agentSpeechGoesToTheEarsAheadOfPlaybackAndEndsWithTheTurnOrAnInterrupt() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Let me look."), .toolCalls([call("c1", "list_agents")]), .finished("tool_calls")]),
+            .success([.text("Claude is busy."), .finished("stop")]),
+            .success([.text("Codex is idle."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("what is claude doing")
+    #expect(await eventually { rig.mouth.finishes == 2 })
+    rig.mouth.onEvent?(.upcoming("Let me "))
+    rig.mouth.onEvent?(.upcoming("look. Claude is busy."))
+    #expect(rig.ears.said == ["Let me ", "look. Claude is busy."])
+    #expect(rig.ears.ends == 0)
+    rig.mouth.settle()
+    #expect(rig.ears.ends == 1)
+
+    rig.ears.phrase("and codex")
+    #expect(await eventually { rig.mouth.finishes == 3 })
+    rig.mouth.onEvent?(.upcoming("Codex "))
+    rig.ears.partial("wait")
+    #expect(rig.ears.said.last == "Codex ")
+    #expect(rig.ears.ends == 2)
+    #expect(rig.mouth.stops == 1)
+}
+
 @Test func benchmarkCSVQuotesTextAndLeavesMissingTimesEmpty() throws {
     let timing = TurnTiming(
         turn: 7, date: Date(timeIntervalSince1970: 0),

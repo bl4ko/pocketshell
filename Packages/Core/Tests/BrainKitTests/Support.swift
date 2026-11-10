@@ -70,10 +70,17 @@ final class StagedMouth: VoiceMouth {
 final class RecordingEars: VoiceEars {
     var onEvent: ((EarsEvent) -> Void)?
     var muted = false
+    private(set) var said: [String] = []
+    private(set) var ends = 0
 
     func start() async throws {}
 
     func stop() {}
+
+    func agentSaid(_ text: String, end: Bool) {
+        if !text.isEmpty { said.append(text) }
+        if end { ends += 1 }
+    }
 
     func partial(_ text: String) {
         onEvent?(.partial(text))

@@ -22,6 +22,11 @@ public protocol VoiceEars: AnyObject {
     var muted: Bool { get set }
     func start() async throws
     func stop()
+    func agentSaid(_ text: String, end: Bool)
+}
+
+extension VoiceEars {
+    public func agentSaid(_ text: String, end: Bool) {}
 }
 
 @MainActor

@@ -14,18 +14,25 @@
         public var terms = ["Claude", "Codex", "Herdr", "tmux", "PocketShell"]
         public private(set) var lastError: SonioxError?
         public let model: String
+        public let turnEnd: TurnEnd
         private let apiKey: String
         private let microphone: MicrophoneSource
         private let connect: SonioxConnect
         private let permission: @MainActor () async -> Bool
         private let timeline: AudioTimeline
+        private let clock: @Sendable () -> TimeInterval
         private let flag = LockedFlag()
         private var socket: SonioxSocket?
         private var outbox: AsyncStream<SocketMessage>.Continuation?
         private var tasks: [Task<Void, Never>] = []
+        private var partial = ""
+        private var quietTask: Task<Void, Never>?
+        private var finalizedAt = -TimeInterval.infinity
+        static let finalizeSpacing: TimeInterval = 2
 
         public init(
             apiKey: String, microphone: MicrophoneSource, model: String = SonioxSTT.model,
+            turnEnd: TurnEnd = .balanced,
             connect: @escaping SonioxConnect = WebSocketConnection.connect,
             permission: @escaping @MainActor () async -> Bool = { true },
             clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
@@ -33,8 +40,10 @@
             self.apiKey = apiKey
             self.microphone = microphone
             self.model = model
+            self.turnEnd = turnEnd
             self.connect = connect
             self.permission = permission
+            self.clock = clock
             timeline = AudioTimeline(clock: clock)
         }
 
@@ -45,7 +54,7 @@
             guard !apiKey.isEmpty else { throw SonioxError(.auth, message: "No Soniox API key") }
             let socket = connect(SonioxSTT.url, apiKey)
             let (stream, outbox) = AsyncStream<SocketMessage>.makeStream()
-            outbox.yield(.text(SonioxSTT.start(model: model, terms: terms)))
+            outbox.yield(.text(SonioxSTT.start(model: model, terms: terms, turnEnd: turnEnd)))
             self.socket = socket
             self.outbox = outbox
             flag.on = muted
@@ -86,6 +95,21 @@
             outbox?.yield(.text(SonioxSTT.agentText(text, end: end)))
         }
 
+        private func watchQuiet(_ text: String) {
+            guard let quiet = turnEnd.quiet, text != partial else { return }
+            partial = text
+            quietTask?.cancel()
+            guard !text.isEmpty else { return }
+            quietTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(quiet))
+                guard let self, !Task.isCancelled, self.partial == text, !self.muted,
+                    self.clock() - self.finalizedAt >= Self.finalizeSpacing
+                else { return }
+                self.finalizedAt = self.clock()
+                self.outbox?.yield(.text(SonioxSTT.finalize))
+            }
+        }
+
         private func receive(_ socket: SonioxSocket) async {
             var transcript = SonioxTranscript()
             while true {
@@ -101,7 +125,9 @@
                     switch event {
                     case .partial(let text):
                         onEvent?(.partial(text))
+                        watchQuiet(text)
                     case .phrase(let text, let start, let end):
+                        watchQuiet("")
                         if let start, let end {
                             onEvent?(
                                 .spoken(
@@ -133,6 +159,8 @@
             outbox = nil
             for task in tasks { task.cancel() }
             tasks = []
+            quietTask?.cancel()
+            partial = ""
             socket?.close()
             socket = nil
         }

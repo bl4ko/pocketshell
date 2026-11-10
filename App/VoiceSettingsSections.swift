@@ -11,6 +11,7 @@ struct VoiceSettingsSections: View {
     @AppStorage(BrainSettings.sonioxVoiceKey) private var sonioxVoice = SonioxTTS.defaultVoice
     @AppStorage(BrainSettings.earsKey) private var earsRaw = SpeechProvider.iphone.rawValue
     @AppStorage(BrainSettings.mouthKey) private var mouthRaw = ""
+    @AppStorage(BrainSettings.turnEndKey) private var turnEnd = TurnEnd.balanced
     @AppStorage(BrainSettings.saveAudioKey) private var saveAudio = false
     @State private var brainKeySaved = PasswordVault.get(account: BrainSettings.apiKeyAccount) != nil
     @State private var sonioxKeySaved = BrainSettings.sonioxKey != nil
@@ -78,6 +79,12 @@ struct VoiceSettingsSections: View {
                 ForEach(SpeechProvider.allCases) { Text($0.label).tag($0) }
             }
             .accessibilityIdentifier("settings.speech.ears")
+            if ears.wrappedValue == .soniox {
+                Picker("Turn end", selection: $turnEnd) {
+                    ForEach(TurnEnd.allCases) { Text($0.label).tag($0) }
+                }
+                .accessibilityIdentifier("settings.speech.turnEnd")
+            }
             Picker("Mouth", selection: mouth) {
                 ForEach(SpeechProvider.allCases) { Text($0.label).tag($0) }
             }

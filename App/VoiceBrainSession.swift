@@ -17,6 +17,7 @@ enum BrainSettings {
     static let earsKey = "pocketshell.speechEars"
     static let mouthKey = "pocketshell.speechMouth"
     static let sonioxVoiceKey = "pocketshell.sonioxVoice"
+    static let turnEndKey = "pocketshell.speechTurnEnd"
     static let sonioxKeyAccount = "pocketshell.soniox.apiKey"
     static let saveAudioKey = "pocketshell.benchmarkSaveAudio"
 
@@ -39,6 +40,10 @@ enum BrainSettings {
     static var sonioxVoice: String {
         let voice = UserDefaults.standard.string(forKey: sonioxVoiceKey) ?? ""
         return voice.isEmpty ? SonioxTTS.defaultVoice : voice
+    }
+
+    static var turnEnd: TurnEnd {
+        UserDefaults.standard.string(forKey: turnEndKey).flatMap(TurnEnd.init(rawValue:)) ?? .balanced
     }
 
     static func selection() -> SpeechSelection {
@@ -166,7 +171,8 @@ final class VoiceBrainSession: ObservableObject {
             var parts = Parts(ears: TextEars(), mouth: system, lifecycle: .none)
             if selection.ears == .soniox {
                 let soniox = SonioxEars(
-                    apiKey: key, microphone: audio, permission: { await AVAudioApplication.requestRecordPermission() })
+                    apiKey: key, microphone: audio, turnEnd: BrainSettings.turnEnd,
+                    permission: { await AVAudioApplication.requestRecordPermission() })
                 let wrapped = FallbackEars(primary: soniox, fallback: onDevice)
                 parts.fallbackEars = wrapped
                 parts.ears = wrapped

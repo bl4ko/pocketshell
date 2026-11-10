@@ -1,12 +1,48 @@
 import Foundation
 
+public enum TurnEnd: String, CaseIterable, Identifiable, Sendable {
+    case relaxed
+    case balanced
+    case fast
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .relaxed: "Relaxed"
+        case .balanced: "Balanced"
+        case .fast: "Fast"
+        }
+    }
+
+    public var latencyLevel: Int {
+        switch self {
+        case .relaxed: 0
+        case .balanced: 2
+        case .fast: 3
+        }
+    }
+
+    public var sensitivity: Double {
+        switch self {
+        case .relaxed: 0
+        case .balanced: 0.3
+        case .fast: 0.8
+        }
+    }
+
+    public var maxDelayMs: Int { self == .relaxed ? 2000 : 500 }
+
+    public var quiet: TimeInterval? { self == .fast ? 0.5 : nil }
+}
+
 public enum SonioxSTT {
     public static let url = URL(string: "wss://stt-rt.soniox.com/transcribe-websocket")!
     public static let model = "stt-rt-v6"
     public static let keepalive = #"{"type":"keepalive"}"#
     public static let finalize = #"{"type":"finalize"}"#
 
-    public static func start(model: String = model, terms: [String]) -> String {
+    public static func start(model: String = model, terms: [String], turnEnd: TurnEnd = .balanced) -> String {
         var config: [String: Any] = [
             "model": model,
             "audio_format": "pcm_s16le",
@@ -14,6 +50,9 @@ public enum SonioxSTT {
             "num_channels": 1,
             "language_hints": ["en"],
             "enable_endpoint_detection": true,
+            "endpoint_latency_adjustment_level": turnEnd.latencyLevel,
+            "endpoint_sensitivity": turnEnd.sensitivity,
+            "max_endpoint_delay_ms": turnEnd.maxDelayMs,
             "enable_agent_text_input": true,
         ]
         if !terms.isEmpty { config["context"] = ["terms": terms] }

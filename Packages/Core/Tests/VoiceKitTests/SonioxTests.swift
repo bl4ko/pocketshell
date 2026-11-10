@@ -58,6 +58,21 @@ import Testing
     #expect(json(.text(SonioxSTT.agentText("", end: true)))["end_of_segment"] as? Bool == true)
 }
 
+@Test func turnEndKnobSetsTheSonioxEndpointParameters() {
+    func endpoint(_ turnEnd: TurnEnd) -> [Double] {
+        let config = json(.text(SonioxSTT.start(terms: [], turnEnd: turnEnd)))
+        return ["endpoint_latency_adjustment_level", "endpoint_sensitivity", "max_endpoint_delay_ms"].map {
+            config[$0] as? Double ?? -1
+        }
+    }
+    #expect(endpoint(.relaxed) == [0, 0, 2000])
+    #expect(endpoint(.balanced) == [2, 0.3, 500])
+    #expect(endpoint(.fast) == [3, 0.8, 500])
+    #expect(json(.text(SonioxSTT.start(terms: [])))["max_endpoint_delay_ms"] as? Int == 500)
+    #expect(TurnEnd.allCases.map(\.label) == ["Relaxed", "Balanced", "Fast"])
+    #expect(TurnEnd.allCases.map(\.quiet) == [nil, nil, 0.5])
+}
+
 @Test func sonioxTTSRequestsAskForPCMWithTimestampsAndStreamText() {
     let start = json(.text(SonioxTTS.start(stream: "s1", voice: "Hazel")))
     #expect(start["stream_id"] as? String == "s1")
@@ -597,6 +612,8 @@ final class ScriptedEars: VoiceEars {
     let said = socket.sentJSON.filter { $0["type"] as? String == "agent_text" }
     #expect(said.map { $0["text"] as? String } == ["Claude is ", ""])
     #expect(said.map { $0["end_of_segment"] as? Bool } == [false, true])
+    try await Task.sleep(for: .milliseconds(700))
+    #expect(!socket.sentJSON.contains { $0["type"] as? String == "finalize" })
 
     ears.muted = true
     #expect(await eventually { socket.sentJSON.contains { $0["type"] as? String == "finalize" } })
@@ -610,6 +627,39 @@ final class ScriptedEars: VoiceEars {
     #expect(ears.lastError?.kind == .auth)
     #expect(socket.closed)
     #expect(microphone.sink == nil)
+}
+
+@MainActor
+@Test func fastTurnEndFinalizesAfterHalfASecondWithoutNewWords() async throws {
+    let factory = SocketFactory()
+    let clock = LockedClock(500)
+    let ears = SonioxEars(
+        apiKey: "test-key", microphone: FakeMicrophone(), turnEnd: .fast, connect: factory.connect,
+        clock: { clock.value })
+    var events: [EarsEvent] = []
+    ears.onEvent = { events.append($0) }
+    try await ears.start()
+    let socket = try #require(factory.last)
+    func finalizes() -> Int { socket.sentJSON.filter { $0["type"] as? String == "finalize" }.count }
+    #expect(await eventually { socket.sentJSON.first?["endpoint_latency_adjustment_level"] as? Int == 3 })
+    socket.push(#"{"tokens":[{"text":"What","is_final":false}]}"#)
+    try await Task.sleep(for: .milliseconds(250))
+    socket.push(#"{"tokens":[{"text":"What","is_final":false},{"text":" now","is_final":false}]}"#)
+    try await Task.sleep(for: .milliseconds(350))
+    #expect(finalizes() == 0)
+    socket.push(#"{"tokens":[{"text":"What","is_final":false},{"text":" now","is_final":false}]}"#)
+    #expect(await eventually { finalizes() == 1 })
+    socket.push(
+        #"{"tokens":[{"text":"What","is_final":true},{"text":" now","is_final":true},{"text":"<fin>","is_final":true}]}"#
+    )
+    #expect(await eventually { events.contains(.phrase("What now")) })
+    socket.push(#"{"tokens":[{"text":"And","is_final":false}]}"#)
+    try await Task.sleep(for: .milliseconds(700))
+    #expect(finalizes() == 1)
+    clock.value = 503
+    socket.push(#"{"tokens":[{"text":"And","is_final":false},{"text":" then","is_final":false}]}"#)
+    #expect(await eventually { finalizes() == 2 })
+    ears.stop()
 }
 
 final class LockedClock: @unchecked Sendable {

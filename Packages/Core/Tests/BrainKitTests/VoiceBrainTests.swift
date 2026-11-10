@@ -8,6 +8,7 @@ private final class ScriptedModel: BrainModel, @unchecked Sendable {
     private let lock = NSLock()
     private var replies: [Result<[BrainStreamEvent], BrainError>]
     private var received: [[ChatMessage]] = []
+    private var warmed = 0
     let delay: Duration
 
     init(_ replies: [Result<[BrainStreamEvent], BrainError>], delay: Duration = .zero) {
@@ -16,6 +17,11 @@ private final class ScriptedModel: BrainModel, @unchecked Sendable {
     }
 
     var requests: [[ChatMessage]] { lock.withLock { received } }
+    var warmUps: Int { lock.withLock { warmed } }
+
+    func warmUp() {
+        lock.withLock { warmed += 1 }
+    }
 
     func stream(_ messages: [ChatMessage], tools: [ToolDefinition]) -> AsyncThrowingStream<BrainStreamEvent, Error> {
         let reply = lock.withLock { () -> Result<[BrainStreamEvent], BrainError> in
@@ -148,7 +154,7 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     let second = try #require(rig.model.requests.last)
     #expect(second.last?.role == .tool)
     #expect(second.last?.content?.contains("Claude in api") == true)
-    #expect(rig.brain.conversation.messages.map(\.role) == [.user, .assistant, .tool, .assistant])
+    #expect(rig.brain.conversation.messages.map(\.role) == [.user, .user, .assistant, .tool, .assistant])
     #expect(second.first?.role == .system)
     #expect(await eventually { rig.brain.phase == .listening })
 }
@@ -507,6 +513,33 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     #expect(rig.ears.said.last == "Codex ")
     #expect(rig.ears.ends == 2)
     #expect(rig.mouth.stops == 1)
+}
+
+@MainActor
+@Test func agentSnapshotRidesWithTheUserTurnAndIsNotRepeatedWhileUnchanged() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Claude is busy."), .finished("stop")]),
+            .success([.text("Codex is idle."), .finished("stop")]),
+        ]))
+    #expect(rig.model.warmUps == 1)
+    rig.ears.phrase("what is claude doing")
+    #expect(await eventually { rig.mouth.finishes == 1 })
+    rig.mouth.settle()
+    let first = try #require(rig.model.requests.first)
+    #expect(first.map(\.role) == [.system, .user, .user])
+    let note = try #require(first[1].content)
+    #expect(note.hasPrefix("[app: Agents now: Claude in api (busy, tmux work:2, current tab); Codex in web"))
+    #expect(note.hasSuffix(".]"))
+    #expect(first[2].content == "what is claude doing")
+    #expect(first[0].content?.contains("Agents now") == true)
+
+    rig.ears.phrase("and codex")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    let second = try #require(rig.model.requests.last)
+    #expect(Array(second.prefix(first.count)) == first)
+    #expect(second.filter { $0.content?.hasPrefix(AgentToolbox.snapshotPrefix) == true }.count == 1)
+    #expect(second.last?.content == "and codex")
 }
 
 @Test func benchmarkCSVQuotesTextAndLeavesMissingTimesEmpty() throws {

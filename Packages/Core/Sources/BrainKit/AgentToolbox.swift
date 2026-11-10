@@ -27,6 +27,7 @@ public final class AgentToolbox {
     }
 
     public private(set) var agents: [BrainAgent] = []
+    public private(set) var listed = false
     public var gate = ConfirmationGate()
     public var onSent: ((BrainAgent, String) -> Void)?
     private let io: IO
@@ -37,10 +38,22 @@ public final class AgentToolbox {
 
     public var currentAgent: BrainAgent? { agents.first(where: \.isCurrent) }
 
+    public static let snapshotPrefix = "[app: Agents now: "
+
+    public var snapshot: String? {
+        guard listed else { return nil }
+        guard !agents.isEmpty else { return Self.snapshotPrefix + "none.]" }
+        let items = agents.map { agent in
+            "\(agent.spokenName) (\(agent.status.rawValue), \(agent.where_)\(agent.isCurrent ? ", current tab" : ""))"
+        }
+        return Self.snapshotPrefix + items.joined(separator: "; ") + ".]"
+    }
+
     @discardableResult
     public func listAgents() async -> [BrainAgent]? {
         guard let output = await io.exec(HostAgents.listCommand()) else { return nil }
         agents = HostAgents.parse(output, current: io.current())
+        listed = true
         return agents
     }
 
@@ -230,7 +243,9 @@ public final class AgentToolbox {
     }
 
     nonisolated public static let definitions: [ToolDefinition] = [
-        tool("list_agents", "List the Claude Code and Codex agents on this host with status and a short preview.", [:]),
+        tool(
+            "list_agents",
+            "Refresh the agent list: status, working directory, and a short preview of each agent's screen.", [:]),
         tool(
             "read_answer", "Read an agent's last answer, or its full last turn, from its transcript.",
             ["agent": agentParameter, "which": .object(["type": "string", "enum": .array(["last", "full"])])]),
@@ -267,7 +282,7 @@ public final class AgentToolbox {
 
     nonisolated private static let agentParameter: JSONValue = .object([
         "type": "string",
-        "description": "Agent name from list_agents. Omit for the agent in the current tab.",
+        "description": "Agent name as the app lists it. Omit for the agent in the current tab.",
     ])
 
     nonisolated private static func tool(

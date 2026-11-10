@@ -65,7 +65,8 @@ public struct Conversation: Codable, Equatable, Sendable {
     }
 
     private mutating func trim() {
-        while messages.count > maxMessages || characters > maxCharacters {
+        guard messages.count > maxMessages || characters > maxCharacters else { return }
+        while messages.count > maxMessages / 2 || characters > maxCharacters / 2 {
             guard let next = messages.indices.dropFirst().first(where: { messages[$0].role == .user }) else { break }
             for message in messages[..<next] where message.role == .user {
                 let text = (message.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

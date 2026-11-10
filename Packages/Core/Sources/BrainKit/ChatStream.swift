@@ -169,6 +169,11 @@ public struct ChatStreamAssembler: Sendable {
 
 public protocol BrainModel: Sendable {
     func stream(_ messages: [ChatMessage], tools: [ToolDefinition]) -> AsyncThrowingStream<BrainStreamEvent, Error>
+    func warmUp()
+}
+
+extension BrainModel {
+    public func warmUp() {}
 }
 
 public struct OpenAIChatClient: BrainModel {
@@ -201,6 +206,18 @@ public struct OpenAIChatClient: BrainModel {
         if !apiKey.isEmpty { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
         request.httpBody = try JSONEncoder().encode(ChatRequest(model: model, messages: messages, tools: tools))
         return request
+    }
+
+    public var warmUpRequest: URLRequest {
+        let models = Self.endpoint(for: baseURL).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("models")
+        var request = URLRequest(url: models, timeoutInterval: timeout)
+        if !apiKey.isEmpty { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
+        return request
+    }
+
+    public func warmUp() {
+        session.dataTask(with: warmUpRequest).resume()
     }
 
     public func stream(_ messages: [ChatMessage], tools: [ToolDefinition]) -> AsyncThrowingStream<

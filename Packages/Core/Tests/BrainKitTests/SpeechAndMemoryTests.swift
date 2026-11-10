@@ -51,6 +51,22 @@ import Testing
     #expect((conversation.messages.last?.content?.count ?? 0) < 6100)
 }
 
+@Test func historyTrimsToHalfSoThePromptPrefixStaysStableBetweenTrims() {
+    let now = Date()
+    var conversation = Conversation(hostID: "h", now: now, maxMessages: 8, maxCharacters: 10_000)
+    for turn in 1...4 {
+        conversation.append(.user("request \(turn)"), at: now)
+        conversation.append(.assistant("answer \(turn)"), at: now)
+    }
+    #expect(conversation.messages.count == 8)
+    conversation.append(.user("request 5"), at: now)
+    #expect(conversation.messages.map(\.content) == ["request 4", "answer 4", "request 5"])
+    let prefix = conversation.request(system: "sys")
+    conversation.append(.assistant("answer 5"), at: now)
+    conversation.append(.user("request 6"), at: now)
+    #expect(Array(conversation.request(system: "sys").prefix(prefix.count)) == prefix)
+}
+
 @Test func historyCanCutAnAssistantMessageToWhatWasHeard() {
     let now = Date()
     var conversation = Conversation(hostID: "h", now: now)

@@ -94,6 +94,18 @@ func assemblesTextAndToolCallsFromStreamDeltas(chunkSize: Int) throws {
     #expect(OpenAIChatClient.endpoint(for: full) == full)
 }
 
+@Test func warmUpAsksTheSameHostForItsModelList() {
+    let client = OpenAIChatClient(
+        baseURL: URL(string: "https://llm.example.test/v1")!, apiKey: "sk-test", model: "gpt-6-luna")
+    #expect(client.warmUpRequest.url?.absoluteString == "https://llm.example.test/v1/models")
+    #expect(client.warmUpRequest.value(forHTTPHeaderField: "Authorization") == "Bearer sk-test")
+    #expect(client.warmUpRequest.httpMethod == "GET")
+    let full = OpenAIChatClient(
+        baseURL: URL(string: "https://llm.example.test/openai/v1/chat/completions")!, apiKey: "", model: "m")
+    #expect(full.warmUpRequest.url?.absoluteString == "https://llm.example.test/openai/v1/models")
+    #expect(full.warmUpRequest.value(forHTTPHeaderField: "Authorization") == nil)
+}
+
 @Test func messagesRoundTripThroughStorage() throws {
     let messages: [ChatMessage] = [
         .user("hi"), .assistant("ok", toolCalls: [ToolCall(id: "a", name: "list_agents", arguments: "{}")]),

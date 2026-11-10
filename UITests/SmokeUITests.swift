@@ -72,6 +72,10 @@ final class SmokeUITests: XCTestCase {
             app.launchEnvironment["PS_UI_TEST_CLOUD_CONFIG"] = configFixture(
                 hosts: [("00000000-0000-0000-0000-000000000001", "bl4ot")])
         }
+        if name.contains("testZZCloudVoice") {
+            app.launchEnvironment["PS_UI_TEST_CLOUD_CONFIG"] = configFixture(
+                hosts: [], voice: ["pocketshell.brainBaseURL": cloudEndpoint, "pocketshell.speechMouth": "soniox"])
+        }
         app.launch()
     }
 
@@ -2103,6 +2107,23 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["bl4ot-tailscale"].firstMatch.exists)
     }
 
+    private let cloudEndpoint = "https://example.com/\(UUID().uuidString.prefix(8))/v1"
+
+    func testZZCloudVoiceSettingsArriveOnADeviceWithoutThem() {
+        app.buttons["Settings"].tap()
+        let endpoint = app.textFields["settings.brain.endpoint"]
+        for _ in 0..<4 where !endpoint.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(endpoint.waitForExistence(timeout: 5))
+        XCTAssertEqual(endpoint.value as? String, cloudEndpoint)
+        let mouth = app.descendants(matching: .any)["settings.speech.mouth"]
+        for _ in 0..<4 where !mouth.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(waitForSetting(mouth, showing: "Soniox"))
+    }
+
     private func caretVisible(_ image: UIImage, terminal: CGRect) -> Bool {
         for x in stride(from: terminal.minX + 1, through: terminal.minX + 50, by: 2) {
             for y in stride(from: terminal.minY + 1, through: terminal.minY + 18, by: 2) {
@@ -2273,12 +2294,15 @@ final class SmokeUITests: XCTestCase {
         app.buttons["Save"].tap()
     }
 
-    private func configFixture(hosts: [(id: String, name: String)]) -> String {
+    private func configFixture(hosts: [(id: String, name: String)], voice: [String: String] = [:]) -> String {
         let hostsJSON = hosts.map { host in
             #"{"id":"\#(host.id)","name":"\#(host.name)","hostname":"127.0.0.1","port":22,"username":"test","keyTag":"pocketshell-device-key"}"#
         }.joined(separator: ",")
+        let now = Date().timeIntervalSinceReferenceDate
+        let voiceJSON = voice.map { #""\#($0)":{"value":"\#($1)","updatedAt":\#(now)}"# }.joined(separator: ",")
         let json =
-            #"{"version":1,"hosts":[\#(hostsJSON)],"vncHosts":[],"snippets":[],"toolbarKeys":[],"knownHosts":{}}"#
+            #"{"version":1,"hosts":[\#(hostsJSON)],"vncHosts":[],"snippets":[],"toolbarKeys":[],"knownHosts":{}"#
+            + (voice.isEmpty ? "}" : #","voice":{"fields":{\#(voiceJSON)}}}"#)
         return Data(json.utf8).base64EncodedString()
     }
 

@@ -50,6 +50,7 @@ private struct SyncedCredentials: Codable {
     var importedKeys: [ImportedKey]
     var privateKeys: [String: PortablePrivateKey]
     var vncPasswords: [String: String]
+    var voiceKeys: SyncedFields?
 }
 
 @MainActor
@@ -79,6 +80,7 @@ final class AppStore: ObservableObject {
 
     let keyStore = DeviceKeyStore()
     let knownHosts: KnownHostsStore
+    let voice: VoiceSync
 
     private let hostsStore = JSONStore<[HostConfig]>(filename: "hosts.json")
     private let vncHostsStore = JSONStore<[VNCHostConfig]>(filename: "vnc-hosts.json")
@@ -95,7 +97,8 @@ final class AppStore: ObservableObject {
     private static let cloudConfigAccount = "config-v1"
     private static let cloudCredentialsAccount = "credentials-v1"
 
-    init() {
+    init(voice: VoiceSync = VoiceSync()) {
+        self.voice = voice
         let localFixture = testConfig("PS_UI_TEST_LOCAL_CONFIG")
         hosts = localFixture?.hosts ?? hostsStore.load() ?? []
         vncHosts = localFixture?.vncHosts ?? vncHostsStore.load() ?? []
@@ -108,6 +111,8 @@ final class AppStore: ObservableObject {
         sessionOrder = sessionOrderStore.load() ?? [:]
         workspaceUpdatedAt = workspaceUpdatedAtStore.load() ?? [:]
         knownHosts = KnownHostsStore(fileURL: appDataURL("known-hosts.json"))
+        voice.onSettingsEdit = { [weak self] in self?.saveConfigToCloud() }
+        voice.onKeysEdit = { [weak self] in self?.saveCredentialsToCloud() }
         if cloudSyncEnabled {
             refreshCloudConfig()
         }
@@ -169,7 +174,8 @@ final class AppStore: ObservableObject {
             snippets: snippets,
             toolbarKeys: toolbarKeys,
             knownHosts: (try? knownHosts.entries()) ?? [:],
-            workspace: localWorkspace
+            workspace: localWorkspace,
+            voice: voice.settings()
         )
     }
 
@@ -184,6 +190,7 @@ final class AppStore: ObservableObject {
         }
         try? knownHosts.merge(config.knownHosts)
         applyingConfig = false
+        voice.receive(settings: config.voice)
         saveConfigToCloud()
     }
 
@@ -238,6 +245,9 @@ final class AppStore: ObservableObject {
         toolbarKeys = config.toolbarKeys
         try? knownHosts.merge(config.knownHosts)
         applyingConfig = false
+        if voice.receive(settings: config.voice) {
+            saveConfigToCloud()
+        }
     }
 
     func saveConfigToCloud() {
@@ -309,7 +319,8 @@ final class AppStore: ObservableObject {
     func setCredentialsSyncEnabled(_ enabled: Bool) {
         guard enabled, cloudSyncEnabled else { return }
         var credentials = localCredentials()
-        if let remote = cloudCredentials() {
+        let remote = cloudCredentials()
+        if let remote {
             credentials = mergedCredentials(local: credentials, remote: remote)
         }
         if credentials.deviceKey == nil {
@@ -317,6 +328,7 @@ final class AppStore: ObservableObject {
             credentials.deviceKey = deviceKey
         }
         guard applyCredentials(credentials) else { return }
+        voice.receive(keys: remote?.voiceKeys)
         saveCredentialsToCloud()
     }
 
@@ -346,6 +358,9 @@ final class AppStore: ObservableObject {
     private func receiveCloudCredentials() {
         guard let credentials = cloudCredentials() else { return }
         applyCredentials(credentials)
+        if voice.receive(keys: credentials.voiceKeys) {
+            saveCredentialsToCloud()
+        }
     }
 
     private func localCredentials() -> SyncedCredentials {
@@ -366,7 +381,8 @@ final class AppStore: ObservableObject {
             deviceKey: deviceKey,
             importedKeys: importedKeys,
             privateKeys: keys,
-            vncPasswords: passwords
+            vncPasswords: passwords,
+            voiceKeys: voice.keys()
         )
     }
 

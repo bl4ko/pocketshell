@@ -4,6 +4,7 @@ import SwiftUI
 import VoiceKit
 
 struct VoiceSettingsSections: View {
+    @EnvironmentObject private var store: AppStore
     var developerMode: Bool
     @AppStorage(BrainSettings.baseURLKey) private var brainURL = ""
     @AppStorage(BrainSettings.voiceKey) private var systemVoice = ""
@@ -29,6 +30,10 @@ struct VoiceSettingsSections: View {
         .onAppear {
             systemVoices = SpeechVoices.ranked(SpeechVoices.installed())
             lastTurn = BrainSettings.benchmarkLog.last
+        }
+        .onReceive(store.voice.$keysRevision) { _ in
+            brainKeySaved = PasswordVault.get(account: BrainSettings.apiKeyAccount) != nil
+            sonioxKeySaved = BrainSettings.sonioxKey != nil
         }
         .sheet(item: $shared) { file in ActivitySheet(url: file.url) }
     }
@@ -63,7 +68,7 @@ struct VoiceSettingsSections: View {
         } header: {
             Text("Voice brain")
         } footer: {
-            Text("Any OpenAI-compatible Chat Completions endpoint. Keys stay in this device's Keychain.")
+            VoiceSyncNote(text: "Any OpenAI-compatible Chat Completions endpoint.")
         }
     }
 
@@ -158,6 +163,7 @@ struct VoiceSettingsSections: View {
 }
 
 struct KeychainKeyRow: View {
+    @EnvironmentObject private var store: AppStore
     var title: String
     var account: String
     @Binding var saved: Bool
@@ -171,7 +177,7 @@ struct KeychainKeyRow: View {
                     Text("Saved").foregroundStyle(.secondary)
                         .accessibilityIdentifier("\(id).saved")
                     Button("Remove", role: .destructive) {
-                        PasswordVault.delete(account: account)
+                        store.voice.setKey("", account: account)
                         saved = false
                     }
                     .buttonStyle(.borderless)
@@ -198,7 +204,7 @@ struct KeychainKeyRow: View {
     private func save() {
         let key = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
-        PasswordVault.set(key, account: account)
+        store.voice.setKey(key, account: account)
         draft = ""
         saved = true
     }

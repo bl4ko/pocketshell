@@ -444,6 +444,23 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
 }
 
 @MainActor
+@Test func speechThatContinuesBeforeACompleteReplyIsHeardReplacesThatReply() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Fix what?"), .finished("stop")]),
+            .success([.text("OK, asking Claude."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("tell claude to fix the")
+    #expect(await eventually { rig.mouth.finishes == 1 && rig.spoken.count == 2 })
+    rig.ears.partial("login")
+    #expect(rig.spoken.map(\.content) == ["tell claude to fix the"])
+    rig.ears.phrase("login bug on mobile")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    let users = try #require(rig.model.requests.last).filter { $0.content?.hasPrefix("[app:") != true }
+    #expect(users.dropFirst().map(\.content) == ["tell claude to fix the login bug on mobile"])
+}
+
+@MainActor
 @Test func echoOfTheMouthIsNotABargeInButNewWordsAre() async throws {
     let rig = try await StagedRig(
         ScriptedModel([

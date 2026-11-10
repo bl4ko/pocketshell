@@ -292,6 +292,7 @@ public final class VoiceBrain: ObservableObject {
 
     private func settleTurn() {
         replies = []
+        turnText = nil
         endAgentSegment()
     }
 
@@ -379,6 +380,7 @@ public final class VoiceBrain: ObservableObject {
             text = carry + " " + phrase
         }
         carry = nil
+        turnText = nil
         switch toolbox.gate.resolve(userTurn: text) {
         case .confirmed(let pending):
             let result = await toolbox.perform(pending.action)
@@ -494,7 +496,6 @@ public final class VoiceBrain: ObservableObject {
     private func finish(_ id: Int) {
         guard id == turnID else { return }
         turnActive = false
-        turnText = nil
         store?.save(conversation)
         feed(.brainDone)
         if timing?.turn == id { timing?.brainDone = true }

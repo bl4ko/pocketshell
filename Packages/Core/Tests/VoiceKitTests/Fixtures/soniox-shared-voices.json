@@ -1,0 +1,157 @@
+{
+  "voices": [
+    {
+      "id": "Daniel",
+      "description": "Low British baritone that sits still and lets the facts do the work. Built for documentaries, explainers, and other long, even reads.",
+      "gender": "male",
+      "age": "middle_aged",
+      "accent": "british",
+      "use_case": [
+        "narration",
+        "entertainment",
+        "educational"
+      ],
+      "style": [
+        "calm",
+        "deep",
+        "smooth",
+        "friendly"
+      ]
+    },
+    {
+      "id": "Nina",
+      "description": "Young British speaker with bounce in the phrasing and an easy, matey warmth. Made for social clips and casual conversation.",
+      "gender": "female",
+      "age": "young",
+      "accent": "british",
+      "use_case": [
+        "social_media",
+        "conversational"
+      ],
+      "style": [
+        "energetic",
+        "friendly",
+        "neutral",
+        "smooth",
+        "bright"
+      ]
+    },
+    {
+      "id": "Emma",
+      "description": "Offhand British delivery with a light lift at the ends of lines. Sounds like someone you would actually text back.",
+      "gender": "female",
+      "age": "young",
+      "accent": "british",
+      "use_case": [
+        "conversational",
+        "social_media"
+      ],
+      "style": [
+        "bright",
+        "friendly",
+        "energetic"
+      ]
+    },
+    {
+      "id": "Grace",
+      "description": "Unhurried American guide voice, quiet and sure of itself. Fits lessons, support scripts, and anything that should not startle the listener.",
+      "gender": "female",
+      "age": "middle_aged",
+      "accent": "american",
+      "use_case": [
+        "educational",
+        "narration",
+        "conversational"
+      ],
+      "style": [
+        "calm",
+        "soft",
+        "neutral",
+        "confident",
+        "smooth"
+      ]
+    },
+    {
+      "id": "Owen",
+      "description": "Dry Australian male register, low and unhurried. Documentary pacing with a hint of understatement.",
+      "gender": "male",
+      "age": "young",
+      "accent": "australian",
+      "use_case": [
+        "narration",
+        "conversational",
+        "social_media"
+      ],
+      "style": [
+        "deep",
+        "confident",
+        "friendly"
+      ]
+    },
+    {
+      "id": "Kenji",
+      "description": "Measured Japanese male speech, polite without stiffness. Works for both straight narration and everyday dialogue.",
+      "gender": "male",
+      "age": "middle_aged",
+      "accent": "japanese",
+      "use_case": [
+        "narration",
+        "conversational"
+      ],
+      "style": [
+        "calm",
+        "friendly",
+        "bright",
+        "smooth",
+        "soft"
+      ]
+    },
+    {
+      "id": "Lucia",
+      "description": "A clear, mature female voice with a natural Spanish accent, steady pacing, and a composed tone that feels warm, focused, and approachable.",
+      "gender": "female",
+      "age": "middle_aged",
+      "accent": "spanish",
+      "use_case": [
+        "educational"
+      ],
+      "style": [
+        "confident",
+        "soft",
+        "bright"
+      ]
+    },
+    {
+      "id": "Arthur",
+      "description": "Older British male with a worn, low register and a little gravel in the finish. Narration that feels lived-in rather than polished.",
+      "gender": "male",
+      "age": "old",
+      "accent": "british",
+      "use_case": [
+        "narration"
+      ],
+      "style": [
+        "deep",
+        "expressive",
+        "dramatic",
+        "smooth",
+        "breathy"
+      ]
+    },
+    {
+      "id": "Hazel",
+      "description": "Low-key American conversation, smooth and unforced. Chats, explainers, and editorial audio that should not sound staged.",
+      "gender": "female",
+      "age": "young",
+      "accent": "american",
+      "use_case": [
+        "conversational"
+      ],
+      "style": [
+        "warm",
+        "smooth"
+      ]
+    }
+  ],
+  "next_page_cursor": null
+}

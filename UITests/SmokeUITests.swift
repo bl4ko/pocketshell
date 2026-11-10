@@ -39,6 +39,9 @@ final class SmokeUITests: XCTestCase {
             app.launchEnvironment["PS_UI_TEST_BRAIN_URL"] = env["PS_TEST_BRAIN_URL"]
             app.launchEnvironment["PS_UI_TEST_BRAIN_KEY"] = env["PS_TEST_BRAIN_KEY"]
         }
+        if name.contains("testSettingsVoicePicker") {
+            app.launchEnvironment["PS_UI_TEST_VOICES"] = Self.voiceCatalog
+        }
         if name.contains("testTerminalCamera") {
             app.launchEnvironment["PS_UI_TEST_CAMERA"] = "1"
         }
@@ -1617,7 +1620,98 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForSetting(ears, showing: "iPhone"))
     }
 
+    private static let voiceCatalog = """
+        {"voices":[
+        {"id":"Daniel","description":"Low British baritone that sits still and lets the facts do the work.",
+        "gender":"male","age":"middle_aged","accent":"british","use_case":["narration"],"style":["calm","deep"]},
+        {"id":"Kenji","description":"Measured Japanese male speech, polite without stiffness.",
+        "gender":"male","age":"middle_aged","accent":"japanese","use_case":["conversational"],"style":["calm"]},
+        {"id":"Grace","description":"Unhurried American guide voice, quiet and sure of itself.",
+        "gender":"female","age":"middle_aged","accent":"american","use_case":["conversational"],
+        "style":["calm","soft"]},
+        {"id":"Owen","description":"Dry Australian male register, low and unhurried.",
+        "gender":"male","age":"young","accent":"australian","use_case":["conversational"],
+        "style":["deep","confident"]},
+        {"id":"Hazel","description":"Low-key American conversation, smooth and unforced.",
+        "gender":"female","age":"young","accent":"american","use_case":["conversational"],
+        "style":["warm","smooth"]}
+        ],"next_page_cursor":null}
+        """
+
+    func testSettingsVoicePickerSelectsAndPreviewsAVoice() {
+        app.buttons["Settings"].tap()
+        let mouth = app.descendants(matching: .any)["settings.speech.mouth"]
+        let saveAudio = app.switches["settings.benchmark.saveAudio"]
+        for _ in 0..<4 where !(saveAudio.exists && saveAudio.isHittable) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(mouth.waitForExistence(timeout: 5))
+        choose("Soniox", in: mouth)
+        let voice = app.descendants(matching: .any)["settings.speech.voice"]
+        XCTAssertTrue(waitForSetting(voice, showing: "Hazel"))
+
+        voice.tap()
+        let hazel = app.buttons["voices.row.Hazel"]
+        let grace = app.buttons["voices.row.Grace"]
+        let kenji = app.buttons["voices.row.Kenji"]
+        XCTAssertTrue(hazel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.images["voices.selected.Hazel"].exists)
+        XCTAssertTrue(waitForLabel(grace, containing: "Unhurried American guide voice"))
+        XCTAssertTrue(waitForLabel(grace, containing: "Female"))
+        XCTAssertFalse(kenji.exists, "the default filter shows English accents only")
+
+        let playGrace = app.buttons["voices.play.Grace"]
+        XCTAssertEqual(playGrace.value as? String, "Stopped")
+        grace.tap()
+        XCTAssertTrue(app.images["voices.selected.Grace"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.images["voices.selected.Hazel"].exists)
+        XCTAssertTrue(waitForValue(playGrace, "Playing"), "selecting a voice plays its preview")
+
+        let playOwen = app.buttons["voices.play.Owen"]
+        playOwen.tap()
+        XCTAssertTrue(waitForValue(playOwen, "Playing"))
+        XCTAssertTrue(waitForValue(playGrace, "Stopped"), "only one preview plays at a time")
+        XCTAssertTrue(app.images["voices.selected.Grace"].exists, "the play button does not select")
+        playOwen.tap()
+        XCTAssertTrue(waitForValue(playOwen, "Stopped"))
+
+        app.segmentedControls["voices.filter.gender"].buttons["Male"].tap()
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: grace)
+        XCTAssertEqual(XCTWaiter().wait(for: [hidden], timeout: 5), .completed)
+        XCTAssertTrue(app.buttons["voices.row.Daniel"].exists)
+        app.segmentedControls["voices.filter.gender"].buttons["All"].tap()
+        XCTAssertTrue(grace.waitForExistence(timeout: 5))
+        choose("All accents", in: app.descendants(matching: .any)["voices.filter.accent"])
+        XCTAssertTrue(kenji.waitForExistence(timeout: 5))
+
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(waitForSetting(voice, showing: "Grace"))
+
+        voice.tap()
+        XCTAssertTrue(hazel.waitForExistence(timeout: 5))
+        hazel.tap()
+        XCTAssertTrue(app.images["voices.selected.Hazel"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(waitForSetting(voice, showing: "Hazel"))
+
+        choose("iPhone", in: mouth)
+        XCTAssertTrue(waitForSetting(voice, showing: "Best installed"))
+        voice.tap()
+        let best = app.buttons["voices.row.best"]
+        XCTAssertTrue(best.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.images["voices.selected.best"].exists)
+        best.tap()
+        XCTAssertTrue(waitForValue(app.buttons["voices.play.best"], "Playing"))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(waitForSetting(voice, showing: "Best installed"))
+    }
+
     private func choose(_ option: String, in picker: XCUIElement) {
+        let bar = app.navigationBars.firstMatch
+        for _ in 0..<3 where picker.frame.minY < bar.frame.maxY + 8 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)))
+        }
         picker.tap()
         let item = app.buttons.matching(
             NSPredicate(format: "label == %@ AND identifier != %@", option, picker.identifier)

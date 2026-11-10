@@ -16,7 +16,6 @@ struct VoiceSettingsSections: View {
     @State private var brainKeySaved = PasswordVault.get(account: BrainSettings.apiKeyAccount) != nil
     @State private var sonioxKeySaved = BrainSettings.sonioxKey != nil
     @State private var systemVoices: [VoiceChoice] = []
-    @State private var sonioxVoices = SonioxTTS.voices
     @State private var lastTurn: TurnTiming?
     @State private var shared: SharedFile?
     @State private var exportError: String?
@@ -31,7 +30,6 @@ struct VoiceSettingsSections: View {
             systemVoices = SpeechVoices.ranked(SpeechVoices.installed())
             lastTurn = BrainSettings.benchmarkLog.last
         }
-        .task(id: sonioxKeySaved) { await loadSonioxVoices() }
         .sheet(item: $shared) { file in ActivitySheet(url: file.url) }
     }
 
@@ -89,19 +87,12 @@ struct VoiceSettingsSections: View {
                 ForEach(SpeechProvider.allCases) { Text($0.label).tag($0) }
             }
             .accessibilityIdentifier("settings.speech.mouth")
-            if mouth.wrappedValue == .soniox {
-                Picker("Voice", selection: $sonioxVoice) {
-                    ForEach(sonioxVoices, id: \.self) { Text($0).tag($0) }
-                }
-                .pickerStyle(.navigationLink)
-                .accessibilityIdentifier("settings.speech.voice")
-            } else {
-                Picker("Voice", selection: $systemVoice) {
-                    Text("Best installed").tag("")
-                    ForEach(systemVoices) { Text($0.label).tag($0.id) }
-                }
-                .accessibilityIdentifier("settings.speech.voice")
+            NavigationLink {
+                VoicePickerScreen(mouth: mouth.wrappedValue)
+            } label: {
+                LabeledContent("Voice", value: voiceName)
             }
+            .accessibilityIdentifier("settings.speech.voice")
             KeychainKeyRow(
                 title: "Soniox key", account: BrainSettings.sonioxKeyAccount, saved: $sonioxKeySaved,
                 id: "settings.speech.sonioxKey")
@@ -153,10 +144,9 @@ struct VoiceSettingsSections: View {
         }
     }
 
-    private func loadSonioxVoices() async {
-        guard sonioxKeySaved, let key = BrainSettings.sonioxKey else { return }
-        let fetched = await SonioxTTS.fetchVoices(apiKey: key)
-        if !fetched.isEmpty { sonioxVoices = fetched }
+    private var voiceName: String {
+        if mouth.wrappedValue == .soniox { return sonioxVoice.isEmpty ? SonioxTTS.defaultVoice : sonioxVoice }
+        return systemVoices.first { $0.id == systemVoice }?.name ?? "Best installed"
     }
 }
 

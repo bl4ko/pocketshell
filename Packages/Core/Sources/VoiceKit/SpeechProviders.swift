@@ -25,13 +25,13 @@ public struct SpeechSelection: Equatable, Sendable {
         self.notice = notice
     }
 
-    public static func defaultMouth(hasSonioxKey: Bool) -> SpeechProvider {
+    public static func defaultProvider(hasSonioxKey: Bool) -> SpeechProvider {
         hasSonioxKey ? .soniox : .iphone
     }
 
     public static func resolve(ears: String?, mouth: String?, hasSonioxKey: Bool) -> SpeechSelection {
-        let wantedEars = ears.flatMap(SpeechProvider.init(rawValue:)) ?? .iphone
-        let wantedMouth = mouth.flatMap(SpeechProvider.init(rawValue:)) ?? defaultMouth(hasSonioxKey: hasSonioxKey)
+        let wantedEars = ears.flatMap(SpeechProvider.init(rawValue:)) ?? defaultProvider(hasSonioxKey: hasSonioxKey)
+        let wantedMouth = mouth.flatMap(SpeechProvider.init(rawValue:)) ?? defaultProvider(hasSonioxKey: hasSonioxKey)
         guard !hasSonioxKey, wantedEars == .soniox || wantedMouth == .soniox else {
             return SpeechSelection(ears: wantedEars, mouth: wantedMouth)
         }

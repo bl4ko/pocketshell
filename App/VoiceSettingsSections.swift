@@ -9,7 +9,7 @@ struct VoiceSettingsSections: View {
     @AppStorage(BrainSettings.modelKey) private var brainModel = BrainSettings.defaultModel
     @AppStorage(BrainSettings.voiceKey) private var systemVoice = ""
     @AppStorage(BrainSettings.sonioxVoiceKey) private var sonioxVoice = SonioxTTS.defaultVoice
-    @AppStorage(BrainSettings.earsKey) private var earsRaw = SpeechProvider.iphone.rawValue
+    @AppStorage(BrainSettings.earsKey) private var earsRaw = ""
     @AppStorage(BrainSettings.mouthKey) private var mouthRaw = ""
     @AppStorage(BrainSettings.turnEndKey) private var turnEnd = TurnEnd.balanced
     @AppStorage(BrainSettings.saveAudioKey) private var saveAudio = false
@@ -35,13 +35,15 @@ struct VoiceSettingsSections: View {
 
     private var ears: Binding<SpeechProvider> {
         Binding(
-            get: { SpeechProvider(rawValue: earsRaw) ?? .iphone },
+            get: { SpeechProvider(rawValue: earsRaw) ?? SpeechSelection.defaultProvider(hasSonioxKey: sonioxKeySaved) },
             set: { earsRaw = $0.rawValue })
     }
 
     private var mouth: Binding<SpeechProvider> {
         Binding(
-            get: { SpeechProvider(rawValue: mouthRaw) ?? SpeechSelection.defaultMouth(hasSonioxKey: sonioxKeySaved) },
+            get: {
+                SpeechProvider(rawValue: mouthRaw) ?? SpeechSelection.defaultProvider(hasSonioxKey: sonioxKeySaved)
+            },
             set: { mouthRaw = $0.rawValue })
     }
 

@@ -128,13 +128,6 @@ import Testing
     #expect(abs(playhead.position(at: 20.4) - 1.15) < 0.0001)
 }
 
-@Test func sonioxVoicesComeFromTheModelListWithCuratedVoicesFirst() throws {
-    let voices = SonioxTTS.voices(fromModels: try fixtureData("soniox-tts-models", "json"))
-    #expect(voices == ["Daniel", "Zed", "Hazel", "Grace"])
-    #expect(SonioxTTS.ordered(voices) == ["Hazel", "Grace", "Daniel", "Zed"])
-    #expect(SonioxTTS.ordered([]) == SonioxTTS.voices)
-}
-
 @Test func playbackQueueKeepsSentenceOrderWhenLaterAudioArrivesFirst() {
     var queue = SonioxPlaybackQueue()
     queue.open("s1")
@@ -155,7 +148,9 @@ import Testing
 }
 
 @Test func speechSelectionDefaultsMouthToSonioxOnlyWithAKey() {
-    #expect(SpeechSelection.resolve(ears: nil, mouth: nil, hasSonioxKey: true) == .init(ears: .iphone, mouth: .soniox))
+    #expect(SpeechSelection.resolve(ears: nil, mouth: nil, hasSonioxKey: true) == .init(ears: .soniox, mouth: .soniox))
+    #expect(
+        SpeechSelection.resolve(ears: "iphone", mouth: nil, hasSonioxKey: true) == .init(ears: .iphone, mouth: .soniox))
     #expect(SpeechSelection.resolve(ears: nil, mouth: nil, hasSonioxKey: false) == .init(ears: .iphone, mouth: .iphone))
     #expect(
         SpeechSelection.resolve(ears: "soniox", mouth: "iphone", hasSonioxKey: true)

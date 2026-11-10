@@ -60,32 +60,6 @@ public enum SonioxTTS {
         if object["terminated"] as? Bool == true { return .terminated(stream) }
         return .ignored
     }
-
-    public static let modelsURL = URL(string: "https://api.soniox.com/v1/tts-models")!
-
-    public static func fetchVoices(apiKey: String, session: URLSession = .shared) async -> [String] {
-        var request = URLRequest(url: modelsURL)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        guard let (data, response) = try? await session.data(for: request),
-            (response as? HTTPURLResponse)?.statusCode == 200
-        else { return [] }
-        return ordered(voices(fromModels: data))
-    }
-
-    public static func ordered(_ fetched: [String]) -> [String] {
-        guard !fetched.isEmpty else { return voices }
-        let available = Set(fetched)
-        let curated = voices.filter(available.contains)
-        return curated + fetched.filter { !curated.contains($0) }.sorted()
-    }
-
-    public static func voices(fromModels data: Data, model: String = model) -> [String] {
-        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-            let models = object["models"] as? [[String: Any]],
-            let entry = models.first(where: { $0["id"] as? String == model })
-        else { return [] }
-        return (entry["voices"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
-    }
 }
 
 struct Playhead: Equatable, Sendable {

@@ -181,7 +181,7 @@ public struct OpenAIChatClient: BrainModel {
     public var apiKey: String
     public var model: String
     public var timeout: TimeInterval
-    private let session: URLSession
+    let session: URLSession
 
     public init(baseURL: URL, apiKey: String, model: String, timeout: TimeInterval = 20, session: URLSession = .shared)
     {

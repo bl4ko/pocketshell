@@ -54,22 +54,10 @@ enum BrainSettings {
             hasSonioxKey: sonioxKey != nil)
     }
 
-    static var modelName: String {
-        let model = (UserDefaults.standard.string(forKey: modelKey) ?? "").trimmingCharacters(
-            in: .whitespacesAndNewlines)
-        return model.isEmpty ? defaultModel : model
-    }
+    static var modelName: String { model(UserDefaults.standard.string(forKey: modelKey)) }
 
     static func client() -> BrainModel? {
-        let env = ProcessInfo.processInfo.environment
-        if isUITest, let url = env["PS_UI_TEST_BRAIN_URL"].flatMap(URL.init(string:)) {
-            return OpenAIChatClient(baseURL: url, apiKey: env["PS_UI_TEST_BRAIN_KEY"] ?? "", model: defaultModel)
-        }
-        let defaults = UserDefaults.standard
-        let raw = (defaults.string(forKey: baseURLKey) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: raw), url.scheme != nil, url.host != nil else { return nil }
-        return OpenAIChatClient(
-            baseURL: url, apiKey: PasswordVault.get(account: apiKeyAccount) ?? "", model: modelName)
+        client(model: isUITest ? defaultModel : modelName)
     }
 
     static func providers(_ selection: SpeechSelection) -> BenchmarkProviders {

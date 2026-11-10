@@ -6,7 +6,6 @@ import VoiceKit
 struct VoiceSettingsSections: View {
     var developerMode: Bool
     @AppStorage(BrainSettings.baseURLKey) private var brainURL = ""
-    @AppStorage(BrainSettings.modelKey) private var brainModel = BrainSettings.defaultModel
     @AppStorage(BrainSettings.voiceKey) private var systemVoice = ""
     @AppStorage(BrainSettings.sonioxVoiceKey) private var sonioxVoice = SonioxTTS.defaultVoice
     @AppStorage(BrainSettings.earsKey) private var earsRaw = ""
@@ -60,13 +59,7 @@ struct VoiceSettingsSections: View {
             }
             KeychainKeyRow(
                 title: "API key", account: BrainSettings.apiKeyAccount, saved: $brainKeySaved, id: "settings.brain.key")
-            LabeledContent("Model") {
-                TextField(BrainSettings.defaultModel, text: $brainModel)
-                    .multilineTextAlignment(.trailing)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("settings.brain.model")
-            }
+            BrainModelRows(endpoint: brainURL, keySaved: brainKeySaved)
         } header: {
             Text("Voice brain")
         } footer: {

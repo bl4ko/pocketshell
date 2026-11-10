@@ -34,7 +34,7 @@ final class SmokeUITests: XCTestCase {
         if name.contains("testTerminalAttachment") {
             app.launchEnvironment["PS_UI_TEST_ATTACHMENT"] = "pocketshell-file-attachment\n"
         }
-        if name.contains("testVoiceBrain") {
+        if name.contains("testVoiceBrain") || name.contains("testSettingsBrainModel") {
             let env = ProcessInfo.processInfo.environment
             app.launchEnvironment["PS_UI_TEST_BRAIN_URL"] = env["PS_TEST_BRAIN_URL"]
             app.launchEnvironment["PS_UI_TEST_BRAIN_KEY"] = env["PS_TEST_BRAIN_KEY"]
@@ -1701,8 +1701,8 @@ final class SmokeUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(endpoint.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.textFields["settings.brain.model"].exists)
         let brainKey = app.descendants(matching: .any)
+        XCTAssertTrue(brainKey["settings.brain.model"].exists)
         XCTAssertTrue(brainKey["settings.brain.key"].exists || brainKey["settings.brain.key.saved"].exists)
 
         let mouth = app.descendants(matching: .any)["settings.speech.mouth"]
@@ -1730,6 +1730,45 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForSetting(ears, showing: "Soniox"))
         choose("iPhone", in: ears)
         XCTAssertTrue(waitForSetting(ears, showing: "iPhone"))
+    }
+
+    func testSettingsBrainModelListsAndChecksModels() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+        app.buttons["Settings"].tap()
+        let model = app.descendants(matching: .any)["settings.brain.model"]
+        let check = app.staticTexts["settings.brain.model.check"]
+        for _ in 0..<4 where !check.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(check.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["settings.brain.model.list"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForSetting(model, showing: "claude-opus-5-5"))
+        XCTAssertTrue(waitForLabel(check, containing: "Not tested"))
+        app.buttons["settings.brain.model.test"].tap()
+        XCTAssertTrue(waitForLabel(check, containing: "Not tested", present: false))
+
+        model.tap()
+        let denied = app.buttons["mock-denied"]
+        XCTAssertTrue(denied.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Custom…"].exists)
+        XCTAssertFalse(app.buttons["mock-embedding"].exists)
+        denied.tap()
+        XCTAssertTrue(waitForSetting(model, showing: "mock-denied"))
+        XCTAssertTrue(waitForLabel(check, containing: "HTTP 403: this client key cannot use this model"))
+
+        choose("Custom…", in: model)
+        let custom = app.textFields["settings.brain.model.custom"]
+        XCTAssertTrue(custom.waitForExistence(timeout: 5))
+        custom.tap()
+        custom.typeText("mock-custom\n")
+        XCTAssertTrue(waitForSetting(model, showing: "mock-custom"))
+        XCTAssertTrue(waitForLabel(check, containing: "Works, answered in"))
+
+        choose("claude-opus-5-5", in: model)
+        XCTAssertTrue(waitForSetting(model, showing: "claude-opus-5-5"))
+        XCTAssertTrue(waitForLabel(check, containing: "Works, answered in"))
     }
 
     private static let voiceCatalog = """

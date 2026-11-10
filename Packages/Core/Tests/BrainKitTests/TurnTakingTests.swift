@@ -37,23 +37,23 @@ import Testing
     #expect(machine.phase == .listening)
 }
 
-@Test func fillerPlaysOnceWhenNoAudioStartsWithinOneSecond() {
+@Test func fillerPlaysOnceWhenNoAudioStartsWithinTwoSeconds() {
     var machine = TurnTaking(now: 0)
     _ = machine.handle(.userPhrase("check the agents"), at: 10)
-    #expect(machine.handle(.tick, at: 10.5).isEmpty)
-    #expect(machine.handle(.tick, at: 11.0) == [.playFiller])
-    #expect(machine.handle(.tick, at: 11.5).isEmpty)
-    _ = machine.handle(.mouthStarted, at: 11.1)
-    _ = machine.handle(.mouthIdle, at: 11.6)
+    #expect(machine.handle(.tick, at: 11.9).isEmpty)
+    #expect(machine.handle(.tick, at: 12.0) == [.playFiller])
+    #expect(machine.handle(.tick, at: 12.5).isEmpty)
+    _ = machine.handle(.mouthStarted, at: 12.1)
+    _ = machine.handle(.mouthIdle, at: 12.6)
     #expect(machine.phase == .thinking)
-    #expect(machine.handle(.tick, at: 13).isEmpty)
+    #expect(machine.handle(.tick, at: 15).isEmpty)
 }
 
 @Test func noFillerWhenTheBrainAnswersQuickly() {
     var machine = TurnTaking(now: 0)
     _ = machine.handle(.userPhrase("hi"), at: 10)
-    _ = machine.handle(.mouthStarted, at: 10.6)
-    #expect(machine.handle(.tick, at: 11.2).isEmpty)
+    _ = machine.handle(.mouthStarted, at: 11.6)
+    #expect(machine.handle(.tick, at: 12.2).isEmpty)
 }
 
 @Test func proactiveEventsWaitForSilence() {

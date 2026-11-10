@@ -27,7 +27,7 @@ public struct TurnTaking: Equatable, Sendable {
         case announce
     }
 
-    public static let fillerDelay: TimeInterval = 1.0
+    public static let fillerDelay: TimeInterval = 2.0
     public static let proactiveSilence: TimeInterval = 1.5
 
     public private(set) var phase: Phase = .listening

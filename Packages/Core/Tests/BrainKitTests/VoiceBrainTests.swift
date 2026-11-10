@@ -542,6 +542,39 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     #expect(second.last?.content == "and codex")
 }
 
+@MainActor
+@Test func fillersAreShortAndTheSameOneIsNotPlayedTwiceInARow() async throws {
+    #expect(VoiceBrain.fillers.allSatisfy { $0.split(separator: " ").count <= 3 })
+    #expect(Set(VoiceBrain.fillers).count == VoiceBrain.fillers.count)
+    let rig = try await StagedRig(
+        ScriptedModel(
+            [.success([.text("One."), .finished("stop")]), .success([.text("Two."), .finished("stop")])],
+            delay: .milliseconds(800)))
+    rig.time = 10
+    rig.ears.phrase("first")
+    rig.time = 11.9
+    try await Task.sleep(for: .milliseconds(200))
+    #expect(rig.mouth.spoken.isEmpty)
+    rig.time = 12.1
+    #expect(await eventually { rig.mouth.spoken.count == 1 })
+    #expect(await eventually { rig.mouth.finishes == 1 })
+    rig.mouth.hear(rig.mouth.spoken[0] + " ")
+    rig.mouth.settle()
+    let filled = try #require(rig.brain.lastTiming)
+    #expect(filled.firstAudioMs == nil)
+
+    rig.time = 20
+    rig.ears.phrase("second")
+    rig.time = 22.5
+    #expect(await eventually { rig.mouth.spoken.count == 2 })
+    #expect(rig.mouth.spoken[0] != rig.mouth.spoken[1])
+    #expect(rig.mouth.spoken.allSatisfy(VoiceBrain.fillers.contains))
+    #expect(await eventually { rig.mouth.finishes == 2 })
+    rig.mouth.hear("Two.", reply: rig.mouth.reply)
+    rig.mouth.settle()
+    #expect(rig.brain.lastTiming?.firstAudioMs == 2500)
+}
+
 @Test func benchmarkCSVQuotesTextAndLeavesMissingTimesEmpty() throws {
     let timing = TurnTiming(
         turn: 7, date: Date(timeIntervalSince1970: 0),

@@ -91,7 +91,7 @@ public final class VoiceBrain: ObservableObject {
         var appended = false
     }
 
-    public static let fillers = ["Hmm.", "Okay, one moment.", "Let me think.", "Mm-hm, one sec."]
+    public static let fillers = ["Hmm.", "One moment.", "Let me think."]
 
     public init(
         hostID: String, hostName: String, ears: VoiceEars, mouth: VoiceMouth, model: BrainModel?,

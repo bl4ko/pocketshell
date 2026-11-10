@@ -17,6 +17,7 @@ targets:
     platform: iOS
     sources:
       - App
+      - Shared
     dependencies:
       - target: pocketshellWidget
         platformFilter: iOS
@@ -55,6 +56,7 @@ targets:
         NSCameraUsageDescription: Take a photo and paste it into the terminal.
         NSMicrophoneUsageDescription: Listens while voice mode is on so you can speak to a session.
         NSSpeechRecognitionUsageDescription: Turns your speech into text and commands for the session.
+        NSSupportsLiveActivities: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations:
@@ -118,6 +120,7 @@ targets:
     platform: iOS
     sources:
       - Widget
+      - Shared
     dependencies:
       - package: Core
         products:

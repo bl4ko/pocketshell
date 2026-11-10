@@ -45,6 +45,9 @@ struct PocketshellApp: App {
         WatchRelay.shared.activate(store: store)
         UNUserNotificationCenter.current().delegate = ForegroundNotificationDelegate.shared
         ApprovalService.registerCategory()
+        #if !targetEnvironment(macCatalyst)
+            VoiceActivityController.endLeftovers()
+        #endif
         MainActor.assumeIsolated { ApprovalService.shared.store = store }
         let backgroundRefreshHandler: @Sendable (BGTask) -> Void = { task in
             guard let refresh = task as? BGAppRefreshTask else {

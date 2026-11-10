@@ -41,6 +41,8 @@
 	<string>Listens while voice mode is on so you can speak to a session.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Turns your speech into text and commands for the session.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

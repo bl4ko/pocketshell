@@ -96,6 +96,15 @@ struct SessionsWidgetView: View {
 }
 
 @main
+struct PocketshellWidgets: WidgetBundle {
+    var body: some Widget {
+        PocketshellWidget()
+        #if !targetEnvironment(macCatalyst)
+            VoiceLiveActivity()
+        #endif
+    }
+}
+
 struct PocketshellWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "pocketshell-sessions", provider: SessionsProvider()) { entry in

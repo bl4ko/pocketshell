@@ -93,3 +93,14 @@ import Testing
     #expect(actions.contains(.tab))
     #expect(actions.contains(.sequence("\u{03}")))
 }
+
+@Test func voiceActivityStateHasAGlyphAndLabelForEveryStatusAndRoundTrips() throws {
+    let symbols = Set(VoiceActivityState.Status.allCases.map(\.symbol))
+    #expect(symbols.count == VoiceActivityState.Status.allCases.count)
+    #expect(VoiceActivityState.Status.allCases.allSatisfy { !$0.label.isEmpty })
+    let state = VoiceActivityState(status: .hearing, caption: "run the tests", muted: false)
+    let decoded = try JSONDecoder().decode(VoiceActivityState.self, from: JSONEncoder().encode(state))
+    #expect(decoded == state)
+    #expect(VoiceActivityState.line("a\n b") == "a b")
+    #expect(VoiceActivityState.line("one two three four", limit: 9) == "…four")
+}

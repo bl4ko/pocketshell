@@ -86,6 +86,10 @@ final class VoiceBrainSession: ObservableObject {
     private(set) var testEars: TextEars?
     private var audio: AnyObject?
     private var report_: () -> String = { "-" }
+    #if !targetEnvironment(macCatalyst)
+        private let activity = VoiceActivityController()
+    #endif
+
     static let execDeadline = 20.0
 
     static func bounded(
@@ -148,6 +152,9 @@ final class VoiceBrainSession: ObservableObject {
         }
         parts.interruptions? { [weak brain] began in brain?.audioInterrupted(began) }
         self.brain = brain
+        #if !targetEnvironment(macCatalyst)
+            activity.follow(brain)
+        #endif
         Task {
             await brain.start()
             if let notice = selection.notice { brain.notice(notice) }

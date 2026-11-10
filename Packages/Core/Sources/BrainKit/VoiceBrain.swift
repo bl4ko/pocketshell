@@ -528,7 +528,7 @@ public final class VoiceBrain: ObservableObject {
         timing = nil
         mode = .dictation(message)
         pollTask?.cancel()
-        caption = Caption(.app, message + " Dictating into the draft.")
+        caption = Caption(.app, ((error as? BrainError)?.caption ?? message) + " Dictating into the draft.")
         mouth.speak(message + " I'll type what you say into the draft instead.")
         feed(.brainDone)
     }

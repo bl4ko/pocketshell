@@ -57,6 +57,7 @@ extension BrainError {
         switch self {
         case .notConfigured: "Add the endpoint to load its models"
         case .unauthorized: "The endpoint rejected the API key"
+        case .modelRefused(let detail): detail.isEmpty ? spoken : detail
         case .unreachable(let reason): "No connection: \(reason)"
         case .timeout: "The endpoint did not answer in time"
         case .http(let code, let message): message.isEmpty ? "HTTP \(code)" : "HTTP \(code): \(message)"

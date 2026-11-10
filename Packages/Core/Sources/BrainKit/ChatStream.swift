@@ -52,6 +52,7 @@ public enum BrainStreamEvent: Equatable, Sendable {
 public enum BrainError: Error, Equatable, Sendable {
     case notConfigured
     case unauthorized
+    case modelRefused(String)
     case unreachable(String)
     case timeout
     case http(Int, String)
@@ -62,12 +63,18 @@ public enum BrainError: Error, Equatable, Sendable {
         switch self {
         case .notConfigured: "The brain is not set up. Add its address and key in Settings."
         case .unauthorized: "The brain rejected the API key."
+        case .modelRefused: "This key cannot use the selected model. Choose a different model in Settings."
         case .unreachable: "I can't reach the brain right now."
         case .timeout: "The brain took too long to answer."
         case .http(let code, _): "The brain answered with error \(code)."
         case .api: "The brain reported an error."
         case .malformed: "The brain sent something I could not read."
         }
+    }
+
+    public var caption: String {
+        if case .modelRefused(let detail) = self, !detail.isEmpty { return "\(spoken) (\(detail))" }
+        return spoken
     }
 }
 
@@ -240,9 +247,7 @@ public struct OpenAIChatClient: BrainModel {
                             body.append(byte)
                             if body.count > 2000 { break }
                         }
-                        let text = String(decoding: body, as: UTF8.self)
-                        throw http.statusCode == 401 || http.statusCode == 403
-                            ? BrainError.unauthorized : BrainError.http(http.statusCode, text)
+                        throw Self.failure(status: http.statusCode, body: Data(body))
                     }
                     var parser = SSEParser()
                     var assembler = ChatStreamAssembler()
@@ -266,6 +271,15 @@ public struct OpenAIChatClient: BrainModel {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    static func failure(status: Int, body: Data) -> BrainError {
+        let error = (try? JSONSerialization.jsonObject(with: body) as? [String: Any])?["error"] as? [String: Any]
+        if status == 401 { return .unauthorized }
+        if status == 403 || error?["code"] as? String == "model_not_found" {
+            return .modelRefused(error?["message"] as? String ?? "")
+        }
+        return .http(status, String(decoding: body, as: UTF8.self))
     }
 
     public static func map(_ error: Error) -> Error {

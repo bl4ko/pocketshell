@@ -213,6 +213,18 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
 }
 
 @MainActor
+@Test func refusedModelSaysToChooseAnotherModelAndShowsTheServerMessage() async throws {
+    let rig = try Rig(ScriptedModel([.failure(.modelRefused("this client key cannot use this model"))]))
+    await rig.brain.start()
+    rig.phrase("hello there")
+    let spoken = "This key cannot use the selected model. Choose a different model in Settings."
+    #expect(await eventually { rig.brain.mode == .dictation(spoken) })
+    #expect(rig.mouth.spoken.contains { $0.hasPrefix(spoken) })
+    #expect(
+        rig.brain.caption?.text == spoken + " (this client key cannot use this model) Dictating into the draft.")
+}
+
+@MainActor
 @Test func userSpeechBargesInAndCancelsTheReply() async throws {
     let words = (1...30).map { BrainStreamEvent.text("Sentence \($0). ") }
     let rig = try Rig(

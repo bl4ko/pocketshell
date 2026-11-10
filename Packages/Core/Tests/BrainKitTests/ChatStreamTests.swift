@@ -120,3 +120,32 @@ func assemblesTextAndToolCallsFromStreamDeltas(chunkSize: Int) throws {
     #expect(OpenAIChatClient.map(URLError(.cannotConnectToHost)) as? BrainError != nil)
     #expect(OpenAIChatClient.map(URLError(.cancelled)) is CancellationError)
 }
+
+@Test func voiceTurnReportsARefusedModelNotARejectedKey() async {
+    func failure(_ host: String, _ status: Int, _ body: String) async -> BrainError? {
+        let client = StubProtocol.client(host) { _ in .success((status, body)) }
+        do {
+            for try await _ in client.stream([.user("hi")], tools: []) {}
+            return nil
+        } catch {
+            return error as? BrainError
+        }
+    }
+    let denied =
+        #"{"error":{"message":"this client key cannot use this model","type":"permission_error","code":"provider_not_allowed"}}"#
+    let unknown = #"{"error":{"message":"unknown provider for model nope","code":"model_not_found"}}"#
+    let invalid = #"{"error":{"message":"messages is empty","code":"invalid_request"}}"#
+    #expect(
+        await failure("turn403.example.test", 403, denied) == .modelRefused("this client key cannot use this model"))
+    #expect(await failure("turn400.example.test", 400, unknown) == .modelRefused("unknown provider for model nope"))
+    #expect(await failure("turn404.example.test", 404, unknown) == .modelRefused("unknown provider for model nope"))
+    #expect(await failure("turn403plain.example.test", 403, "Forbidden") == .modelRefused(""))
+    #expect(await failure("turn401.example.test", 401, #"{"error":{"message":"bad key"}}"#) == .unauthorized)
+    #expect(await failure("turn400other.example.test", 400, invalid) == .http(400, invalid))
+    let spoken = "This key cannot use the selected model. Choose a different model in Settings."
+    #expect(BrainError.modelRefused("no access").spoken == spoken)
+    #expect(BrainError.modelRefused("no access").caption == spoken + " (no access)")
+    #expect(BrainError.modelRefused("").caption == spoken)
+    #expect(BrainError.unauthorized.spoken == "The brain rejected the API key.")
+    #expect(BrainError.unauthorized.caption == BrainError.unauthorized.spoken)
+}

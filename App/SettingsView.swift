@@ -130,7 +130,7 @@ struct SettingsView: View {
                     .onChange(of: iCloudSync) { _, enabled in
                         store.setCloudSyncEnabled(enabled)
                     }
-                Toggle("Include shared SSH key, imported keys and VNC passwords", isOn: $iCloudCredentialsSync)
+                Toggle("Include SSH keys, VNC passwords and voice keys", isOn: $iCloudCredentialsSync)
                     .accessibilityIdentifier("settings.icloudCredentialsSync")
                     .disabled(!iCloudSync)
                     .onChange(of: iCloudCredentialsSync) { _, enabled in

@@ -151,6 +151,7 @@ final class VoiceBrainSession: ObservableObject {
             brain?.providers.mouth = "iphone-fallback"
         }
         parts.interruptions? { [weak brain] began in brain?.audioInterrupted(began) }
+        brain.onEnded = { MicModeMonitor.shared.voiceModeEnded() }
         self.brain = brain
         #if !targetEnvironment(macCatalyst)
             activity.follow(brain)

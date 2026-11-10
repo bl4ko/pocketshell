@@ -19,6 +19,7 @@ struct VoiceSettingsSections: View {
     @State private var lastTurn: TurnTiming?
     @State private var shared: SharedFile?
     @State private var exportError: String?
+    @ObservedObject private var mic = MicModeMonitor.shared
 
     var body: some View {
         Group {
@@ -98,6 +99,17 @@ struct VoiceSettingsSections: View {
             KeychainKeyRow(
                 title: "Soniox key", account: BrainSettings.sonioxKeyAccount, saved: $sonioxKeySaved,
                 id: "settings.speech.sonioxKey")
+            #if !targetEnvironment(macCatalyst)
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent("Microphone mode", value: mic.preferred.label)
+                    Text(MicMode.explanation)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("settings.speech.micMode")
+                .onAppear { mic.refresh() }
+            #endif
         } header: {
             Text("Speech")
         } footer: {

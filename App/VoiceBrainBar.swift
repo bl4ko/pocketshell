@@ -26,12 +26,14 @@ struct VoiceBrainBarHost: View {
 struct VoiceBrainBar: View {
     @ObservedObject var brain: VoiceBrain
     let testEars: TextEars?
+    @ObservedObject private var mic = MicModeMonitor.shared
     @State private var expanded = false
     @State private var testInput = ""
 
     var body: some View {
         if brain.isOn {
             VStack(spacing: 6) {
+                MicModeHint()
                 HStack(spacing: 10) {
                     Button {
                         expanded = true
@@ -51,6 +53,13 @@ struct VoiceBrainBar: View {
                         .truncationMode(.head)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("voice.caption")
+                    if mic.active == .voiceIsolation {
+                        Image(systemName: mic.active.symbol)
+                            .font(.footnote)
+                            .foregroundStyle(PocketshellTheme.secondary)
+                            .accessibilityLabel("Voice Isolation is on")
+                            .accessibilityIdentifier("voice.micMode.compact")
+                    }
                     VoiceBrainControls(brain: brain, compact: true)
                 }
                 if let testEars {
@@ -100,9 +109,12 @@ struct VoiceBrainFullView: View {
                 .accessibilityLabel("Collapse voice mode")
                 .accessibilityIdentifier("voice.collapse")
                 Spacer()
-                Text(brain.hostName)
-                    .font(.headline)
-                    .foregroundStyle(PocketshellTheme.ink)
+                VStack(spacing: 6) {
+                    Text(brain.hostName)
+                        .font(.headline)
+                        .foregroundStyle(PocketshellTheme.ink)
+                    MicModeButton()
+                }
                 Spacer()
                 Color.clear.frame(width: 28, height: 28)
             }

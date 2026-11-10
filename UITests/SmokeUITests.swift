@@ -39,6 +39,9 @@ final class SmokeUITests: XCTestCase {
             app.launchEnvironment["PS_UI_TEST_BRAIN_URL"] = env["PS_TEST_BRAIN_URL"]
             app.launchEnvironment["PS_UI_TEST_BRAIN_KEY"] = env["PS_TEST_BRAIN_KEY"]
         }
+        if name.contains("testVoiceBrainMicMode") {
+            app.launchEnvironment["PS_UI_TEST_MIC_HINT"] = "1"
+        }
         if name.contains("testSettingsVoicePicker") {
             app.launchEnvironment["PS_UI_TEST_VOICES"] = Self.voiceCatalog
         }
@@ -1607,6 +1610,42 @@ final class SmokeUITests: XCTestCase {
         input.typeText("what are my agents doing\n")
         XCTAssertTrue(waitForLabel(app.staticTexts["voice.caption"], containing: "All quiet on localbox"))
 
+        app.buttons["voice.end"].tap()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+    }
+
+    func testVoiceBrainMicModeHintIsShownOnceAndTheFullViewOpensThePicker() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+        openHost("localbox")
+        tapVoiceToggle()
+        let bar = app.descendants(matching: .any)["voice.bar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let hint = app.staticTexts["voice.micHint.text"]
+        XCTAssertTrue(hint.waitForExistence(timeout: 5))
+        XCTAssertTrue(hint.label.contains("Voice Isolation"))
+        XCTAssertTrue(app.buttons["voice.micHint.open"].exists)
+        app.buttons["voice.micHint.dismiss"].tap()
+        XCTAssertTrue(hint.waitForNonExistence(timeout: 5))
+
+        app.buttons["voice.end"].tap()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+        tapVoiceToggle()
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(app.staticTexts["voice.caption"], containing: "Listening"))
+        XCTAssertFalse(hint.exists, "a dismissed hint never comes back")
+        XCTAssertFalse(app.descendants(matching: .any)["voice.micMode.compact"].exists)
+
+        app.descendants(matching: .any)["voice.orb"].tap()
+        let mode = app.buttons["voice.micMode"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        XCTAssertEqual(mode.label, "Microphone mode: Standard")
+        mode.tap()
+        XCTAssertTrue(waitForLabel(mode, containing: "Voice Isolation"))
+
+        app.buttons["voice.collapse"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["voice.micMode.compact"].waitForExistence(timeout: 5))
         app.buttons["voice.end"].tap()
         XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
     }

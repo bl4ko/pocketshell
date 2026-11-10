@@ -172,6 +172,7 @@ public struct ConfigExport: Codable, Equatable, Sendable {
     public var toolbarKeys: [ToolbarKey]
     public var knownHosts: [String: String]
     public var workspace: WorkspaceConfig?
+    public var voice: SyncedFields?
 
     public init(
         hosts: [HostConfig],
@@ -179,7 +180,8 @@ public struct ConfigExport: Codable, Equatable, Sendable {
         snippets: [Snippet],
         toolbarKeys: [ToolbarKey],
         knownHosts: [String: String],
-        workspace: WorkspaceConfig? = nil
+        workspace: WorkspaceConfig? = nil,
+        voice: SyncedFields? = nil
     ) {
         version = 1
         self.hosts = hosts
@@ -188,6 +190,7 @@ public struct ConfigExport: Codable, Equatable, Sendable {
         self.toolbarKeys = toolbarKeys
         self.knownHosts = knownHosts
         self.workspace = workspace
+        self.voice = voice
     }
 
     public static func mergeByID<T: Identifiable & Equatable>(existing: [T], incoming: [T]) -> [T] {

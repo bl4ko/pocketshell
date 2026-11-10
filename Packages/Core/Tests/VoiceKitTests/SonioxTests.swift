@@ -52,7 +52,7 @@ import Testing
     #expect(config["api_key"] == nil)
 }
 
-@Test func sonioxTTSRequestsUsePCMOneStreamPerSentence() {
+@Test func sonioxTTSRequestsAskForPCMWithTimestampsAndStreamText() {
     let start = json(.text(SonioxTTS.start(stream: "s1", voice: "Hazel")))
     #expect(start["stream_id"] as? String == "s1")
     #expect(start["model"] as? String == "tts-rt-v2")
@@ -60,25 +60,51 @@ import Testing
     #expect(start["voice"] as? String == "Hazel")
     #expect(start["audio_format"] as? String == "pcm_s16le")
     #expect(start["sample_rate"] as? Int == 24000)
+    #expect(start["return_timestamps"] as? Bool == true)
     #expect(start["api_key"] == nil)
-    let text = json(.text(SonioxTTS.text(stream: "s1", "Hello there.")))
-    #expect(text["text"] as? String == "Hello there.")
-    #expect(text["text_end"] as? Bool == true)
+    let text = json(.text(SonioxTTS.text(stream: "s1", "Hello ", end: false)))
+    #expect(text["text"] as? String == "Hello ")
+    #expect(text["text_end"] as? Bool == false)
+    #expect(json(.text(SonioxTTS.text(stream: "s1", "", end: true)))["text_end"] as? Bool == true)
     let cancel = json(.text(SonioxTTS.cancel(stream: "s1")))
     #expect(cancel["cancel"] as? Bool == true)
     #expect(cancel["stream_id"] as? String == "s1")
 }
 
-@Test func sonioxTTSRepliesDecodeAudioEndTerminationAndErrors() {
+@Test func sonioxTTSRepliesDecodeAudioTimestampsEndTerminationAndErrors() {
     let audio = pcm(samples: 4)
-    #expect(SonioxTTS.parse(.text(audioReply("s1", audio))) == .audio(stream: "s1", pcm: audio, end: false))
-    #expect(SonioxTTS.parse(.text(audioReply("s1", audio, end: true))) == .audio(stream: "s1", pcm: audio, end: true))
+    #expect(
+        SonioxTTS.parse(.text(audioReply("s1", audio))) == .audio(stream: "s1", pcm: audio, end: false, marks: []))
+    #expect(
+        SonioxTTS.parse(.text(audioReply("s1", audio, end: true)))
+            == .audio(stream: "s1", pcm: audio, end: true, marks: []))
+    let timed = SonioxTTS.parse(
+        .text(
+            #"{"stream_id":"s1","audio":"\#(audio.base64EncodedString())","timestamps":{"characters":["H","i"],"#
+                + #""character_start_times_seconds":[0,0.1],"character_end_times_seconds":[0.1,0.25]}}"#))
+    #expect(timed == .audio(stream: "s1", pcm: audio, end: false, marks: [.init("H", 0), .init("i", 0.1)]))
     #expect(SonioxTTS.parse(.text(#"{"terminated":true,"stream_id":"s1"}"#)) == .terminated("s1"))
     let failed = SonioxTTS.parse(
         .text(#"{"stream_id":"s2","error_code":408,"error_type":"request_timeout","error_message":"Timeout"}"#))
     #expect(
         failed == .failed(stream: "s2", SonioxError(.server, code: 408, type: "request_timeout", message: "Timeout")))
     #expect(SonioxTTS.parse(.text("not json")) == .ignored)
+}
+
+@Test func playheadFollowsBufferCompletionsAndTheClockInsideABuffer() {
+    var playhead = Playhead()
+    #expect(playhead.position(at: 5) == 0)
+    playhead.schedule(0.5, at: 10)
+    playhead.schedule(0.25, at: 10.01)
+    #expect(playhead.scheduled == 0.75)
+    #expect(abs(playhead.position(at: 10.2) - 0.2) < 0.0001)
+    #expect(playhead.position(at: 11) == 0.5)
+    playhead.finish(at: 10.52)
+    #expect(abs(playhead.position(at: 10.62) - 0.6) < 0.0001)
+    playhead.finish(at: 10.77)
+    #expect(playhead.position(at: 12) == 0.75)
+    playhead.schedule(1, at: 20)
+    #expect(abs(playhead.position(at: 20.4) - 1.15) < 0.0001)
 }
 
 @Test func sonioxVoicesComeFromTheModelListWithCuratedVoicesFirst() throws {
@@ -171,38 +197,147 @@ import Testing
 }
 
 @MainActor
-@Test func sonioxMouthPlaysSentencesInOrderAndGoesIdleAfterPlayback() async throws {
+@Test func sonioxMouthStreamsReplyTokensIntoOneStreamAndClosesItWhenTheReplyEnds() async throws {
     let factory = SocketFactory()
     let line = FakeLine()
     let mouth = SonioxMouth(apiKey: "test-key", voice: "Hazel", line: { line }, connect: factory.connect)
-    var events: [MouthEvent] = []
-    mouth.onEvent = { if case .level = $0 {} else { events.append($0) } }
-    mouth.speak("First sentence.")
-    mouth.speak("Second one.")
+    let log = MouthLog(mouth)
+    let tokens = [
+        "Claude in **the API** pro", "ject is still running the test ", "suite, and Codex in web is", " idle.",
+    ]
+    for token in tokens { mouth.stream(token, reply: 4) }
     let socket = try #require(factory.last)
     #expect(socket.url == SonioxTTS.url)
     #expect(socket.key == "test-key")
-    #expect(await eventually { socket.sent.count == 4 })
-    let sent = socket.sentJSON
-    #expect(sent.map { $0["stream_id"] as? String } == ["s1", "s1", "s2", "s2"])
-    #expect(sent[1]["text"] as? String == "First sentence.")
-    #expect(sent[3]["text"] as? String == "Second one.")
+    #expect(await eventually { socket.sent.count == 5 })
+    var sent = socket.sentJSON
+    #expect(sent[0]["return_timestamps"] as? Bool == true)
+    #expect(sent.allSatisfy { $0["stream_id"] as? String == "s1" })
+    #expect(sent.dropFirst().allSatisfy { $0["text_end"] as? Bool == false })
+    #expect(sent[1]["text"] as? String == "Claude in the API ")
+    mouth.finish()
+    #expect(await eventually { socket.sent.count == 6 })
+    sent = socket.sentJSON
+    #expect(sent[5]["text"] as? String == "idle.")
+    #expect(sent[5]["text_end"] as? Bool == true)
+    #expect(
+        sent.dropFirst().compactMap { $0["text"] as? String }.joined()
+            == "Claude in the API project is still running the test suite, and Codex in web is idle.")
+    #expect(log.events == [.started])
 
-    socket.push(audioReply("s2", pcm(samples: 240), end: true))
-    socket.push(#"{"terminated":true,"stream_id":"s2"}"#)
-    socket.push(audioReply("s1", pcm(samples: 480)))
-    #expect(await eventually { line.scheduled.count == 1 })
-    #expect(line.scheduled[0].frameLength == 480)
-    socket.push(audioReply("s1", Data(), end: true))
+    socket.push(audioReply("s1", pcm(samples: 2400), end: true, marks: marks("Claude in the API")))
     socket.push(#"{"terminated":true,"stream_id":"s1"}"#)
-    #expect(await eventually { line.scheduled.count == 2 })
-    #expect(line.scheduled[1].frameLength == 240)
+    #expect(await eventually { line.scheduled.count == 1 })
     #expect(mouth.isSpeaking)
     line.playAll()
     #expect(await eventually { !mouth.isSpeaking })
-    #expect(events == [.started, .playing("First sentence."), .playing("Second one."), .idle])
+    #expect(log.heard(4) == "Claude in the API")
+    #expect(log.events.last == .idle)
     mouth.shutdown()
     #expect(socket.closed)
+}
+
+@MainActor
+@Test func sonioxMouthSendsAShortFirstSentenceAtOnceAndStreamsTheRest() async throws {
+    let factory = SocketFactory()
+    let line = FakeLine()
+    let mouth = SonioxMouth(apiKey: "test-key", line: { line }, connect: factory.connect)
+    let log = MouthLog(mouth)
+    mouth.stream("Hmm, let me check. Claude is ", reply: 1)
+    mouth.stream("busy. Codex ", reply: 1)
+    let socket = try #require(factory.last)
+    #expect(await eventually { socket.sent.count == 5 })
+    let sent = socket.sentJSON
+    #expect(sent.map { $0["stream_id"] as? String } == ["s1", "s1", "s2", "s2", "s2"])
+    #expect(sent[1]["text"] as? String == "Hmm, let me check.")
+    #expect(sent[1]["text_end"] as? Bool == true)
+    #expect(sent[3]["text"] as? String == "Claude is ")
+    #expect(sent[4]["text"] as? String == "busy. Codex ")
+    #expect(sent[4]["text_end"] as? Bool == false)
+    mouth.finish()
+    #expect(await eventually { socket.sentJSON.last?["text_end"] as? Bool == true })
+
+    socket.push(audioReply("s2", pcm(samples: 240), end: true, marks: marks("Claude is busy. Codex")))
+    socket.push(#"{"terminated":true,"stream_id":"s2"}"#)
+    socket.push(audioReply("s1", pcm(samples: 480), end: true, marks: marks("Hmm, let me check.")))
+    socket.push(#"{"terminated":true,"stream_id":"s1"}"#)
+    #expect(await eventually { line.scheduled.count == 2 })
+    #expect(line.scheduled.map(\.frameLength) == [480, 240])
+    line.playAll()
+    #expect(await eventually { !mouth.isSpeaking })
+    #expect(log.heard(1) == "Hmm, let me check. Claude is busy. Codex")
+    #expect(log.upcoming == "Hmm, let me check. Claude is busy. Codex")
+    mouth.shutdown()
+}
+
+@MainActor
+@Test func sonioxMouthReportsHeardWordsAndUpcomingTextFromTimestampsAndPlayback() async throws {
+    let factory = SocketFactory()
+    let line = FakeLine()
+    let clock = LockedClock(100)
+    let mouth = SonioxMouth(apiKey: "test-key", line: { line }, connect: factory.connect, clock: { clock.value })
+    let log = MouthLog(mouth)
+    mouth.speak("Hello there world.")
+    let socket = try #require(factory.last)
+    socket.push(audioReply("s1", pcm(samples: 24000), marks: marks("Hello there world.", step: 0.06)))
+    #expect(await eventually { log.events.count == 3 })
+    #expect(log.events == [.started, .upcoming("Hello there "), .heard("Hello", reply: nil)])
+    clock.value = 100.5
+    #expect(await eventually { log.events.count == 5 })
+    #expect(log.events.suffix(2) == [.upcoming("world."), .heard(" there", reply: nil)])
+    socket.push(audioReply("s1", Data(), end: true))
+    socket.push(#"{"terminated":true,"stream_id":"s1"}"#)
+    try await Task.sleep(for: .milliseconds(120))
+    #expect(log.events.count == 5)
+    clock.value = 101
+    line.playAll()
+    #expect(await eventually { !mouth.isSpeaking })
+    #expect(log.events.suffix(2) == [.heard(" world.", reply: nil), .idle])
+    mouth.shutdown()
+}
+
+@MainActor
+@Test func sonioxMouthEndsAStalledStreamBeforeTheServerTimesItOut() async throws {
+    let factory = SocketFactory()
+    let line = FakeLine()
+    let clock = LockedClock(50)
+    let mouth = SonioxMouth(
+        apiKey: "test-key", line: { line }, connect: factory.connect, stallTimeout: 2, clock: { clock.value })
+    mouth.stream("Claude in the API project is still wai", reply: 2)
+    let socket = try #require(factory.last)
+    #expect(await eventually { socket.sent.count == 2 })
+    clock.value = 51.9
+    try await Task.sleep(for: .milliseconds(120))
+    #expect(socket.sent.count == 2)
+    clock.value = 52.1
+    #expect(await eventually { socket.sent.count == 3 })
+    #expect(socket.sentJSON[2]["text"] as? String == "")
+    #expect(socket.sentJSON[2]["text_end"] as? Bool == true)
+    mouth.stream("ting for you.", reply: 2)
+    mouth.finish()
+    #expect(await eventually { socket.sent.count == 6 })
+    let rest = socket.sentJSON.dropFirst(3)
+    #expect(rest.allSatisfy { $0["stream_id"] as? String == "s2" })
+    #expect(rest.compactMap { $0["text"] as? String }.joined() == "waiting for you.")
+    #expect(rest.last?["text_end"] as? Bool == true)
+    mouth.shutdown()
+}
+
+@MainActor
+@Test func sonioxMouthKeepsAtMostThreeStreamsOpen() async throws {
+    let factory = SocketFactory()
+    let line = FakeLine()
+    let mouth = SonioxMouth(apiKey: "test-key", line: { line }, connect: factory.connect)
+    for text in ["One.", "Two.", "Three.", "Four."] { mouth.speak(text) }
+    let socket = try #require(factory.last)
+    #expect(await eventually { socket.sent.count == 6 })
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(socket.sent.count == 6)
+    socket.push(audioReply("s1", pcm(samples: 240), end: true))
+    socket.push(#"{"terminated":true,"stream_id":"s1"}"#)
+    #expect(await eventually { socket.sent.count == 8 })
+    #expect(socket.sentJSON[7]["text"] as? String == "Four.")
+    mouth.shutdown()
 }
 
 @MainActor
@@ -210,20 +345,19 @@ import Testing
     let factory = SocketFactory()
     let line = FakeLine()
     let mouth = SonioxMouth(apiKey: "test-key", line: { line }, connect: factory.connect)
-    var events: [MouthEvent] = []
-    mouth.onEvent = { if case .level = $0 {} else { events.append($0) } }
-    mouth.speak("Long reply that the user interrupts.")
+    let log = MouthLog(mouth)
+    mouth.stream("Long reply that the user interrupts. ", reply: 1)
     let socket = try #require(factory.last)
-    socket.push(audioReply("s1", pcm(samples: 480)))
+    socket.push(audioReply("s1", pcm(samples: 480), marks: marks("Long reply", step: 1)))
     #expect(await eventually { line.scheduled.count == 1 })
     mouth.stop()
     #expect(!mouth.isSpeaking)
     #expect(line.stopCount == 1)
     #expect(await eventually { socket.sentJSON.contains { $0["cancel"] as? Bool == true } })
-    socket.push(audioReply("s1", pcm(samples: 480)))
+    socket.push(audioReply("s1", pcm(samples: 480), marks: marks(" that")))
     try await Task.sleep(for: .milliseconds(50))
     #expect(line.scheduled.count == 1)
-    #expect(events == [.started, .playing("Long reply that the user interrupts."), .idle])
+    #expect(log.events == [.started, .upcoming("Long"), .heard("Long", reply: 1), .idle])
     mouth.speak("Next turn.")
     #expect(await eventually { socket.sentJSON.last?["stream_id"] as? String == "s2" })
     #expect(factory.sockets.count == 1)
@@ -231,36 +365,52 @@ import Testing
 }
 
 @MainActor
-@Test func sonioxMouthReportsUnspokenSentencesOnAuthErrorAndTimeout() async throws {
+@Test func sonioxMouthReportsUnspokenTextOnAuthErrorAndTimeout() async throws {
     let factory = SocketFactory()
     let line = FakeLine()
     let mouth = SonioxMouth(apiKey: "bad", line: { line }, connect: factory.connect)
-    var failures: [(SonioxError, [String])] = []
-    mouth.onFailure = { failures.append(($0, $1)) }
+    var failures: [(SonioxError, [Utterance], Int?)] = []
+    mouth.onFailure = { failures.append(($0, $1, $2)) }
     mouth.speak("One.")
-    mouth.speak("Two.")
+    mouth.stream("Two is still ", reply: 9)
     let socket = try #require(factory.last)
     socket.push(#"{"error_code":401,"error_type":"unauthenticated","error_message":"Invalid API key."}"#)
     #expect(await eventually { failures.count == 1 })
     #expect(failures[0].0.kind == .auth)
-    #expect(failures[0].1 == ["One.", "Two."])
+    #expect(failures[0].1 == [Utterance("One."), Utterance("Two is still", reply: 9)])
+    #expect(failures[0].2 == 9)
     #expect(!mouth.isSpeaking)
     #expect(socket.closed)
 
+    let clock = LockedClock(10)
     let slow = SonioxMouth(
-        apiKey: "key", line: { line }, connect: factory.connect, firstAudioTimeout: .milliseconds(30))
-    slow.onFailure = { failures.append(($0, $1)) }
-    slow.speak("Hello?")
+        apiKey: "key", line: { line }, connect: factory.connect, firstAudioTimeout: 4, clock: { clock.value })
+    slow.onFailure = { failures.append(($0, $1, $2)) }
+    slow.stream("Hello", reply: 3)
+    slow.stream(" there", reply: 3)
+    clock.value = 11.5
+    slow.finish()
+    clock.value = 15.4
+    try await Task.sleep(for: .milliseconds(120))
+    #expect(failures.count == 1)
+    clock.value = 15.6
     #expect(await eventually { failures.count == 2 })
     #expect(failures[1].0.kind == .timeout)
-    #expect(failures[1].1 == ["Hello?"])
+    #expect(failures[1].1 == [Utterance("Hello there", reply: 3)])
+    #expect(failures[1].2 == nil)
     #expect(!slow.isSpeaking)
+
+    let keyless = SonioxMouth(apiKey: "", line: { line }, connect: factory.connect)
+    keyless.onFailure = { failures.append(($0, $1, $2)) }
+    keyless.speak("No key.")
+    #expect(failures.count == 3)
+    #expect(failures[2].1 == [Utterance("No key.")])
 }
 
 @MainActor
 final class ScriptedMouth: ProviderMouth {
     var onEvent: ((MouthEvent) -> Void)?
-    var onFailure: ((SonioxError, [String]) -> Void)?
+    var onFailure: ((SonioxError, [Utterance], Int?) -> Void)?
     private(set) var isSpeaking = false
     private(set) var spoken: [String] = []
 
@@ -272,6 +422,12 @@ final class ScriptedMouth: ProviderMouth {
         }
     }
 
+    func stream(_ delta: String, reply: Int) {
+        speak(delta)
+    }
+
+    func finish() {}
+
     func stop() {
         guard isSpeaking else { return }
         isSpeaking = false
@@ -279,7 +435,7 @@ final class ScriptedMouth: ProviderMouth {
     }
 
     func fail(_ kind: SonioxError.Kind) {
-        onFailure?(SonioxError(kind, message: "x"), spoken)
+        onFailure?(SonioxError(kind, message: "x"), spoken.map { Utterance($0) }, nil)
         stop()
     }
 }
@@ -315,6 +471,38 @@ final class ScriptedMouth: ProviderMouth {
     #expect(mouth.disabled)
     #expect(fallback.spoken.last == "Five.")
     mouth.stop()
+}
+
+@MainActor
+@Test func fallbackMouthContinuesAReplyOnTheIPhoneVoiceFromWhereSonioxAudioStopped() async throws {
+    let factory = SocketFactory()
+    let line = FakeLine()
+    let primary = SonioxMouth(apiKey: "test-key", line: { line }, connect: factory.connect)
+    let fallback = TimedMouth(secondsPerCharacter: 0.0001)
+    let mouth = FallbackMouth(primary: primary, fallback: fallback)
+    let log = MouthLog(mouth)
+    var notices: [String] = []
+    mouth.onNotice = { notices.append($0) }
+    mouth.stream("Claude in the API project is still running the test suite and Codex in web fin", reply: 3)
+    let socket = try #require(factory.last)
+    socket.push(audioReply("s1", pcm(samples: 2400), marks: marks("Claude in the API pro")))
+    #expect(await eventually { line.scheduled.count == 1 })
+    socket.drop()
+    #expect(await eventually { notices.count == 1 })
+    #expect(mouth.usingFallback)
+    mouth.stream("ished two minutes ago. All good", reply: 3)
+    mouth.finish()
+    #expect(
+        fallback.spoken == [
+            "is still running the test suite and Codex in web finished two minutes ago.", "All good",
+        ])
+    line.playAll()
+    #expect(await eventually { !mouth.isSpeaking })
+    #expect(
+        log.heard(3)
+            == "Claude in the API pro" + "is still running the test suite and Codex in web finished two minutes ago. "
+            + "All good ")
+    #expect(log.events.filter { $0 == .started || $0 == .idle } == [.started, .idle])
 }
 
 @MainActor

@@ -10,7 +10,8 @@ public enum EarsEvent: Equatable, Sendable {
 
 public enum MouthEvent: Equatable, Sendable {
     case started
-    case playing(String)
+    case upcoming(String)
+    case heard(String, reply: Int?)
     case idle
     case level(Float)
 }
@@ -28,6 +29,8 @@ public protocol VoiceMouth: AnyObject {
     var onEvent: ((MouthEvent) -> Void)? { get set }
     var isSpeaking: Bool { get }
     func speak(_ text: String)
+    func stream(_ delta: String, reply: Int)
+    func finish()
     func stop()
 }
 
@@ -59,8 +62,10 @@ public final class TimedMouth: VoiceMouth {
     public var onEvent: ((MouthEvent) -> Void)?
     public private(set) var spoken: [String] = []
     public private(set) var isSpeaking = false
-    private var queue: [String] = []
+    private var queue: [(text: String, reply: Int?)] = []
     private var task: Task<Void, Never>?
+    private var chunker = SpeechChunker()
+    private var streaming: Int?
     private let secondsPerCharacter: Double
 
     public init(secondsPerCharacter: Double = 0.03) {
@@ -68,31 +73,49 @@ public final class TimedMouth: VoiceMouth {
     }
 
     public func speak(_ text: String) {
+        finish()
+        enqueue(text, reply: nil)
+    }
+
+    public func stream(_ delta: String, reply: Int) {
+        streaming = reply
+        for sentence in chunker.append(delta) { enqueue(sentence, reply: reply) }
+    }
+
+    public func finish() {
+        for sentence in chunker.flush() { enqueue(sentence, reply: streaming) }
+        streaming = nil
+    }
+
+    public func stop() {
+        task?.cancel()
+        queue.removeAll()
+        chunker = SpeechChunker()
+        streaming = nil
+        guard isSpeaking else { return }
+        settle()
+    }
+
+    private func enqueue(_ text: String, reply: Int?) {
         spoken.append(text)
-        queue.append(text)
+        queue.append((text, reply))
         guard task == nil else { return }
         isSpeaking = true
         onEvent?(.started)
         task = Task { [weak self] in
             while let self, !self.queue.isEmpty {
                 let next = self.queue.removeFirst()
-                self.onEvent?(.playing(next))
-                let seconds = min(1.5, Double(next.count) * self.secondsPerCharacter)
+                self.onEvent?(.upcoming(next.text + " "))
+                self.onEvent?(.heard(next.text + " ", reply: next.reply))
+                let seconds = min(1.5, Double(next.text.count) * self.secondsPerCharacter)
                 try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { return }
             }
-            self?.finish()
+            self?.settle()
         }
     }
 
-    public func stop() {
-        task?.cancel()
-        queue.removeAll()
-        guard isSpeaking else { return }
-        finish()
-    }
-
-    private func finish() {
+    private func settle() {
         task = nil
         isSpeaking = false
         onEvent?(.idle)

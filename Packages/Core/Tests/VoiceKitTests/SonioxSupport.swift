@@ -108,6 +108,11 @@ final class FakeLine: AudioLine, @unchecked Sendable {
         for completion in pending { completion() }
     }
 
+    func playNext() {
+        let next = lock.withLock { completions.isEmpty ? nil : completions.removeFirst() }
+        next?()
+    }
+
     func stop() {
         lock.withLock {
             stops += 1
@@ -143,8 +148,39 @@ func pcm(samples: Int, value: Int16 = 1000) -> Data {
     return data
 }
 
-func audioReply(_ stream: String, _ data: Data, end: Bool = false) -> String {
-    #"{"stream_id":"\#(stream)","audio":"\#(data.base64EncodedString())","audio_end":\#(end)}"#
+func marks(_ text: String, from start: Double = 0, step: Double = 0.05) -> [SonioxTTS.Mark] {
+    text.enumerated().map { SonioxTTS.Mark(String($1), start + Double($0) * step) }
+}
+
+func audioReply(_ stream: String, _ data: Data, end: Bool = false, marks: [SonioxTTS.Mark] = []) -> String {
+    var object: [String: Any] = ["stream_id": stream, "audio": data.base64EncodedString(), "audio_end": end]
+    if !marks.isEmpty {
+        object["timestamps"] = [
+            "characters": marks.map(\.text), "character_start_times_seconds": marks.map(\.start),
+            "character_end_times_seconds": marks.map { $0.start + 0.04 },
+        ]
+    }
+    return String(decoding: (try? JSONSerialization.data(withJSONObject: object)) ?? Data(), as: UTF8.self)
+}
+
+@MainActor
+final class MouthLog {
+    var events: [MouthEvent] = []
+
+    init(_ mouth: VoiceMouth) {
+        mouth.onEvent = { [weak self] event in
+            if case .level = event { return }
+            self?.events.append(event)
+        }
+    }
+
+    var upcoming: String {
+        events.reduce(into: "") { if case .upcoming(let text) = $1 { $0 += text } }
+    }
+
+    func heard(_ reply: Int?) -> String {
+        events.reduce(into: "") { if case .heard(let text, reply) = $1 { $0 += text } }
+    }
 }
 
 @MainActor

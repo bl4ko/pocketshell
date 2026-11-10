@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VoiceKit
 
 func fixture(_ name: String) throws -> String {
     let parts = name.split(separator: ".", maxSplits: 1).map(String.init)
@@ -15,4 +16,71 @@ func eventually(_ timeout: Duration = .seconds(3), _ condition: @MainActor () ->
         try? await Task.sleep(for: .milliseconds(10))
     }
     return condition()
+}
+
+@MainActor
+final class StagedMouth: VoiceMouth {
+    var onEvent: ((MouthEvent) -> Void)?
+    private(set) var isSpeaking = false
+    private(set) var spoken: [String] = []
+    private(set) var streamed = ""
+    private(set) var reply: Int?
+    private(set) var finishes = 0
+    private(set) var stops = 0
+
+    func speak(_ text: String) {
+        spoken.append(text)
+        begin()
+    }
+
+    func stream(_ delta: String, reply: Int) {
+        streamed += delta
+        self.reply = reply
+        begin()
+    }
+
+    func finish() {
+        finishes += 1
+    }
+
+    func stop() {
+        stops += 1
+        settle()
+    }
+
+    func hear(_ text: String, reply: Int? = nil) {
+        onEvent?(.upcoming(text))
+        onEvent?(.heard(text, reply: reply))
+    }
+
+    func settle() {
+        guard isSpeaking else { return }
+        isSpeaking = false
+        onEvent?(.idle)
+    }
+
+    private func begin() {
+        guard !isSpeaking else { return }
+        isSpeaking = true
+        onEvent?(.started)
+    }
+}
+
+@MainActor
+final class RecordingEars: VoiceEars {
+    var onEvent: ((EarsEvent) -> Void)?
+    var muted = false
+
+    func start() async throws {}
+
+    func stop() {}
+
+    func partial(_ text: String) {
+        onEvent?(.partial(text))
+    }
+
+    func phrase(_ text: String, start: TimeInterval? = nil, end: TimeInterval? = nil) {
+        if let start, let end { onEvent?(.spoken(start: start, end: end)) }
+        onEvent?(.phrase(text))
+    }
 }

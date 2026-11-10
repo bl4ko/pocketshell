@@ -3,30 +3,6 @@ import Testing
 
 @testable import BrainKit
 
-@Test func chunkerSpeaksWholeSentencesAsTheyStream() {
-    var chunker = SpeechChunker()
-    #expect(chunker.append("Hmm, let me ").isEmpty)
-    #expect(chunker.append("check that. Claude is") == ["Hmm, let me check that."])
-    #expect(chunker.append(" busy, e.g. running tests! Ok") == ["Claude is busy, e.g. running tests!"])
-    #expect(chunker.flush() == ["Ok"])
-    #expect(chunker.flush().isEmpty)
-}
-
-@Test func chunkerDropsMarkdownAndCode() {
-    var chunker = SpeechChunker()
-    let spoken = chunker.append(
-        "## Result\n**Done**: see [the PR](https://example.test/pr/1).\n```swift\nlet x = 1\n```\nAll good. ")
-    #expect(spoken == ["Result", "Done: see the PR.", "All good."])
-    #expect(SpeechChunker.clean("- run `make test` at https://example.test") == "run make test at a link")
-    #expect(SpeechChunker.clean("```\ncode only\n```").isEmpty)
-}
-
-@Test func chunkerHoldsAnOpenCodeFence() {
-    var chunker = SpeechChunker()
-    #expect(chunker.append("```\nrm -rf build.\n").isEmpty)
-    #expect(chunker.append("```\nDone. ") == ["Done."])
-}
-
 @Test func conversationResumesOnlyWithinAnHour() {
     let start = Date(timeIntervalSince1970: 1_000_000)
     var conversation = Conversation(hostID: "h", now: start)
@@ -73,4 +49,22 @@ import Testing
     var conversation = Conversation(hostID: "h", now: Date())
     conversation.append(.tool("c", String(repeating: "x", count: 20000)), at: Date())
     #expect((conversation.messages.last?.content?.count ?? 0) < 6100)
+}
+
+@Test func historyCanCutAnAssistantMessageToWhatWasHeard() {
+    let now = Date()
+    var conversation = Conversation(hostID: "h", now: now)
+    conversation.append(.user("hi"), at: now)
+    conversation.append(
+        .assistant("Let me look.", toolCalls: [ToolCall(id: "c1", name: "list_agents", arguments: "{}")]), at: now)
+    conversation.append(.tool("c1", "{}"), at: now)
+    conversation.append(.assistant("Claude is busy. Codex is idle."), at: now)
+    conversation.setContent("Claude is…", at: 3)
+    #expect(conversation.messages[3].content == "Claude is…")
+    conversation.setContent(nil, at: 3)
+    #expect(conversation.messages.count == 3)
+    conversation.setContent(nil, at: 1)
+    #expect(conversation.messages[1].content == nil)
+    #expect(conversation.messages[1].toolCalls.count == 1)
+    #expect(conversation.removeLast()?.role == .tool)
 }

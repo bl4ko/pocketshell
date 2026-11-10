@@ -39,11 +39,35 @@ private func voice(_ id: String, _ language: String, _ quality: VoiceChoice.Qual
     mouth.speak("one")
     mouth.speak("two")
     while mouth.isSpeaking { try await Task.sleep(for: .milliseconds(5)) }
-    #expect(events == [.started, .playing("one"), .playing("two"), .idle])
+    #expect(
+        events == [
+            .started, .upcoming("one "), .heard("one ", reply: nil), .upcoming("two "), .heard("two ", reply: nil),
+            .idle,
+        ])
     mouth.speak("three")
     mouth.stop()
     #expect(events.filter { $0 == .started || $0 == .idle } == [.started, .idle, .started, .idle])
     #expect(mouth.spoken == ["one", "two", "three"])
+}
+
+@MainActor
+@Test func timedMouthSpeaksAStreamedReplySentenceBySentenceWithItsReplyID() async throws {
+    let mouth = TimedMouth(secondsPerCharacter: 0.001)
+    var events: [MouthEvent] = []
+    mouth.onEvent = { events.append($0) }
+    mouth.stream("Claude is **bu", reply: 5)
+    #expect(mouth.spoken.isEmpty)
+    mouth.stream("sy**. Codex is", reply: 5)
+    #expect(mouth.spoken == ["Claude is busy."])
+    mouth.finish()
+    #expect(mouth.spoken == ["Claude is busy.", "Codex is"])
+    while mouth.isSpeaking { try await Task.sleep(for: .milliseconds(5)) }
+    #expect(events.contains(.heard("Claude is busy. ", reply: 5)))
+    #expect(events.contains(.heard("Codex is ", reply: 5)))
+    mouth.stream("Dropped at stop", reply: 6)
+    mouth.stop()
+    mouth.finish()
+    #expect(mouth.spoken.count == 2)
 }
 
 #if os(iOS)
@@ -58,5 +82,22 @@ private func voice(_ id: String, _ language: String, _ quality: VoiceChoice.Qual
         state.reset()
         #expect(!state.isCurrent(next))
         #expect(!state.bufferPlayed(next))
+    }
+
+    @Test func mouthStateAnnouncesASentenceWhenItsFirstBufferStartsToPlay() {
+        let state = MouthState()
+        let fired = LockedFlag()
+        let generation = state.beginUtterance()
+        state.addBuffer(started: { fired.on = true })
+        #expect(fired.on)
+        fired.on = false
+        state.addBuffer()
+        _ = state.beginUtterance()
+        state.addBuffer(started: { fired.on = true })
+        #expect(!fired.on)
+        _ = state.bufferPlayed(generation)
+        #expect(!fired.on)
+        _ = state.bufferPlayed(generation)
+        #expect(fired.on)
     }
 #endif

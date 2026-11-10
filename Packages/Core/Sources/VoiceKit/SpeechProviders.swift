@@ -63,7 +63,7 @@ public final class FallbackMouth: VoiceMouth {
         self.clock = clock
         primary.onEvent = { [weak self] in self?.forward($0) }
         fallback.onEvent = { [weak self] in self?.forward($0) }
-        primary.onFailure = { [weak self] error, unspoken in self?.primaryFailed(error, unspoken) }
+        primary.onFailure = { [weak self] error, unspoken, open in self?.primaryFailed(error, unspoken, open) }
     }
 
     public var usingFallback: Bool {
@@ -78,6 +78,19 @@ public final class FallbackMouth: VoiceMouth {
         }
     }
 
+    public func stream(_ delta: String, reply: Int) {
+        if usingFallback {
+            fallback.stream(delta, reply: reply)
+        } else {
+            primary.stream(delta, reply: reply)
+        }
+    }
+
+    public func finish() {
+        primary.finish()
+        fallback.finish()
+    }
+
     public func stop() {
         primary.stop()
         fallback.stop()
@@ -85,20 +98,27 @@ public final class FallbackMouth: VoiceMouth {
         settle()
     }
 
-    private func primaryFailed(_ error: SonioxError, _ unspoken: [String]) {
+    private func primaryFailed(_ error: SonioxError, _ unspoken: [Utterance], _ open: Int?) {
         failures += 1
         fallingBack = true
         failedAt = clock()
         if error.kind == .auth { disabled = true }
         onNotice?(error.notice + ", using iPhone voice")
-        for text in unspoken { fallback.speak(text) }
+        for (index, item) in unspoken.enumerated() {
+            guard let reply = item.reply else {
+                fallback.speak(item.text)
+                continue
+            }
+            fallback.stream(item.text, reply: reply)
+            if index < unspoken.count - 1 || open != reply { fallback.finish() }
+        }
     }
 
     private func forward(_ event: MouthEvent) {
         switch event {
         case .started, .idle:
             settle()
-        case .playing, .level:
+        case .upcoming, .heard, .level:
             onEvent?(event)
         }
     }

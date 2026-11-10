@@ -14,6 +14,8 @@
         private let synthesizer = AVSpeechSynthesizer()
         private let audio: DuplexAudio
         private let state = MouthState()
+        private var chunker = SpeechChunker()
+        private var streaming: Int?
 
         public init(audio: DuplexAudio, voiceIdentifier: String? = nil) {
             self.audio = audio
@@ -21,6 +23,21 @@
         }
 
         public func speak(_ text: String) {
+            finish()
+            say(text, reply: nil)
+        }
+
+        public func stream(_ delta: String, reply: Int) {
+            streaming = reply
+            for sentence in chunker.append(delta) { say(sentence, reply: reply) }
+        }
+
+        public func finish() {
+            for sentence in chunker.flush() { say(sentence, reply: streaming) }
+            streaming = nil
+        }
+
+        private func say(_ text: String, reply: Int?) {
             let utterance = AVSpeechUtterance(string: text)
             if voice == nil {
                 voice = SpeechVoices.choose(voiceIdentifier, from: SpeechVoices.installed()).flatMap {
@@ -39,29 +56,34 @@
             let finished: @Sendable () -> Void = { [weak self] in
                 Task { @MainActor in self?.drained(generation) }
             }
+            let started: @Sendable () -> Void = { [weak self] in
+                Task { @MainActor in
+                    guard let self, state.isCurrent(generation) else { return }
+                    self.onEvent?(.upcoming(text + " "))
+                    self.onEvent?(.heard(text + " ", reply: reply))
+                }
+            }
             synthesizer.write(utterance) { [weak self] buffer in
                 guard state.isCurrent(generation) else { return }
                 guard let pcm = buffer as? AVAudioPCMBuffer, pcm.frameLength > 0 else {
                     if state.finishUtterance(generation) { finished() }
                     return
                 }
-                state.addBuffer()
+                state.addBuffer(started: announced.on ? nil : started)
+                announced.on = true
                 let scheduled = line.schedule(pcm) {
                     if state.bufferPlayed(generation) { finished() }
                 }
                 if !scheduled, state.bufferPlayed(generation) { finished() }
                 let level = PCM.level(pcm)
-                let first = !announced.on
-                announced.on = true
-                Task { @MainActor in
-                    if first { self?.onEvent?(.playing(text)) }
-                    self?.onEvent?(.level(level))
-                }
+                Task { @MainActor in self?.onEvent?(.level(level)) }
             }
         }
 
         public func stop() {
             state.reset()
+            chunker = SpeechChunker()
+            streaming = nil
             synthesizer.stopSpeaking(at: .immediate)
             audio.line.stop()
             guard isSpeaking else { return }
@@ -81,6 +103,7 @@
         private var generation = 0
         private var utterances = 0
         private var buffers = 0
+        private var marks: [(ahead: Int, fire: @Sendable () -> Void)] = []
 
         func beginUtterance() -> Int {
             lock.withLock {
@@ -93,8 +116,14 @@
             lock.withLock { value == generation }
         }
 
-        func addBuffer() {
-            lock.withLock { buffers += 1 }
+        func addBuffer(started: (@Sendable () -> Void)? = nil) {
+            let fire = lock.withLock { () -> (@Sendable () -> Void)? in
+                defer { buffers += 1 }
+                guard let started, buffers > 0 else { return started }
+                marks.append((buffers, started))
+                return nil
+            }
+            fire?()
         }
 
         func finishUtterance(_ value: Int) -> Bool {
@@ -106,11 +135,16 @@
         }
 
         func bufferPlayed(_ value: Int) -> Bool {
-            lock.withLock {
-                guard value == generation else { return false }
+            let (idle, due) = lock.withLock { () -> (Bool, [@Sendable () -> Void]) in
+                guard value == generation else { return (false, []) }
                 buffers = max(0, buffers - 1)
-                return utterances == 0 && buffers == 0
+                for index in marks.indices { marks[index].ahead -= 1 }
+                let due = marks.filter { $0.ahead <= 0 }.map(\.fire)
+                marks.removeAll { $0.ahead <= 0 }
+                return (utterances == 0 && buffers == 0, due)
             }
+            for fire in due { fire() }
+            return idle
         }
 
         func isIdle(_ value: Int) -> Bool {
@@ -122,6 +156,7 @@
                 generation += 1
                 utterances = 0
                 buffers = 0
+                marks = []
             }
         }
     }

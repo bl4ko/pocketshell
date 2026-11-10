@@ -45,6 +45,44 @@ private final class ScriptedModel: BrainModel, @unchecked Sendable {
 private let busyScreen = "✻ Thinking… (12s · esc to interrupt)\n> \n  ? for shortcuts"
 
 @MainActor
+private func makeToolbox() throws -> AgentToolbox {
+    let list = try fixture("list-agents.txt")
+    return AgentToolbox(
+        io: .init(
+            exec: { command in
+                if command.contains("list-panes") { return list }
+                if command.contains("capture-pane") { return busyScreen }
+                return ""
+            },
+            focus: { _ in true },
+            current: { CurrentTarget(tmuxSession: "work", windowIndex: 2, windowID: "@7") }))
+}
+
+@MainActor
+private final class StagedRig {
+    let ears = RecordingEars()
+    let mouth = StagedMouth()
+    var time: TimeInterval = 0
+    let model: ScriptedModel
+    var brain: VoiceBrain!
+
+    init(_ model: ScriptedModel) async throws {
+        self.model = model
+        brain = VoiceBrain(
+            hostID: "host-1", hostName: "devbox", ears: ears, mouth: mouth, model: model, toolbox: try makeToolbox(),
+            pollInterval: .seconds(60), clock: { [weak self] in self?.time ?? 0 })
+        await brain.start()
+        _ = await eventually { !self.brain.toolbox.agents.isEmpty }
+    }
+
+    deinit {
+        MainActor.assumeIsolated { brain.end() }
+    }
+
+    var spoken: [ChatMessage] { brain.conversation.messages.filter { $0.content?.hasPrefix("[app:") != true } }
+}
+
+@MainActor
 private final class Rig {
     let ears = TextEars()
     let mouth = TimedMouth(secondsPerCharacter: 0.001)
@@ -83,6 +121,8 @@ private final class Rig {
     func phrase(_ text: String) {
         ears.submit(text)
     }
+
+    var spoken: [ChatMessage] { brain.conversation.messages.filter { $0.content?.hasPrefix("[app:") != true } }
 }
 
 private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> ToolCall {
@@ -101,7 +141,10 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     rig.phrase("what are my agents doing")
     #expect(await eventually { rig.mouth.spoken.contains("Codex in web is idle.") })
     #expect(rig.mouth.spoken.prefix(3) == ["Hmm, let me check.", "Claude in api is busy.", "Codex in web is idle."])
-    #expect(rig.brain.caption == VoiceBrain.Caption(.brain, "Claude in api is busy. Codex in web is idle."))
+    #expect(
+        await eventually {
+            rig.brain.caption == VoiceBrain.Caption(.brain, "Claude in api is busy. Codex in web is idle.")
+        })
     let second = try #require(rig.model.requests.last)
     #expect(second.last?.role == .tool)
     #expect(second.last?.content?.contains("Claude in api") == true)
@@ -176,10 +219,12 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     rig.phrase("wait, what about codex")
     #expect(await eventually { rig.mouth.spoken.contains("Sure, Codex.") })
     #expect(!rig.mouth.spoken.contains("Sentence 30."))
-    let users = rig.brain.conversation.messages.filter { $0.role == .user }.compactMap(\.content)
+    let users = rig.spoken.filter { $0.role == .user }.compactMap(\.content)
     #expect(users == ["tell me everything", "wait, what about codex"])
-    let partial = try #require(rig.brain.conversation.messages.first { $0.role == .assistant })
-    #expect(partial.content?.hasPrefix("Sentence 1.") == true)
+    let partial = try #require(rig.brain.conversation.messages.first { $0.role == .assistant }?.content)
+    #expect(partial.hasPrefix("Sentence 1. Sentence 2."))
+    #expect(partial.hasSuffix("…"))
+    #expect(!partial.contains("Sentence 30."))
 }
 
 @MainActor
@@ -234,11 +279,11 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     let first = try Rig(ScriptedModel([.success([.text("Hi."), .finished("stop")])]), store: store, now: start)
     await first.brain.start()
     first.phrase("hello")
-    #expect(await eventually { first.brain.phase == .listening && first.brain.conversation.messages.count == 2 })
+    #expect(await eventually { first.brain.phase == .listening && first.spoken.count == 2 })
     first.brain.end()
     let again = try Rig(ScriptedModel([]), store: store, now: start.addingTimeInterval(1200))
     await again.brain.start()
-    #expect(again.brain.conversation.messages.count == 2)
+    #expect(again.spoken.map(\.content) == ["hello", "Hi."])
     again.brain.end()
     let later = try Rig(ScriptedModel([]), store: store, now: start.addingTimeInterval(7200))
     await later.brain.start()
@@ -294,6 +339,102 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     rig.phrase("and codex")
     #expect(await eventually { timings.count == 2 })
     #expect(timings[1].sttMs == 0)
+}
+
+@MainActor
+@Test func replyTokensStreamToTheMouthAndTheCaptionFollowsWhatWasHeard() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([
+                .text("Let me **look**. "), .toolCalls([call("c1", "list_agents")]), .finished("tool_calls"),
+            ]),
+            .success([.text("Claude in api "), .text("is busy."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("what is claude doing")
+    #expect(await eventually { rig.mouth.streamed == "Let me **look**. Claude in api is busy." })
+    #expect(await eventually { rig.mouth.finishes == 2 })
+    #expect(rig.brain.caption == VoiceBrain.Caption(.user, "what is claude doing"))
+    let reply = try #require(rig.mouth.reply)
+    rig.mouth.hear("Let me look. ", reply: reply - 1)
+    #expect(rig.brain.caption == VoiceBrain.Caption(.brain, "Let me look."))
+    rig.mouth.hear("Claude in ", reply: reply)
+    #expect(rig.brain.caption == VoiceBrain.Caption(.brain, "Claude in"))
+    rig.mouth.hear("api is busy.", reply: reply)
+    #expect(rig.brain.caption == VoiceBrain.Caption(.brain, "Claude in api is busy."))
+    rig.mouth.settle()
+    #expect(rig.brain.phase == .listening)
+    #expect(rig.spoken.last?.content == "Claude in api is busy.")
+}
+
+@MainActor
+@Test func bargeInCutsTheStoredReplyToWhatTheUserHeard() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Claude in api is busy. Codex in web is idle."), .finished("stop")]),
+            .success([.text("Okay."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("what are my agents doing")
+    #expect(await eventually { rig.mouth.finishes == 1 && rig.spoken.count == 2 })
+    #expect(rig.spoken.last?.content == "Claude in api is busy. Codex in web is idle.")
+    let reply = try #require(rig.mouth.reply)
+    rig.mouth.hear("Claude in api ", reply: reply)
+    rig.ears.partial("stop")
+    #expect(rig.mouth.stops == 1)
+    #expect(rig.spoken.map(\.content) == ["what are my agents doing", "Claude in api…"])
+    rig.ears.phrase("stop, tell me about codex")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    let sent = try #require(rig.model.requests.last).filter { $0.content?.hasPrefix("[app:") != true }
+    #expect(
+        sent.dropFirst().map(\.content) == ["what are my agents doing", "Claude in api…", "stop, tell me about codex"])
+}
+
+@MainActor
+@Test func bargeInDuringGenerationKeepsToolCallsAndDropsUnheardText() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel(
+            [
+                .success([.text("Let me look. "), .toolCalls([call("c1", "list_agents")]), .finished("tool_calls")]),
+                .success((1...40).map { .text("Word\($0) ") } + [.finished("stop")]),
+            ], delay: .milliseconds(20)))
+    rig.ears.phrase("what are my agents doing")
+    #expect(await eventually { rig.mouth.streamed.contains("Word3 ") })
+    let reply = try #require(rig.mouth.reply)
+    rig.mouth.hear("Let me ", reply: reply - 1)
+    rig.ears.partial("no wait")
+    let messages = rig.spoken
+    #expect(messages.map(\.role) == [.user, .assistant, .tool])
+    #expect(messages[1].content == "Let me…")
+    #expect(messages[1].toolCalls.count == 1)
+    #expect(rig.brain.phase == .userSpeaking)
+}
+
+@MainActor
+@Test func speechThatContinuesAfterAnEarlyEndpointBecomesOneUserTurn() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel(
+            [
+                .success([.text("Fix what?"), .finished("stop")]),
+                .success([.text("OK, asking Claude."), .finished("stop")]),
+            ], delay: .milliseconds(150)))
+    rig.ears.phrase("tell claude to fix the")
+    #expect(await eventually { rig.model.requests.count == 1 })
+    rig.ears.partial("login")
+    rig.ears.phrase("login bug on mobile")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    let users = try #require(rig.model.requests.last).filter {
+        $0.role == .user && $0.content?.hasPrefix("[app:") != true
+    }
+    #expect(users.map(\.content) == ["tell claude to fix the login bug on mobile"])
+    #expect(await eventually { rig.spoken.map(\.role) == [.user, .assistant] })
+
+    let reply = try #require(rig.mouth.reply)
+    rig.mouth.hear("OK, asking ", reply: reply)
+    rig.ears.phrase("and also run the tests")
+    #expect(await eventually { rig.model.requests.count == 3 })
+    #expect(
+        rig.spoken.prefix(3).map(\.content) == [
+            "tell claude to fix the login bug on mobile", "OK, asking…", "and also run the tests",
+        ])
 }
 
 @Test func benchmarkCSVQuotesTextAndLeavesMissingTimesEmpty() throws {

@@ -35,6 +35,20 @@ public struct Conversation: Codable, Equatable, Sendable {
         updatedAt = now
     }
 
+    @discardableResult
+    public mutating func removeLast() -> ChatMessage? {
+        messages.popLast()
+    }
+
+    public mutating func setContent(_ content: String?, at index: Int) {
+        guard messages.indices.contains(index) else { return }
+        if content == nil, messages[index].toolCalls.isEmpty {
+            messages.remove(at: index)
+        } else {
+            messages[index].content = content
+        }
+    }
+
     public var summary: String? {
         guard !earlier.isEmpty else { return nil }
         return "Earlier in this conversation the user said: " + earlier.joined(separator: "; ") + "."

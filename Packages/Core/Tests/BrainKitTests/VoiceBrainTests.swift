@@ -1,4 +1,5 @@
 import Foundation
+import MonitorKit
 import Testing
 import VoiceKit
 
@@ -77,12 +78,17 @@ private final class StagedRig {
     var brain: VoiceBrain!
     var herdrScreen = ""
     var commands: [String] = []
+    var onCommand: ((String) -> Void)?
 
     init(_ model: ScriptedModel, herdrScreen: String = "") async throws {
         self.model = model
         self.herdrScreen = herdrScreen
         let toolbox = try makeToolbox(
-            herdrScreen: { [weak self] in self?.herdrScreen ?? "" }, sent: { [weak self] in self?.commands.append($0) })
+            herdrScreen: { [weak self] in self?.herdrScreen ?? "" },
+            sent: { [weak self] command in
+                self?.commands.append(command)
+                self?.onCommand?(command)
+            })
         brain = VoiceBrain(
             hostID: "host-1", hostName: "devbox", ears: ears, mouth: mouth, model: model, toolbox: toolbox,
             pollInterval: .seconds(60), clock: { [weak self] in self?.time ?? 0 })
@@ -859,4 +865,41 @@ private func sentTexts(_ rig: StagedRig) -> [String] {
     #expect(rig.brain.pendingSend == nil)
     let note = try #require(rig.model.requests.last?.last?.content)
     #expect(note.contains("did not confirm"))
+}
+
+@MainActor
+@Test func aMenuTheBrainsOwnToolOpensIsNotAskedAsAUserDecision() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([
+                .text("Switching the model. "),
+                .toolCalls([call("m1", "set_model", #"{"agent":"reviewer","model":"sonnet"}"#)]),
+                .finished("tool_calls"),
+            ]),
+            .success([.text("Done."), .finished("stop")]),
+        ]))
+    var agents = HostAgents.parse(try fixture("list-agents.txt"))
+    agents[2].prompt = InteractivePrompt.read(askScreen)
+    #expect(agents[2].prompt != nil)
+    var polled = false
+    rig.onCommand = { command in
+        guard !polled, command.contains("w1:p3") else { return }
+        polled = true
+        rig.brain.noteAgents(agents)
+    }
+    rig.ears.phrase("switch the reviewer to sonnet")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    #expect(polled)
+    #expect(rig.mouth.stops == 0)
+    #expect(rig.brain.waitingPrompts.isEmpty)
+    rig.brain.noteAgents(agents)
+    #expect(rig.brain.waitingPrompts.isEmpty, "the grace after the tool still hides the menu")
+    rig.mouth.settle()
+    #expect(!rig.mouth.spoken.contains(askSentence))
+
+    rig.time = VoiceBrain.toolGrace + 1
+    rig.brain.noteAgents(agents)
+    #expect(rig.brain.waitingPrompts.count == 1, "a prompt still there after the grace is the user's decision")
+    rig.time += 1
+    #expect(await eventually { rig.mouth.spoken.contains(askSentence) })
 }

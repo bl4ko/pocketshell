@@ -90,6 +90,7 @@ public final class VoiceBrain: ObservableObject {
     private var agentSegment = false
     private var answered: [String: InteractivePrompt] = [:]
     private var notes: [String] = []
+    private var driving: [String: TimeInterval] = [:]
 
     private struct Reply {
         let id: Int
@@ -149,6 +150,7 @@ public final class VoiceBrain: ObservableObject {
         pendingSend = nil
         answered = [:]
         notes = []
+        driving = [:]
         ears.onEvent = { [weak self] in self?.hear($0) }
         mouth.onEvent = { [weak self] in self?.mouthChanged($0) }
         ears.muted = muted
@@ -232,7 +234,12 @@ public final class VoiceBrain: ObservableObject {
         }
     }
 
-    public func noteAgents(_ agents: [BrainAgent]) {
+    public static let toolGrace: TimeInterval = 3
+
+    public func noteAgents(_ listed: [BrainAgent]) {
+        let now = clock()
+        driving = driving.filter { $0.value > now }
+        let agents = listed.filter { driving[$0.id] == nil }
         answered = answered.filter { id, prompt in agents.contains { $0.id == id && $0.prompt == prompt } }
         let current = agents.compactMap { agent -> WaitingPrompt? in
             guard agent.status == .waiting, let prompt = agent.prompt, answered[agent.id] != prompt else { return nil }
@@ -507,7 +514,10 @@ public final class VoiceBrain: ObservableObject {
             guard !calls.isEmpty else { return }
             for call in calls {
                 toolbox.spokenTurns = spokenTurns
+                let driven = drivenAgent(call)
+                if let driven { driving[driven] = .infinity }
                 let result = await toolbox.call(call)
+                if let driven { driving[driven] = clock() + Self.toolGrace }
                 refreshPendingSend()
                 guard id == turnID, !Task.isCancelled else { return }
                 append(.tool(call.id, result))
@@ -545,6 +555,14 @@ public final class VoiceBrain: ObservableObject {
         }
         let name = toolbox.agents.first { $0.id == id }?.spokenName ?? "the agent"
         pendingSend = PendingSend(agentName: name, text: text)
+    }
+
+    private func drivenAgent(_ call: ToolCall) -> String? {
+        guard !["list_agents", "list_sessions"].contains(call.name) else { return nil }
+        let arguments = call.argumentObject
+        let name = (arguments["agent"] as? String) ?? (arguments["target"] as? String)
+        guard case .found(let agent) = AgentResolver.resolve(name, in: toolbox.agents) else { return nil }
+        return agent.id
     }
 
     private func appendReply(_ reply: String, calls: [ToolCall]) {

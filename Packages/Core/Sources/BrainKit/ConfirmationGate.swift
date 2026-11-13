@@ -9,6 +9,7 @@ public enum AgentAction: Equatable, Sendable {
     case focus(agentID: String)
     case start(kind: AgentKind, directory: String?)
     case close(agentID: String)
+    case session(SessionAction)
 }
 
 public struct PendingConfirmation: Equatable, Sendable {
@@ -100,6 +101,8 @@ public enum SafetyPolicy {
                 + (directory.map { " in \(($0 as NSString).lastPathComponent)" } ?? "") + "?"
         case .close:
             return "Should I close \(name)?"
+        case .session:
+            return nil
         }
     }
 

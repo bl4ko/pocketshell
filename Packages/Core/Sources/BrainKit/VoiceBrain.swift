@@ -419,7 +419,9 @@ public final class VoiceBrain: ObservableObject {
             let segment = replyID
             replies.append(Reply(id: segment))
             do {
-                let stream = model.stream(conversation.request(system: systemPrompt), tools: AgentToolbox.definitions)
+                let stream = model.stream(
+                    conversation.request(system: systemPrompt),
+                    tools: AgentToolbox.definitions + SessionToolbox.definitions)
                 for try await event in stream {
                     guard id == turnID, !Task.isCancelled else { return }
                     if timing?.turn == id, timing?.firstToken == nil { timing?.firstToken = clock() }
@@ -554,7 +556,8 @@ public enum BrainPrompt {
     public static func system(hostName: String) -> String {
         """
         You are the voice assistant in PocketShell, an SSH terminal app on the user's iPhone. You talk with the user \
-        out loud and help them run their coding agents (Claude Code and Codex) on the host "\(hostName)".
+        out loud and help them run their coding agents (Claude Code and Codex) and their terminal sessions on the host \
+        "\(hostName)".
 
         Everything you write is spoken aloud. Talk like a person in a relaxed conversation: short sentences, plain \
         words, usually one to three sentences per reply. Start with the answer. Do not repeat the question and do \
@@ -566,6 +569,8 @@ public enum BrainPrompt {
         for a screen preview, a working directory, or when the user asks you to check again. When the user names no \
         agent, act on the agent in the current tab: omit the agent argument. Read answers with read_answer and \
         summarize them in plain speech; give details only when asked.
+
+        \(SessionToolbox.prompt)
 
         Before any tool call, first say a short lead-in in the same reply, for example "Let me look." or "OK, \
         asking Claude." Keep it under six words and do not use the same one twice in a row. Then call the tool.

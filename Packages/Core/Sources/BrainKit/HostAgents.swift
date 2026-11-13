@@ -239,6 +239,7 @@ public enum HostAgents {
 
     static let listScript = """
         \(path)
+        \(HostLayout.windowsScript)
         ps -A -o pid= -o ppid= -o args= > "${TMPDIR:-/tmp}/psh-brain-ps.$$" 2>/dev/null
         tmux list-panes -a -F '#{pane_id}|#{pane_pid}|#{session_name}|#{window_index}|#{window_id}|#{window_name}' 2>/dev/null |
         awk -F'|' '{ clone = ($3 ~ /-psh-[0-9a-f]+$/) ? 1 : 0

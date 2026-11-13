@@ -1,0 +1,23 @@
+@@psh-windows@@
+1	1	work	0	@1	%1	zsh	/home/dev	zsh
+1	0	work	1	@4	%5	npm	/home/dev/src/web	build
+0	0	work	1	@4	%6	zsh	/home/dev	build
+1	0	work	2	@7	%3	node	/home/dev/src/api	api
+1	1	work-psh-0a1b2c3d	2	@7	%3	node	/home/dev/src/api	api
+1	1	ops	0	@9	%8	zsh	/home/dev/homelab	backups
+@@psh-tmux:%3|4101|claude|work|2|@7|api@@
+@@psh-session@@
+{"pid":4101,"sessionId":"5b3c0a52-7d1e-4c8e-9f20-1a2b3c4d5e6f","cwd":"/home/dev/src/api","status":"busy","name":"api-1"}
+@@psh-cwd@@
+/home/dev/src/api
+@@psh-screen@@
+⏺ Running the migration tests now.
+
+✻ Migrating… (12s · ↓ 1.2k tokens · esc to interrupt)
+
+────────────────────────────────────────
+>
+────────────────────────────────────────
+  ? for shortcuts
+@@psh-herdr:default@@
+{"id":"cli:api:snapshot","result":{"snapshot":{"version":"0.9.0","protocol":3,"focused_workspace_id":"w1","focused_tab_id":"w1:t1","focused_pane_id":"w1:p3","workspaces":[{"workspace_id":"w1","number":1,"label":"infra","agent_status":"blocked","focused":true},{"workspace_id":"w2","number":2,"label":"pocketshell","agent_status":"done","focused":false}],"agents":[{"agent":"codex","agent_status":"blocked","focused":true,"name":"reviewer","pane_id":"w1:p3","tab_id":"w1:t1","workspace_id":"w1","title":"Allow command?"},{"agent":"claude","agent_status":"done","focused":false,"pane_id":"w2:p7","tab_id":"w2:t1","workspace_id":"w2"}],"tabs":[{"tab_id":"w1:t1","workspace_id":"w1","label":"deploy","number":1},{"tab_id":"w1:t2","workspace_id":"w1","label":"logs","number":2},{"tab_id":"w2:t1","workspace_id":"w2","label":"1","number":1}],"panes":[{"pane_id":"w1:p3","workspace_id":"w1","tab_id":"w1:t1","agent":"codex","cwd":"/home/dev/src/infra","agent_status":"blocked","focused":true},{"pane_id":"w1:p5","workspace_id":"w1","tab_id":"w1:t1","label":"server","cwd":"/home/dev/src/infra","agent_status":"unknown","focused":false},{"pane_id":"w1:p6","workspace_id":"w1","tab_id":"w1:t2","cwd":"/var/log","agent_status":"unknown","focused":false},{"pane_id":"w2:p7","workspace_id":"w2","tab_id":"w2:t1","agent":"claude","cwd":"/home/dev/src/pocketshell","agent_status":"done","focused":false}],"layouts":[{"tab_id":"w1:t1","focused_pane_id":"w1:p3","zoomed":false,"panes":[{"pane_id":"w1:p3"},{"pane_id":"w1:p5"}]},{"tab_id":"w1:t2","focused_pane_id":"w1:p6","zoomed":false,"panes":[{"pane_id":"w1:p6"}]},{"tab_id":"w2:t1","focused_pane_id":"w2:p7","zoomed":false,"panes":[{"pane_id":"w2:p7"}]}]}}}

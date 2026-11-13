@@ -40,7 +40,7 @@ let package = Package(
         .target(name: "GitKit", swiftSettings: strict),
         .target(name: "VoiceKit", swiftSettings: strict),
         .target(
-            name: "BrainKit", dependencies: ["Models", "VoiceKit", "MonitorKit", "TmuxKit", "HerdrKit"],
+            name: "BrainKit", dependencies: ["Models", "VoiceKit", "MonitorKit", "TmuxKit", "HerdrKit", "GitKit"],
             swiftSettings: strict),
         .binaryTarget(name: "GhosttyVt", path: "Frameworks/GhosttyVt.xcframework"),
         .target(name: "VTKit", dependencies: ["GhosttyVt"], swiftSettings: strict),

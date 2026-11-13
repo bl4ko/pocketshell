@@ -30,6 +30,7 @@ public final class AgentToolbox {
     public private(set) var listed = false
     public var gate = ConfirmationGate()
     public var onSent: ((BrainAgent, String) -> Void)?
+    public var sessions: SessionToolbox?
     private let io: IO
 
     public init(io: IO) {
@@ -41,6 +42,11 @@ public final class AgentToolbox {
     public static let snapshotPrefix = "[app: Agents now: "
 
     public var snapshot: String? {
+        guard let agents = agentSnapshot else { return nil }
+        return sessions?.snapshot.map { agents + "\n" + $0 } ?? agents
+    }
+
+    private var agentSnapshot: String? {
         guard listed else { return nil }
         guard !agents.isEmpty else { return Self.snapshotPrefix + "none.]" }
         let items = agents.map { agent in
@@ -54,6 +60,7 @@ public final class AgentToolbox {
         guard let output = await io.exec(HostAgents.listCommand()) else { return nil }
         agents = HostAgents.parse(output, current: io.current())
         listed = true
+        sessions?.ingest(output, agents: agents)
         return agents
     }
 
@@ -87,6 +94,10 @@ public final class AgentToolbox {
                 return await self.request(.answer(agentID: agent.id, digit: digit), agent: agent, screen: screen)
             }
         case "send_key":
+            if let sessions, arguments["target"] != nil || AgentKey(rawValue: arguments["key"] as? String ?? "") == nil
+            {
+                return await settle(sessions.call(call) { await self.listAgents() })
+            }
             guard let key = AgentKey(rawValue: arguments["key"] as? String ?? "") else {
                 return Self.error("key must be esc, ctrl_c, or enter")
             }
@@ -110,12 +121,25 @@ public final class AgentToolbox {
         case "close_agent":
             return await withAgent(name) { await self.request(.close(agentID: $0.id), agent: $0) }
         default:
-            return Self.error("Unknown tool \(call.name)")
+            guard let sessions, SessionToolbox.toolNames.contains(call.name) else {
+                return Self.error("Unknown tool \(call.name)")
+            }
+            return await settle(sessions.call(call) { await self.listAgents() })
         }
     }
 
     public func perform(_ action: AgentAction) async -> String {
+        if case .session(let sessionAction) = action {
+            guard let sessions else { return Self.error("unreachable") }
+            return await sessions.perform(sessionAction) { await self.listAgents() }
+        }
         if case .start(let kind, let directory) = action {
+            if let herdr = await sessions?.herdrStart(
+                kind: kind, directory: directory, current: io.current(), hasTmux: io.tmuxSession() != nil,
+                refresh: { await self.listAgents() })
+            {
+                return herdr
+            }
             guard let session = io.tmuxSession() ?? agents.compactMap(Self.tmuxSession).first else {
                 return Self.error("There is no tmux session to start an agent in.")
             }
@@ -149,7 +173,7 @@ public final class AgentToolbox {
             guard await io.focus(agent) else { return Self.error("Could not switch to \(agent.spokenName).") }
             result["focused"] = true
             return Self.json(result)
-        case .start:
+        case .start, .session:
             return Self.error("unreachable")
         }
         guard let raw = await io.exec(AgentControl.checked(command)) else {
@@ -169,13 +193,24 @@ public final class AgentToolbox {
 
     private func request(_ action: AgentAction, agent: BrainAgent?, screen: String? = nil) async -> String {
         if let question = SafetyPolicy.question(for: action, agent: agent, screen: screen) {
-            gate.hold(action, question: question)
-            return Self.json([
-                "status": "needs_confirmation", "question": question,
-                "instruction": "Ask the user this question and wait. Do not call the tool again.",
-            ])
+            return hold(action, question: question)
         }
         return await perform(action)
+    }
+
+    private func hold(_ action: AgentAction, question: String) -> String {
+        gate.hold(action, question: question)
+        return Self.json([
+            "status": "needs_confirmation", "question": question,
+            "instruction": "Ask the user this question and wait. Do not call the tool again.",
+        ])
+    }
+
+    private func settle(_ outcome: SessionToolbox.Outcome) -> String {
+        switch outcome {
+        case .done(let result): result
+        case .confirm(let action, let question): hold(.session(action), question: question)
+        }
     }
 
     private func withAgent(_ name: String?, _ body: (BrainAgent) async -> String) async -> String {
@@ -222,7 +257,7 @@ public final class AgentToolbox {
     static func agentID(_ action: AgentAction) -> String? {
         switch action {
         case .sendPrompt(let id, _), .answer(let id, _), .key(let id, _), .focus(let id), .close(let id): id
-        case .start: nil
+        case .start, .session: nil
         }
     }
 
@@ -261,10 +296,13 @@ public final class AgentToolbox {
                 "option": .object(["type": "string", "description": "Option number, or words from its label."]),
             ], required: ["option"]),
         tool(
-            "send_key", "Press a key in an agent: esc cancels or interrupts, ctrl_c interrupts, enter accepts.",
+            "send_key",
+            "Press a key in an agent, or with target in any tab, window, or pane: esc cancels or interrupts, ctrl_c "
+                + "interrupts, enter accepts, tab and arrows move, shift_tab cycles modes, ctrl_d ends input.",
             [
                 "agent": agentParameter,
-                "key": .object(["type": "string", "enum": .array(["esc", "ctrl_c", "enter"])]),
+                "key": .object(["type": "string", "enum": .array(SessionKey.allCases.map { .string($0.rawValue) })]),
+                "target": SessionToolbox.targetParameter,
             ],
             required: ["key"]),
         tool("focus_agent", "Show an agent on the phone screen.", ["agent": agentParameter]),

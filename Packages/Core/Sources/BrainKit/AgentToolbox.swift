@@ -34,6 +34,9 @@ public final class AgentToolbox {
     public var gate = ConfirmationGate()
     public var onSent: ((BrainAgent, String) -> Void)?
     public var sessions: SessionToolbox?
+    public var spokenTurns: [String]? {
+        didSet { sessions?.spokenTurns = spokenTurns }
+    }
     let io: IO
 
     public init(io: IO) {
@@ -87,7 +90,13 @@ public final class AgentToolbox {
         case "send_prompt":
             let text = (arguments["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return Self.error("text is empty") }
-            return await withAgent(name) { await self.request(.sendPrompt(agentID: $0.id, text: text), agent: $0) }
+            return await withAgent(name) { agent in
+                let action = AgentAction.sendPrompt(agentID: agent.id, text: text)
+                if let turns = self.spokenTurns, !PromptFidelity.isVerbatim(text, turns: turns) {
+                    return self.hold(action, question: PromptFidelity.readBack(text, agent: agent.spokenName))
+                }
+                return await self.request(action, agent: agent)
+            }
         case "answer_question":
             let option = "\(arguments["option"] ?? "")"
             return await withAgent(name) { agent in
@@ -210,10 +219,11 @@ public final class AgentToolbox {
 
     private func hold(_ action: AgentAction, question: String) -> String {
         gate.hold(action, question: question)
-        return Self.json([
-            "status": "needs_confirmation", "question": question,
-            "instruction": "Ask the user this question and wait. Do not call the tool again.",
-        ])
+        let instruction =
+            question.hasPrefix(PromptFidelity.readBackPrefix)
+            ? "This is not the user's own words. Say the question word for word, then wait. Do not call the tool again."
+            : "Ask the user this question and wait. Do not call the tool again."
+        return Self.json(["status": "needs_confirmation", "question": question, "instruction": instruction])
     }
 
     private func settle(_ outcome: SessionToolbox.Outcome) -> String {
@@ -295,8 +305,18 @@ public final class AgentToolbox {
             "read_answer", "Read an agent's last answer, or its full last turn, from its transcript.",
             ["agent": agentParameter, "which": .object(["type": "string", "enum": .array(["last", "full"])])]),
         tool(
-            "send_prompt", "Type a prompt into an agent's input box and submit it.",
-            ["agent": agentParameter, "text": .object(["type": "string", "description": "The exact prompt."])],
+            "send_prompt",
+            "Type the user's own words into an agent's input box and submit them. Text that is not near verbatim is "
+                + "read back to the user first.",
+            [
+                "agent": agentParameter,
+                "text": .object([
+                    "type": "string",
+                    "description": .string(
+                        "The user's words: drop only fillers and the addressing part (\"tell Claude to\"), fix "
+                            + "obvious speech recognition errors. Never add goals, context, a prefix, or paraphrase."),
+                ]),
+            ],
             required: ["text"]),
         tool(
             "answer_question",

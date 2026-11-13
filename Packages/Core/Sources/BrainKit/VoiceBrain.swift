@@ -48,6 +48,7 @@ public final class VoiceBrain: ObservableObject {
     @Published public private(set) var interrupted = false
     @Published public private(set) var lastTiming: TurnTiming?
     @Published public private(set) var waitingPrompts: [WaitingPrompt] = []
+    @Published public private(set) var pendingSend: PendingSend?
     public var onDictation: ((String) -> Void)?
     public var onEnded: (() -> Void)?
     public var onUserTurn: ((UserTurn) -> Void)?
@@ -145,6 +146,7 @@ public final class VoiceBrain: ObservableObject {
         agentSegment = false
         interrupted = false
         waitingPrompts = []
+        pendingSend = nil
         answered = [:]
         notes = []
         ears.onEvent = { [weak self] in self?.hear($0) }
@@ -201,6 +203,7 @@ public final class VoiceBrain: ObservableObject {
         timing = nil
         interrupted = false
         waitingPrompts = []
+        pendingSend = nil
         phase = .listening
         inputLevel = 0
         outputLevel = 0
@@ -445,6 +448,7 @@ public final class VoiceBrain: ObservableObject {
         }
         carry = nil
         turnText = nil
+        defer { refreshPendingSend() }
         switch toolbox.gate.resolve(userTurn: text) {
         case .confirmed(let pending):
             let result = await toolbox.perform(pending.action)
@@ -502,11 +506,45 @@ public final class VoiceBrain: ObservableObject {
             appendReply(reply, calls: calls)
             guard !calls.isEmpty else { return }
             for call in calls {
+                toolbox.spokenTurns = spokenTurns
                 let result = await toolbox.call(call)
+                refreshPendingSend()
                 guard id == turnID, !Task.isCancelled else { return }
                 append(.tool(call.id, result))
             }
         }
+    }
+
+    public func resolvePendingSend(send: Bool) async {
+        guard let pending = toolbox.gate.pending, case .sendPrompt = pending.action else { return }
+        toolbox.gate.cancel()
+        refreshPendingSend()
+        if machine.phase == .speaking { mouth.stop() }
+        guard send else {
+            notes.append("[app: The user tapped Cancel for \"\(pending.question)\". Nothing was sent.]")
+            return
+        }
+        let result = await toolbox.perform(pending.action)
+        if let failure = AgentToolbox.failure(result) { detail = failure }
+        notes.append("[app: The user tapped Send for \"\(pending.question)\". Result: \(result)]")
+    }
+
+    private var spokenTurns: [String] {
+        let turns = conversation.messages.filter { $0.role == .user }.compactMap(\.content).map { content in
+            let draft = content.contains("has an unsent prompt in its input box")
+            let quoted = draft ? content.matches(of: /«([^»]*)»/).map { String($0.1) }.joined(separator: " ") : ""
+            return content.replacing(/\[app:[^\]]*\]/, with: " ") + " " + quoted
+        }
+        return Array(turns.suffix(4))
+    }
+
+    private func refreshPendingSend() {
+        guard let pending = toolbox.gate.pending, case .sendPrompt(let id, let text) = pending.action else {
+            if pendingSend != nil { pendingSend = nil }
+            return
+        }
+        let name = toolbox.agents.first { $0.id == id }?.spokenName ?? "the agent"
+        pendingSend = PendingSend(agentName: name, text: text)
     }
 
     private func appendReply(_ reply: String, calls: [ToolCall]) {
@@ -606,6 +644,11 @@ public final class VoiceBrain: ObservableObject {
     }
 }
 
+public struct PendingSend: Equatable, Sendable {
+    public let agentName: String
+    public let text: String
+}
+
 public enum BrainPrompt {
     public static func system(hostName: String) -> String {
         """
@@ -633,13 +676,17 @@ public enum BrainPrompt {
         Before any tool call, first say a short lead-in in the same reply, for example "Let me look." or "OK, \
         asking Claude." Keep it under six words and do not use the same one twice in a row. Then call the tool.
 
-        When the user dictates a message for an agent ("tell Claude: ..."), send their words almost verbatim: remove \
-        only filler words and false starts. When the user discussed a task with you and then says "do that" or "go \
-        ahead", write a clear, complete prompt yourself. After every send, say in one short sentence what you sent.
+        A prompt you send to an agent with send_prompt must be the user's own words, near verbatim. Remove only \
+        filler words ("um", "uh") and false starts, fix obvious speech recognition errors, and drop the addressing \
+        part: "tell security to run the tests" sends "Run the tests". Never add goals, context, explanations, a \
+        prefix such as "Correction:", or a paraphrase about the user ("the user wants ..."). When the user says "do \
+        that" about something you discussed, send their own words from that discussion. The app reads any other \
+        text back to the user and sends it only after a yes. After every send, say in one short sentence what you \
+        sent.
 
         Some tool results have status needs_confirmation and a question. Ask the user that question in natural words \
-        and stop. The app runs the action only if the user's next reply is a yes. Never say an action ran unless a \
-        tool result says so.
+        and stop; when the question quotes a text to send, say that text word for word. The app runs the action only \
+        if the user's next reply is a yes. Never say an action ran unless a tool result says so.
 
         When an agent waits on a question with options, the app asks the user in a reply that lists the options \
         and ends with "Which one?", and the agent note shows the question and its numbered options. The user's next \

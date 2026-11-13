@@ -272,6 +272,7 @@ public final class SessionToolbox {
 
     public private(set) var layout = HostLayout()
     public private(set) var ingested = false
+    public var spokenTurns: [String]?
     private var agents: [BrainAgent] = []
     private let io: IO
 
@@ -318,6 +319,9 @@ public final class SessionToolbox {
             let enter = arguments["enter"] as? Bool ?? false
             return await withTarget(target, refresh: refresh) { session in
                 let action = SessionAction.send(target: session.id, text: text, enter: enter)
+                if session.agent != nil, let turns = self.spokenTurns, !PromptFidelity.isVerbatim(text, turns: turns) {
+                    return .confirm(action, question: PromptFidelity.readBack(text, agent: session.spokenName))
+                }
                 if session.isBusy || SafetyPolicy.mentionsRisk(text) {
                     return .confirm(
                         action, question: "Should I type \(Self.quoted(text)) into the \(session.spokenName)?")

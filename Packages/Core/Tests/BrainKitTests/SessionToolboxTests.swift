@@ -432,3 +432,17 @@ private func object(_ json: String) -> [String: Any] {
         ])
     #expect(BrainPrompt.system(hostName: "box").contains("[app: Sessions now: ...]"))
 }
+
+@MainActor
+@Test func sendTextToAnAgentReadsBackWordsTheUserDidNotSay() async throws {
+    let harness = try Harness()
+    harness.toolbox.spokenTurns = ["tell the api agent to work in subagents"]
+    let held = await harness.call(
+        "send_text",
+        #"{"target":"api","text":"PocketShell should also work with subagents for the user.","enter":true}"#)
+    #expect(held.contains("I will send to"))
+    #expect(held.contains("word for word"))
+    harness.toolbox.gate.cancel()
+    let sent = await harness.call("send_text", #"{"target":"api","text":"Work in subagents.","enter":true}"#)
+    #expect(!sent.contains("I will send to"))
+}

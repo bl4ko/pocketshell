@@ -784,3 +784,79 @@ private func showPrompt(_ rig: StagedRig) async {
     #expect(rig.brain.detail == "Codex in reviewer no longer asks that question.")
     #expect(!rig.commands.dropFirst(sends).contains { $0.contains("send-text") })
 }
+
+private let inventedPrompt =
+    "PocketShell should also work with subagents, exposing them to the voice assistant so it can interact with "
+    + "and manage them on the user's behalf."
+
+@MainActor
+private func sendCall(_ text: String) throws -> BrainStreamEvent {
+    let data = try JSONSerialization.data(withJSONObject: ["agent": "api", "text": text])
+    return .toolCalls([call("s1", "send_prompt", String(decoding: data, as: UTF8.self))])
+}
+
+@MainActor
+private func sentTexts(_ rig: StagedRig) -> [String] {
+    rig.commands.filter { $0.contains("send-keys -t '%3' -l --") }
+}
+
+@MainActor
+@Test func anExpandedPromptIsHeldAndReadBackInsteadOfSent() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Sending. "), try sendCall(inventedPrompt), .finished("tool_calls")]),
+            .success([.text("I will send to Claude in api: … Send it?"), .finished("stop")]),
+        ]))
+    rig.ears.phrase("work in subagents")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    #expect(sentTexts(rig).isEmpty)
+    let result = try #require(rig.brain.conversation.messages.last { $0.role == .tool }?.content)
+    #expect(result.contains("needs_confirmation"))
+    #expect(result.contains("I will send to Claude in api: \(inventedPrompt) Send it?"))
+    #expect(rig.brain.pendingSend == PendingSend(agentName: "Claude in api", text: inventedPrompt))
+}
+
+@MainActor
+@Test func aVerbatimDictationIsSentAtOnce() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Sending. "), try sendCall("Run the migration tests again."), .finished("tool_calls")]),
+            .success([.text("Sent."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("tell claude to um run the migration tests again")
+    #expect(await eventually { sentTexts(rig).count == 1 })
+    #expect(sentTexts(rig).first?.contains("'Run the migration tests again.'") == true)
+    #expect(rig.brain.pendingSend == nil)
+}
+
+@MainActor
+@Test func aYesAfterTheReadBackSendsTheExactHeldTextAndANoDropsIt() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Sending. "), try sendCall(inventedPrompt), .finished("tool_calls")]),
+            .success([.text("Send it?"), .finished("stop")]),
+            .success([.text("Sent."), .finished("stop")]),
+            .success([.text("Sending. "), try sendCall(inventedPrompt), .finished("tool_calls")]),
+            .success([.text("Send it?"), .finished("stop")]),
+            .success([.text("Okay, not sent."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("work in subagents")
+    #expect(await eventually { rig.model.requests.count == 2 && rig.brain.pendingSend != nil })
+    rig.mouth.settle()
+    rig.ears.phrase("yes send it")
+    #expect(await eventually { sentTexts(rig).count == 1 })
+    #expect(sentTexts(rig).first?.contains(inventedPrompt.replacingOccurrences(of: "'", with: "'\\''")) == true)
+    #expect(await eventually { rig.brain.pendingSend == nil })
+
+    #expect(await eventually { rig.model.requests.count == 3 })
+    rig.mouth.settle()
+    rig.ears.phrase("work in subagents")
+    #expect(await eventually { rig.model.requests.count == 5 && rig.brain.pendingSend != nil })
+    rig.mouth.settle()
+    rig.ears.phrase("no")
+    #expect(await eventually { rig.model.requests.count == 6 })
+    #expect(sentTexts(rig).count == 1)
+    #expect(rig.brain.pendingSend == nil)
+    let note = try #require(rig.model.requests.last?.last?.content)
+    #expect(note.contains("did not confirm"))
+}

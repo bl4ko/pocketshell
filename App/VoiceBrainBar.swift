@@ -51,6 +51,10 @@ struct VoiceBrainBar: View {
                         VoicePromptStrip(waiting: waiting) { number in
                             Task { await brain.answer(waiting, option: number) }
                         }
+                    } else if let pending = brain.pendingSend {
+                        VoicePendingSendStrip(pending: pending) { send in
+                            Task { await brain.resolvePendingSend(send: send) }
+                        }
                     } else {
                         Text(VoiceBrainText.caption(brain))
                             .font(.callout)
@@ -141,6 +145,11 @@ struct VoiceBrainFullView: View {
             } else {
                 transcript(lines: lines, caption: caption)
             }
+            if let pending = brain.pendingSend {
+                VoicePendingSendCard(pending: pending) { send in
+                    Task { await brain.resolvePendingSend(send: send) }
+                }
+            }
             if let detail = brain.detail {
                 Text(detail)
                     .font(.callout)
@@ -224,6 +233,79 @@ private struct VoicePromptStrip: View {
         .frame(height: 34)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voice.prompt")
+    }
+}
+
+private struct VoicePendingSendStrip: View {
+    let pending: PendingSend
+    let onResolve: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Send to \(pending.agentName): \(pending.text)")
+                .font(.caption)
+                .foregroundStyle(PocketshellTheme.ink)
+                .lineLimit(1)
+                .accessibilityIdentifier("voice.send.text")
+            HStack(spacing: 6) {
+                VoiceChip(title: "Send", highlighted: true) { onResolve(true) }
+                    .accessibilityIdentifier("voice.send.confirm")
+                VoiceChip(title: "Cancel", highlighted: false) { onResolve(false) }
+                    .accessibilityIdentifier("voice.send.cancel")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 34)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice.send")
+    }
+}
+
+private struct VoicePendingSendCard: View {
+    let pending: PendingSend
+    let onResolve: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Send to \(pending.agentName)?")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PocketshellTheme.secondary)
+            Text(pending.text)
+                .font(.body)
+                .foregroundStyle(PocketshellTheme.ink)
+                .lineLimit(8)
+                .accessibilityIdentifier("voice.send.full.text")
+            HStack(spacing: 10) {
+                VoiceChip(title: "Send", highlighted: true) { onResolve(true) }
+                    .accessibilityIdentifier("voice.send.full.confirm")
+                VoiceChip(title: "Cancel", highlighted: false) { onResolve(false) }
+                    .accessibilityIdentifier("voice.send.full.cancel")
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PocketshellTheme.surface, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice.send.full")
+    }
+}
+
+private struct VoiceChip: View {
+    let title: String
+    let highlighted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(PocketshellTheme.ink)
+                .padding(.horizontal, 10)
+                .frame(height: 18)
+                .background(
+                    highlighted ? PocketshellTheme.accentTint : PocketshellTheme.secondarySurface, in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 

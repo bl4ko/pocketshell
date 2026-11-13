@@ -61,16 +61,31 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
+        said = last.get("content") or ""
         if last.get("role") == "tool":
-            agents = json.loads(last.get("content") or "{}").get("agents")
-            text = "All quiet on localbox." if isinstance(agents, list) else "The agent list failed."
+            result = json.loads(said or "{}")
+            if isinstance(result.get("agents"), list):
+                text = "All quiet on localbox."
+            elif result.get("status") == "needs_confirmation":
+                text = result["question"]
+            elif "opened" in result:
+                text = "Opened it."
+            else:
+                text = "The agent list failed."
             parts = [chunk({"role": "assistant", "content": text}), chunk({}, "stop")]
+        elif "[app: The user confirmed" in said:
+            parts = [chunk({"role": "assistant", "content": "Done."}), chunk({}, "stop")]
         else:
+            name, arguments = "list_agents", {}
+            if said.startswith("open a shell tab called "):
+                name, arguments = "new_session", {"kind": "shell_tab", "name": said.split()[-1]}
+            elif said.startswith("close the "):
+                name, arguments = "close", {"target": said[len("close the "):]}
             call = {
                 "index": 0,
                 "id": "call_psh",
                 "type": "function",
-                "function": {"name": "list_agents", "arguments": "{}"},
+                "function": {"name": name, "arguments": json.dumps(arguments)},
             }
             parts = [
                 chunk({"role": "assistant", "content": "Hmm, let me check."}),

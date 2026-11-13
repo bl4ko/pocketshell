@@ -544,7 +544,124 @@ struct HostTabsScreen: View {
                 focus: { await focusAgent($0) },
                 current: { brainTarget },
                 tmuxSession: { host.tmuxSession ?? activeController?.tmuxTarget?.session }),
+            sessions: brainSessions,
             onDictation: dictate)
+    }
+
+    private var brainSessions: SessionToolbox.IO {
+        SessionToolbox.IO(
+            exec: { await brainExec($0) },
+            tabs: { brainTabs },
+            screen: { brainTab($0)?.controller.bridge.visibleText() },
+            type: { id, text in
+                guard let tab = brainTab(id), tab.controller.phase == .attached else { return false }
+                tab.controller.sendText(text)
+                return true
+            },
+            focus: { await focusSession($0) },
+            newTab: { directory, name in openShellTab(directory: directory, name: name) },
+            renameTab: { id, name in
+                guard let tab = brainTab(id) else { return false }
+                renameTab(id: tab.id, name: name)
+                return true
+            },
+            closeTab: { id in
+                guard let tab = brainTab(id) else { return false }
+                closeTab(id: tab.id)
+                return true
+            },
+            tmuxSessionRenamed: { renameSessionReferences(from: $0, to: $1) },
+            unseen: { session, index in
+                monitor.unseenFinished.contains(
+                    SessionMonitor.windowKey(hostID: host.id, session: session, windowIndex: index))
+            },
+            skipPermissions: { await skipPermissionsByVoice() },
+            snippets: {
+                store.snippets.filter { $0.hostID == nil || $0.hostID == host.id }.sorted {
+                    $0.sortOrder < $1.sortOrder
+                }
+            },
+            defaultTmuxSession: { host.tmuxSession ?? activeController?.tmuxTarget?.session })
+    }
+
+    private var brainTabs: [AppTab] {
+        tabs.map { tab in
+            let backend: AppTab.Backend
+            if let tmux = tab.controller.tmuxTarget {
+                backend = .tmux(session: tmux.session, windowIndex: tmux.windowIndex, windowID: tmux.windowID)
+            } else if let herdr = tab.controller.herdrTarget {
+                backend = .herdr(session: herdr.session, workspaceID: herdr.workspaceID)
+            } else {
+                backend = .shell
+            }
+            return AppTab(
+                id: tab.id.uuidString, label: tabLabel(tab), backend: backend, status: tabStatuses[tab.id],
+                unseen: isUnseen(tab), isCurrent: tab.id == selectedTab)
+        }
+    }
+
+    private func brainTab(_ id: String) -> TerminalTab? {
+        tabs.first { $0.id.uuidString == id }
+    }
+
+    private func focusSession(_ place: BrainSession.Place) async -> Bool {
+        switch place {
+        case .tab(let id, _):
+            guard let tab = brainTab(id) else { return false }
+            selectedTab = tab.id
+            return true
+        case .tmuxSession(let session):
+            guard !herdrOnly else { return false }
+            openWindowInNewTab(session: session, windowIndex: nil)
+            return true
+        case .tmuxWindow(let session, let windowIndex, let windowID, _):
+            guard !herdrOnly else { return false }
+            openWindowInNewTab(session: session, windowIndex: windowIndex, windowID: windowID)
+            return true
+        case .herdrWorkspace(let session, let workspaceID), .herdrTab(let session, let workspaceID, _),
+            .herdrPane(let session, let workspaceID, _, _):
+            if let tab = tabs.first(where: { $0.controller.herdrTarget?.session == session }) {
+                selectedTab = tab.id
+                return true
+            }
+            guard !herdrOnly else { return false }
+            openHerdrSessionInNewTab(session: session, workspaceID: workspaceID.isEmpty ? nil : workspaceID)
+            return true
+        }
+    }
+
+    private func openShellTab(directory: String?, name: String?) -> Bool {
+        guard !herdrOnly else { return false }
+        let controller = makeController()
+        if let directory {
+            controller.presetPlain(directory: directory)
+        } else {
+            controller.presetPlain()
+        }
+        let tab = TerminalTab(controller: controller, name: name, group: "Shells", number: nextTabNumber)
+        controller.onExit = { closeTab(id: tab.id) }
+        insertTab(tab)
+        selectedTab = tab.id
+        persistTabs()
+        return true
+    }
+
+    private func skipPermissionsByVoice() async -> String? {
+        guard let id = selectedTab else { return "No tab is open." }
+        for _ in 0..<40 where tabs.first(where: { $0.id == id })?.controller.phase != .attached {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard let tab = tabs.first(where: { $0.id == id }), tab.controller.phase == .attached else {
+            return "The tab is not connected yet."
+        }
+        let process = await tab.controller.agentProbe().flatMap(AgentPermissionSwitch.parseProbe)
+        switch AgentPermissionSwitch.plan(for: process, status: tabStatuses[id]) {
+        case .failure(let refusal):
+            return refusal.message
+        case .success(let plan):
+            if case .failed(let message) = await tab.controller.skipAgentPermissions(plan) { return message }
+            return nil
+        }
     }
 
     private func brainExec(_ command: String) async -> String? {

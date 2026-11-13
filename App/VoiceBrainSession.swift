@@ -95,11 +95,19 @@ final class VoiceBrainSession: ObservableObject {
             + "\(brain.providers.mouth) audio=\(report_())\(timing)"
     }
 
-    func start(host: HostConfig, io: AgentToolbox.IO, onDictation: @escaping (String) -> Void) {
+    func start(
+        host: HostConfig, io: AgentToolbox.IO, sessions: SessionToolbox.IO? = nil,
+        onDictation: @escaping (String) -> Void
+    ) {
         guard !isOn else { return }
         var io = io
         let exec = Self.bounded(io.exec)
         io.exec = exec
+        let toolbox = AgentToolbox(io: io)
+        if var sessions {
+            sessions.exec = exec
+            toolbox.sessions = SessionToolbox(io: sessions)
+        }
         io.unsentPrompt = { agent in
             await exec(AgentControl.boxCommand(agent)).flatMap(AgentControl.unsentPrompt(fromBox:))
         }
@@ -118,7 +126,7 @@ final class VoiceBrainSession: ObservableObject {
         let brain = VoiceBrain(
             hostID: host.id.uuidString, hostName: host.name, ears: parts.ears, mouth: parts.mouth,
             model: BrainSettings.client(),
-            toolbox: AgentToolbox(io: io), store: ConversationStore(directory: directory), audio: parts.lifecycle)
+            toolbox: toolbox, store: ConversationStore(directory: directory), audio: parts.lifecycle)
         let providers = BrainSettings.providers(selection)
         brain.providers = providers
         brain.onDictation = onDictation

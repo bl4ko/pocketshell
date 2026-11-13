@@ -192,6 +192,11 @@ final class ConnectionController: ObservableObject {
         pendingShell = .plain(host.onConnectCommand)
     }
 
+    func presetPlain(directory: String) {
+        let cd = "cd '\(directory.replacingOccurrences(of: "'", with: "'\\''"))'"
+        pendingShell = .plain("\(cd) && " + (host.onConnectCommand ?? "exec \"${SHELL:-/bin/sh}\" -l"))
+    }
+
     func presetHerdr(session: String, workspaceID: String? = nil) {
         pendingShell = .herdr(session: session, workspaceID: workspaceID)
     }

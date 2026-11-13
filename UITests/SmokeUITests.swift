@@ -1500,6 +1500,44 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed)
     }
 
+    func testVoiceBrainOpensAndClosesTabsByVoice() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+
+        openHost("localbox")
+        tapVoiceToggle()
+        let input = app.textFields["voice.testInput"]
+        let caption = app.staticTexts["voice.caption"]
+        func say(_ text: String) {
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            input.tap()
+            input.typeText(text + "\n")
+        }
+        func tab(_ name: String) -> XCUIElement {
+            app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
+        }
+
+        say("open a shell tab called voiceone")
+        XCTAssertTrue(tab("voiceone").waitForExistence(timeout: 10))
+        say("open a shell tab called voicetwo")
+        XCTAssertTrue(tab("voicetwo").waitForExistence(timeout: 10))
+
+        say("close the voicetwo tab")
+        XCTAssertTrue(waitForLabel(caption, containing: "Should I close the voicetwo tab?"))
+        XCTAssertTrue(tab("voicetwo").exists, "close waits for a spoken yes")
+        say("yes")
+        XCTAssertTrue(waitForLabel(caption, containing: "Done"))
+        XCTAssertTrue(tab("voicetwo").waitForNonExistence(timeout: 10))
+        XCTAssertTrue(tab("voiceone").exists)
+
+        say("close the voiceone tab")
+        XCTAssertTrue(waitForLabel(caption, containing: "Should I close the voiceone tab?"))
+        say("yes")
+        XCTAssertTrue(tab("voiceone").waitForNonExistence(timeout: 10))
+        app.buttons["voice.end"].tap()
+    }
+
     func testVoiceBrainFullViewShowsTheTranscript() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
             throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")

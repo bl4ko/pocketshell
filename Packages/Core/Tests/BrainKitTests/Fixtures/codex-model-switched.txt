@@ -1,0 +1,40 @@
+
+  >_ OpenAI Codex (v0.162.1)
+     /Users/dev/src/api
+
+• Model changed to gpt-6-luna high for this session only
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  GPT-6-Luna high · /Users/dev/src/api
+  ← for agents · ? for shortcuts

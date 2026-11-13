@@ -1,0 +1,40 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Sonnet 5.5 · API Usage Billing
+ ▝▝   ▝▝   /Users/dev/src/api
+
+
+❯ /model
+  ⎿  Set model to Opus 5.5 and saved as your default for new sessions
+
+❯ /model --help
+  ⎿  Run /model to open the model selection menu, or /model [modelName] to set the model.
+
+❯ /model
+  ⎿  Set model to Sonnet 5.5 for this session only
+
+
+
+
+
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Select model
+   Switch between Claude models. Your pick becomes the default for new sessions. For
+   other/previous model names, specify with --model.
+
+   ↑ 4.  Claude Fable 5.2        From gateway
+     5.  Codex Auto Review       From gateway
+     6.  GPT Image 1.5           From gateway
+     7.  GPT Image 2             From gateway
+     8.  GPT Image 2.5           From gateway
+     9.  GPT Image 2.5 Flare     From gateway
+     10. GPT Image 2.5 Sunburst  From gateway
+     11. GPT-6-Luna              From gateway
+     12. GPT-Reserve             From gateway
+   ❯ 13. Sonnet ✔                Sonnet 5.5 · Efficient for routine tasks · $2/$10 per Mtok
+      … +1 model
+
+   ◐ Medium effort (default) ←/→ to adjust
+
+   Enter to set as default · s to use this session only · Esc to cancel

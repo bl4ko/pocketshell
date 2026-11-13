@@ -1,0 +1,40 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Sonnet 5.5 · API Usage Billing
+ ▝▝   ▝▝   /Users/dev/src/api
+
+
+❯ /model
+  ⎿  Set model to Opus 5.5 and saved as your default for new sessions
+
+❯ /model --help
+  ⎿  Run /model to open the model selection menu, or /model [modelName] to set the model.
+
+❯ /model
+  ⎿  Set model to Sonnet 5.5 for this session only
+
+❯ /model
+  ⎿  Kept model as Sonnet 5.5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                            ✔ Update installed · Restart to update
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)

@@ -572,6 +572,10 @@ public enum BrainPrompt {
 
         \(SessionToolbox.prompt)
 
+        You can switch the model of an agent session yourself: call set_model with the model the user names, and \
+        get_model when they ask which model an agent uses. Never tell the user to open a menu or a model picker. The \
+        change is for that session only. When the result has choices, say the likely ones briefly and ask which.
+
         Before any tool call, first say a short lead-in in the same reply, for example "Let me look." or "OK, \
         asking Claude." Keep it under six words and do not use the same one twice in a row. Then call the tool.
 

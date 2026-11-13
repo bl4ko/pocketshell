@@ -57,6 +57,22 @@ public enum AgentControl {
         }
     }
 
+    public static func slashCommand(_ agent: BrainAgent, _ command: String) -> String {
+        "\(textCommand(agent, text: command)) && sleep 0.3 && \(keyCommand(agent, key: .enter))"
+    }
+
+    public static func arrowCommand(_ agent: BrainAgent, up: Bool, count: Int) -> String {
+        switch agent.location {
+        case .tmux(_, _, _, let pane):
+            let keys = Array(repeating: up ? "Up" : "Down", count: max(count, 1)).joined(separator: " ")
+            return "\(tmux) send-keys -t \(HostAgents.shellQuote(pane)) \(keys)"
+        case .herdr(let session, let pane, _, _):
+            let keys = Array(repeating: up ? "up" : "down", count: max(count, 1)).joined(separator: " ")
+            return "\(Herdr.commandPrefix(session: session)) agent send-keys \(HostAgents.shellQuote(pane)) \(keys)"
+                + " 2>&1 || true"
+        }
+    }
+
     public static func screenCommand(_ agent: BrainAgent) -> String {
         switch agent.location {
         case .tmux(_, _, _, let pane):

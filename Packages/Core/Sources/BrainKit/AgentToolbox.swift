@@ -10,19 +10,22 @@ public final class AgentToolbox {
         public var unsentPrompt: @MainActor (BrainAgent) async -> String?
         public var current: @MainActor () -> CurrentTarget?
         public var tmuxSession: @MainActor () -> String?
+        public var sleep: @MainActor (Duration) async -> Void
 
         public init(
             exec: @escaping @MainActor (String) async -> String?,
             focus: @escaping @MainActor (BrainAgent) async -> Bool,
             unsentPrompt: @escaping @MainActor (BrainAgent) async -> String? = { _ in nil },
             current: @escaping @MainActor () -> CurrentTarget? = { nil },
-            tmuxSession: @escaping @MainActor () -> String? = { nil }
+            tmuxSession: @escaping @MainActor () -> String? = { nil },
+            sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }
         ) {
             self.exec = exec
             self.focus = focus
             self.unsentPrompt = unsentPrompt
             self.current = current
             self.tmuxSession = tmuxSession
+            self.sleep = sleep
         }
     }
 
@@ -31,7 +34,7 @@ public final class AgentToolbox {
     public var gate = ConfirmationGate()
     public var onSent: ((BrainAgent, String) -> Void)?
     public var sessions: SessionToolbox?
-    private let io: IO
+    let io: IO
 
     public init(io: IO) {
         self.io = io
@@ -120,6 +123,12 @@ public final class AgentToolbox {
             return await request(.start(kind: kind, directory: directory), agent: nil)
         case "close_agent":
             return await withAgent(name) { await self.request(.close(agentID: $0.id), agent: $0) }
+        case "get_model":
+            return await withAgent(name) { await self.model($0, request: nil) }
+        case "set_model":
+            let model = (arguments["model"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !model.isEmpty else { return Self.error("model is empty") }
+            return await withAgent(name) { await self.model($0, request: model) }
         default:
             guard let sessions, SessionToolbox.toolNames.contains(call.name) else {
                 return Self.error("Unknown tool \(call.name)")
@@ -316,6 +325,21 @@ public final class AgentToolbox {
                 "directory": .object(["type": "string", "description": "Working directory."]),
             ]),
         tool("close_agent", "Exit an agent session.", ["agent": agentParameter]),
+        tool(
+            "get_model", "Read which model an agent session uses now and the models its menu offers.",
+            ["agent": agentParameter]),
+        tool(
+            "set_model",
+            "Switch the model of a running agent session for this session only, through the agent's own model "
+                + "menu. Works only when the agent is idle with an empty input box. The result says which model is "
+                + "active now.",
+            [
+                "agent": agentParameter,
+                "model": .object([
+                    "type": "string",
+                    "description": "The model as the user said it, for example sonnet, opus 5.5, or the fast one.",
+                ]),
+            ], required: ["model"]),
     ]
 
     nonisolated private static let agentParameter: JSONValue = .object([

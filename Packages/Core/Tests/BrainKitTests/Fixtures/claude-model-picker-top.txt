@@ -1,0 +1,40 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Haiku 5.5 · API Usage Billing
+ ▝▝   ▝▝   /Users/dev/src/api
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Select model
+   Switch between Claude models. Your pick becomes the default for new sessions. For
+   other/previous model names, specify with --model.
+
+   ❯ 1.  Default (recommended)   Use the default model (currently Opus 5.5) · $4/$20 per Mtok
+     2.  Opus                    Opus 5.5 · Best for everyday, complex tasks · $4/$20 per Mtok
+     3.  Claude Fable 5.1        From gateway
+     4.  Claude Fable 5.2        From gateway
+     5.  Codex Auto Review       From gateway
+     6.  GPT Image 1.5           From gateway
+     7.  GPT Image 2             From gateway
+     8.  GPT Image 2.5           From gateway
+     9.  GPT Image 2.5 Flare     From gateway
+   ↓ 10. GPT Image 2.5 Sunburst  From gateway
+      … +4 models
+
+
+   ● High effort ←/→ to adjust
+
+   Enter to set as default · s to use this session only · Esc to cancel

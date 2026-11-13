@@ -1,0 +1,40 @@
+╭───────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.162.1 -> 0.169.0                       │
+│ See https://github.com/openai/codex for installation options. │
+│                                                               │
+│ See full release notes:                                       │
+│ https://github.com/openai/codex/releases/latest               │
+╰───────────────────────────────────────────────────────────────╯
+
+
+  >_ OpenAI Codex (v0.162.1)
+     /Users/dev/src/api
+
+
+
+
+
+
+
+
+
+
+
+  Select Model and Effort
+
+↑
+  6. GPT-5.6-Terra          Older balanced model for straightforward work.
+  7. GPT-5.6-Luna           Older fast and efficient model.
+  8. GPT-5.5                Legacy coding model.
+  9. Claude Fable 5.1       Claude Fable 5.1 extends Claude Fable 5 at the same input and output
+                            prices, with cache reads at a quarter of the cost, and brings stronger
+                            long-running agentic coding, multistep research, and document,
+                            spreadsheet, and slide work.
+  10. Claude Fable 5.2      claude-fable-5-2
+  11. Claude Haiku 5.5      claude-haiku-5-5
+  12. Claude Opus 5.5       Latest premium model combining maximum intelligence with practical
+                            performance
+› 13. Claude Sonnet 5.5     Anthropic's agentic Sonnet model for coding, tool use, and enterprise
+                            workflows
+
+  enter select · esc back

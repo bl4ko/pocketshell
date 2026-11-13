@@ -1,0 +1,40 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Haiku 5.5 · API Usage Billing
+ ▝▝   ▝▝   /Users/dev/src/api
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus trac… ▔
+   Select model
+   Switch between Claude models. Your pick becomes the default for new sessions. For
+   other/previous model names, specify with --model.
+
+   ↑ 5.  Codex Auto Review       From gateway
+     6.  GPT Image 1.5           From gateway
+     7.  GPT Image 2             From gateway
+     8.  GPT Image 2.5           From gateway
+     9.  GPT Image 2.5 Flare     From gateway
+     10. GPT Image 2.5 Sunburst  From gateway
+     11. GPT-6-Luna              From gateway
+     12. GPT-Reserve             From gateway
+     13. Sonnet                  Sonnet 5.5 · Efficient for routine tasks · $2/$10 per Mtok
+   ❯ 14. Haiku ✔                 Haiku 5.5 · Fastest for quick answers · $0.10/$0.50 per Mtok
+                                 ($0.50/$2.50 for prompts over 100k)
+
+
+   ◐ Medium effort (default) ←/→ to adjust
+
+   Enter to set as default · s to use this session only · Esc to cancel

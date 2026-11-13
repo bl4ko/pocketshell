@@ -1475,6 +1475,80 @@ final class SmokeUITests: XCTestCase {
         voice.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
+    func testVoiceBrainAsksAWaitingAgentsQuestionAndATapAnswersIt() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard env["PS_TEST_BRAIN_URL"] != nil, let fake = env["PS_TEST_FAKE_AGENT"], !fake.isEmpty else {
+            throw XCTSkip("PS_TEST_BRAIN_URL or PS_TEST_FAKE_AGENT not set; voice prompt test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        let session = "psh-ask-\(UUID().uuidString.prefix(8))"
+        let log = "\(fake)/psh-ask-\(UUID().uuidString).log"
+        defer { try? FileManager.default.removeItem(atPath: log) }
+        let tmux = "PATH=$PATH:/opt/homebrew/bin:/usr/local/bin tmux"
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText(
+            "\(tmux) new-session -d -s \(session) -x 100 -y 30 'PSH_FAKE_CLAUDE_LOG=\(log) \(fake)/claude --psh-ask'\n")
+        let lines = {
+            (try? String(contentsOfFile: log, encoding: .utf8))?.split(separator: "\n").map(String.init) ?? []
+        }
+        let started = NSPredicate { _, _ in lines().count == 1 }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: started, object: nil)], timeout: 10), .completed)
+        defer {
+            terminal.tap()
+            terminal.typeText("\(tmux) kill-session -t \(session)\n")
+        }
+
+        tapVoiceToggle()
+        let prompt = app.descendants(matching: .any)["voice.prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 15), app.debugDescription)
+        let question = app.staticTexts["voice.prompt.question"]
+        XCTAssertTrue(waitForLabel(question, containing: "site-wide for psh-uitest?"))
+        guard question.label.contains("psh-uitest") else {
+            return XCTFail("the first card is another host agent; never answer it: \(question.label)")
+        }
+        let first = app.buttons["voice.prompt.option.1"]
+        XCTAssertTrue(first.exists)
+        XCTAssertTrue(first.label.contains("Off site-wide"))
+        XCTAssertTrue(app.buttons["voice.prompt.option.2"].label.contains("Keep on"))
+        XCTAssertTrue(app.buttons["voice.prompt.option.3"].exists, "free text stays available")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "voice-prompt-bar"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        app.descendants(matching: .any)["voice.orb"].tap()
+        let card = app.descendants(matching: .any)["voice.prompt.full"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(app.staticTexts["voice.prompt.full.question"], containing: "site-wide"))
+        XCTAssertTrue(app.buttons["voice.prompt.full.option.2"].exists)
+        let full = XCTAttachment(screenshot: app.screenshot())
+        full.name = "voice-prompt-full"
+        full.lifetime = .keepAlways
+        add(full)
+        app.buttons["voice.collapse"].tap()
+
+        XCTAssertTrue(app.buttons["voice.prompt.option.2"].waitForExistence(timeout: 5))
+        guard question.label.contains("psh-uitest") else {
+            return XCTFail("the card changed to another host agent; never answer it: \(question.label)")
+        }
+        app.buttons["voice.prompt.option.2"].tap()
+        let answered = NSPredicate { _, _ in lines().contains("answer 2") }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: answered, object: nil)], timeout: 10),
+            .completed, "the tap must send the option: \(lines())")
+        let gone = NSPredicate { _, _ in !(question.exists && question.label.contains("psh-uitest")) }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: nil)], timeout: 10), .completed,
+            "the answered card must go away")
+
+        app.buttons["voice.end"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["voice.bar"].waitForNonExistence(timeout: 5))
+    }
+
     func testVoiceBrainBarShowsTheBrainReplyAndEnds() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
             throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")

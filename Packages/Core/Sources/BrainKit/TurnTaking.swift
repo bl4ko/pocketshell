@@ -15,6 +15,8 @@ public struct TurnTaking: Equatable, Sendable {
         case mouthIdle
         case brainDone
         case eventQueued
+        case promptQueued
+        case promptClosed
         case tick
         case muted(Bool)
         case interrupted(Bool)
@@ -26,10 +28,12 @@ public struct TurnTaking: Equatable, Sendable {
         case respond(String)
         case playFiller
         case announce
+        case announcePrompt
     }
 
     public static let fillerDelay: TimeInterval = 2.0
     public static let proactiveSilence: TimeInterval = 1.5
+    public static let promptSilence: TimeInterval = 0.5
 
     public private(set) var phase: Phase = .listening
     public private(set) var muted = false
@@ -41,6 +45,10 @@ public struct TurnTaking: Equatable, Sendable {
     private var brainDone = true
     private var mouthBusy = false
     private var eventsPending = false
+    private var promptPending = false
+    private var promptDeferred = false
+    public private(set) var promptOpen = false
+    public private(set) var promptSpeaking = false
 
     public init(now: TimeInterval) {
         lastActivity = now
@@ -56,6 +64,7 @@ public struct TurnTaking: Equatable, Sendable {
                 return []
             }
             lastActivity = now
+            if promptPending { promptDeferred = true }
             switch phase {
             case .listening:
                 phase = .userSpeaking
@@ -66,6 +75,7 @@ public struct TurnTaking: Equatable, Sendable {
                 phase = .userSpeaking
                 brainDone = true
                 mouthBusy = false
+                promptSpeaking = false
                 return [.stopMouth, .cancelBrain]
             }
         case .userPhrase(let text):
@@ -74,6 +84,9 @@ public struct TurnTaking: Equatable, Sendable {
             }
             var effects: [Effect] = []
             if phase == .thinking || phase == .speaking || mouthBusy { effects = [.stopMouth, .cancelBrain] }
+            promptDeferred = promptPending
+            promptOpen = false
+            promptSpeaking = false
             phase = .thinking
             thinkingSince = now
             audioStarted = false
@@ -89,6 +102,7 @@ public struct TurnTaking: Equatable, Sendable {
             return []
         case .mouthIdle:
             mouthBusy = false
+            promptSpeaking = false
             lastActivity = now
             if phase == .speaking { phase = brainDone ? .listening : .thinking }
             return []
@@ -102,7 +116,16 @@ public struct TurnTaking: Equatable, Sendable {
         case .eventQueued:
             eventsPending = true
             return announceIfQuiet(now)
+        case .promptQueued:
+            promptPending = true
+            if phase == .userSpeaking { promptDeferred = true }
+            return askIfPossible(now)
+        case .promptClosed:
+            promptOpen = false
+            return []
         case .tick:
+            let ask = askIfPossible(now)
+            if !ask.isEmpty { return ask }
             if phase == .thinking, !audioStarted, !fillerPlayed, !brainDone, now - thinkingSince >= Self.fillerDelay {
                 fillerPlayed = true
                 return [.playFiller]
@@ -123,6 +146,7 @@ public struct TurnTaking: Equatable, Sendable {
             phase = .listening
             brainDone = true
             mouthBusy = false
+            promptSpeaking = false
             return busy ? [.stopMouth, .cancelBrain] : []
         }
     }
@@ -135,8 +159,27 @@ public struct TurnTaking: Equatable, Sendable {
         brainDone = false
     }
 
+    private mutating func askIfPossible(_ now: TimeInterval) -> [Effect] {
+        guard promptPending, !interrupted, phase != .userSpeaking else { return [] }
+        let busy = phase == .thinking || phase == .speaking || mouthBusy
+        if busy {
+            guard !promptDeferred, !promptSpeaking else { return [] }
+        } else {
+            guard now - lastActivity >= (promptOpen ? Self.proactiveSilence : Self.promptSilence) else { return [] }
+        }
+        promptPending = false
+        promptDeferred = false
+        promptOpen = true
+        promptSpeaking = true
+        phase = .listening
+        brainDone = true
+        mouthBusy = false
+        lastActivity = now
+        return (busy ? [.stopMouth, .cancelBrain] : []) + [.announcePrompt]
+    }
+
     private mutating func announceIfQuiet(_ now: TimeInterval) -> [Effect] {
-        guard eventsPending, !interrupted, phase == .listening, !mouthBusy,
+        guard eventsPending, !interrupted, !promptOpen, phase == .listening, !mouthBusy,
             now - lastActivity >= Self.proactiveSilence
         else { return [] }
         eventsPending = false

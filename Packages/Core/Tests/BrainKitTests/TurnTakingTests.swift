@@ -119,3 +119,52 @@ import Testing
     #expect(machine.handle(.interrupted(false), at: 2).isEmpty)
     #expect(machine.handle(.userPhrase("hello"), at: 3) == [.respond("hello")])
 }
+
+@Test func aWaitingPromptStopsTheReplyAndIsAskedAtOnce() {
+    var machine = TurnTaking(now: 0)
+    _ = machine.handle(.userPhrase("tell me everything"), at: 1)
+    _ = machine.handle(.mouthStarted, at: 1.5)
+    #expect(machine.handle(.promptQueued, at: 2) == [.stopMouth, .cancelBrain, .announcePrompt])
+    #expect(machine.phase == .listening)
+    _ = machine.handle(.mouthStarted, at: 2.01)
+    #expect(machine.promptSpeaking)
+    #expect(machine.handle(.promptQueued, at: 2.5).isEmpty)
+    #expect(machine.handle(.tick, at: 3).isEmpty)
+    _ = machine.handle(.mouthIdle, at: 4)
+    #expect(machine.phase == .listening)
+    #expect(machine.handle(.tick, at: 4.6).isEmpty)
+    #expect(machine.handle(.tick, at: 5.5) == [.announcePrompt])
+}
+
+@Test func aWaitingPromptWhileThinkingCancelsTheTurn() {
+    var machine = TurnTaking(now: 0)
+    _ = machine.handle(.userPhrase("what is codex doing"), at: 1)
+    #expect(machine.handle(.promptQueued, at: 1.2) == [.stopMouth, .cancelBrain, .announcePrompt])
+    _ = machine.handle(.mouthStarted, at: 1.3)
+    #expect(machine.handle(.tick, at: 3.5).isEmpty)
+}
+
+@Test func aWaitingPromptNeverInterruptsTheUserAndWaitsForTheirTurnToBeAnswered() {
+    var machine = TurnTaking(now: 0)
+    _ = machine.handle(.userPartial("so what"), at: 1)
+    #expect(machine.handle(.promptQueued, at: 1.2).isEmpty)
+    #expect(machine.handle(.tick, at: 3).isEmpty)
+    #expect(machine.handle(.userPhrase("so what about codex"), at: 4) == [.respond("so what about codex")])
+    _ = machine.handle(.mouthStarted, at: 4.5)
+    #expect(machine.handle(.tick, at: 5).isEmpty)
+    _ = machine.handle(.brainDone, at: 5.1)
+    _ = machine.handle(.mouthIdle, at: 6)
+    #expect(machine.handle(.tick, at: 6.3).isEmpty)
+    #expect(machine.handle(.tick, at: 6.5) == [.announcePrompt])
+}
+
+@Test func anOpenPromptHoldsOtherAnnouncementsUntilTheUserAnswersOrItCloses() {
+    var machine = TurnTaking(now: 0)
+    #expect(machine.handle(.promptQueued, at: 1) == [.announcePrompt])
+    _ = machine.handle(.mouthStarted, at: 1.1)
+    _ = machine.handle(.mouthIdle, at: 3)
+    #expect(machine.handle(.eventQueued, at: 3.1).isEmpty)
+    #expect(machine.handle(.tick, at: 30).isEmpty)
+    _ = machine.handle(.promptClosed, at: 31)
+    #expect(machine.handle(.tick, at: 31.1) == [.announce])
+}

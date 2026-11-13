@@ -1,0 +1,12 @@
+⏺ Here is the plan:
+  1. Add the alert rule.
+  2. Deploy it.
+  3. Check the dashboard.
+
+> 1. ship it
+  2. wait
+
+────────────────────────────────────────
+>
+────────────────────────────────────────
+  ? for shortcuts

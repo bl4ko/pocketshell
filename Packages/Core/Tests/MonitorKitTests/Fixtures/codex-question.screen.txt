@@ -1,0 +1,11 @@
+• I need two answers before I add the alert.
+
+  Question 2/3 (2 unanswered)
+  What should the notification contain?
+  › 1. Realm + count      Keep labels private
+                            and low-cardinality.
+    2. User identity       Include username/email,
+                            requiring a separate path.
+    3. None of the above
+
+  tab to add notes | enter to submit answer | ←/→ to navigate questions

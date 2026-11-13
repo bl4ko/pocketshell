@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MonitorKit
 import VoiceKit
 
 @MainActor
@@ -46,6 +47,7 @@ public final class VoiceBrain: ObservableObject {
     @Published public private(set) var muted = false
     @Published public private(set) var interrupted = false
     @Published public private(set) var lastTiming: TurnTiming?
+    @Published public private(set) var waitingPrompts: [WaitingPrompt] = []
     public var onDictation: ((String) -> Void)?
     public var onEnded: (() -> Void)?
     public var onUserTurn: ((UserTurn) -> Void)?
@@ -85,6 +87,8 @@ public final class VoiceBrain: ObservableObject {
     private var partialSince: TimeInterval?
     private var mouthQuiet: TimeInterval? = -.infinity
     private var agentSegment = false
+    private var answered: [String: InteractivePrompt] = [:]
+    private var notes: [String] = []
 
     private struct Reply {
         let id: Int
@@ -140,6 +144,9 @@ public final class VoiceBrain: ObservableObject {
         mouthQuiet = -.infinity
         agentSegment = false
         interrupted = false
+        waitingPrompts = []
+        answered = [:]
+        notes = []
         ears.onEvent = { [weak self] in self?.hear($0) }
         mouth.onEvent = { [weak self] in self?.mouthChanged($0) }
         ears.muted = muted
@@ -193,6 +200,7 @@ public final class VoiceBrain: ObservableObject {
         detail = nil
         timing = nil
         interrupted = false
+        waitingPrompts = []
         phase = .listening
         inputLevel = 0
         outputLevel = 0
@@ -222,9 +230,45 @@ public final class VoiceBrain: ObservableObject {
     }
 
     public func noteAgents(_ agents: [BrainAgent]) {
+        answered = answered.filter { id, prompt in agents.contains { $0.id == id && $0.prompt == prompt } }
+        let current = agents.compactMap { agent -> WaitingPrompt? in
+            guard agent.status == .waiting, let prompt = agent.prompt, answered[agent.id] != prompt else { return nil }
+            return WaitingPrompt(agentID: agent.id, agentName: agent.spokenName, prompt: prompt)
+        }
+        let kept = waitingPrompts.compactMap { old in current.first { $0.agentID == old.agentID } }
+        let shown = kept + current.filter { new in !kept.contains { $0.agentID == new.agentID } }
+        if shown != waitingPrompts { waitingPrompts = shown }
+        if shown.isEmpty, machine.promptOpen { feed(.promptClosed) }
         for event in detector.update(agents) {
+            if event.prompt != nil, answered[event.agentID] == event.prompt { continue }
             events.push(event)
-            feed(.eventQueued)
+            feed(event.prompt != nil ? .promptQueued : .eventQueued)
+        }
+    }
+
+    public func answer(_ waiting: WaitingPrompt, option number: Int) async {
+        guard isOn else { return }
+        if machine.promptSpeaking { mouth.stop() }
+        let result = await toolbox.answerPrompt(agentID: waiting.agentID, number: number, expected: waiting.prompt)
+        guard isOn else { return }
+        if let failure = AgentToolbox.failure(result) {
+            detail = failure
+            return
+        }
+        let label = waiting.prompt.options.first { $0.number == number }?.label ?? "option \(number)"
+        answered[waiting.agentID] = waiting.prompt
+        events.remove(agentID: waiting.agentID)
+        waitingPrompts.removeAll { $0.agentID == waiting.agentID }
+        if waitingPrompts.isEmpty { feed(.promptClosed) }
+        detail = "Chose \(label) for \(waiting.agentName)"
+        notes.append(
+            "[app: The user tapped option \(number), «\(label)», for \(waiting.agentName)'s question "
+                + "«\(waiting.prompt.question)» on screen. It was sent.]")
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            if let agents = await self?.toolbox.listAgents(), !Task.isCancelled { self?.noteAgents(agents) }
+            await self?.poll()
         }
     }
 
@@ -338,6 +382,14 @@ public final class VoiceBrain: ObservableObject {
                 fillerIndex += 1
             case .announce:
                 guard let sentence = events.drain() else { break }
+                caption = Caption(.brain, sentence)
+                append(.assistant(sentence))
+                mouth.speak(sentence)
+            case .announcePrompt:
+                guard let sentence = events.drainPrompts() else {
+                    _ = machine.handle(.promptClosed, at: clock())
+                    break
+                }
                 caption = Caption(.brain, sentence)
                 append(.assistant(sentence))
                 mouth.speak(sentence)
@@ -465,6 +517,8 @@ public final class VoiceBrain: ObservableObject {
     private func appendUser(_ text: String) {
         let noted = conversation.messages.last { $0.content?.hasPrefix(AgentToolbox.snapshotPrefix) == true }
         if let note = toolbox.snapshot, noted?.content != note { append(.user(note)) }
+        for note in notes { append(.user(note)) }
+        notes = []
         append(.user(text))
     }
 
@@ -586,6 +640,12 @@ public enum BrainPrompt {
         Some tool results have status needs_confirmation and a question. Ask the user that question in natural words \
         and stop. The app runs the action only if the user's next reply is a yes. Never say an action ran unless a \
         tool result says so.
+
+        When an agent waits on a question with options, the app asks the user in a reply that lists the options \
+        and ends with "Which one?", and the agent note shows the question and its numbered options. The user's next \
+        reply usually answers it: map their words ("the first", "keep on") to an option and call answer_question \
+        with its number. An option marked free text lets the user type their own answer. If the reply matches no \
+        option, ask once more in a few words.
 
         The user's words come from speech recognition, which can mishear a word or cut a message off in the middle \
         of a thought. If a message is clearly unfinished, do not call a tool: say "Go on." and wait for the rest. \

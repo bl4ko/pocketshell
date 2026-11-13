@@ -1,0 +1,22 @@
+⏺ The firmware alerts are in place. One decision is left before I change the
+  site settings.
+
+─────────────────────────────────────────────────────────────────────────
+ ☐ UniFi site
+
+│ UniFi auto-update is one site-wide setting: it covers switches, UPS 2U
+│ and the U7 Pro AP (gateway is separate, stays on). Turn it off
+│ site-wide?
+
+❯ 1. Off site-wide (Recommended)
+     Switches, UPS and AP update only in the monthly window; new alerts
+     tell when firmware is waiting.
+  2. Keep on
+     Only the alerts; accept night etcd outages.
+  3. Type something.
+─────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+
+

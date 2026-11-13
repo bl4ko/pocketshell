@@ -50,7 +50,7 @@ UsePAM no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 LogLevel QUIET
-SetEnv TMUX_TMPDIR=$TMUX_TMPDIR
+SetEnv TMUX_TMPDIR=$TMUX_TMPDIR PSH_HERDR_ONLY=psh-uitest
 EOF
 
 /usr/sbin/sshd -D -f "$DIR/sshd_config" &
@@ -145,6 +145,7 @@ mkdir "$DIR/fakeagent"
 cat > "$DIR/fakeagent/claude.c" << 'EOF'
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
@@ -164,11 +165,39 @@ int main(int argc, char **argv) {
     raw = original;
     cfmakeraw(&raw);
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
-    printf("\033[2J\033[H> \r\n\r\n  ? for shortcuts\r\n  auto mode on (shift+tab to cycle)\r\n");
+    int ask = argc > 1 && strcmp(argv[1], "--psh-ask") == 0;
+    if (ask) {
+        printf("\033[2J\033[H"
+            "─────────────────────────────────────────────────────────────\r\n"
+            " ☐ UniFi site\r\n\r\n"
+            "│ UniFi auto-update is one site-wide setting: it covers switches\r\n"
+            "│ and the AP. Turn it off site-wide for psh-uitest?\r\n\r\n"
+            "❯ 1. Off site-wide (Recommended)\r\n"
+            "     Devices update only in the monthly window.\r\n"
+            "  2. Keep on\r\n"
+            "     Only the alerts.\r\n"
+            "  3. Type something.\r\n"
+            "─────────────────────────────────────────────────────────────\r\n"
+            "  4. Chat about this\r\n\r\n"
+            "Enter to select · ↑/↓ to navigate · Esc to cancel\r\n");
+    } else {
+        printf("\033[2J\033[H> \r\n\r\n  ? for shortcuts\r\n  auto mode on (shift+tab to cycle)\r\n");
+    }
     fflush(stdout);
     time_t armed = 0;
     char byte;
     while (read(STDIN_FILENO, &byte, 1) == 1) {
+        if (ask && byte >= '1' && byte <= '9') {
+            ask = 0;
+            FILE *answers = log ? fopen(log, "a") : NULL;
+            if (answers) {
+                fprintf(answers, "answer %c\n", byte);
+                fclose(answers);
+            }
+            printf("\033[2J\033[H⏺ Answered %c.\r\n\r\n> \r\n\r\n  ? for shortcuts\r\n", byte);
+            fflush(stdout);
+            continue;
+        }
         if (byte != 3) continue;
         if (armed && time(NULL) - armed <= 2) break;
         armed = time(NULL);

@@ -53,7 +53,8 @@ public final class AgentToolbox {
         guard listed else { return nil }
         guard !agents.isEmpty else { return Self.snapshotPrefix + "none.]" }
         let items = agents.map { agent in
-            "\(agent.spokenName) (\(agent.status.rawValue), \(agent.where_)\(agent.isCurrent ? ", current tab" : ""))"
+            "\(agent.spokenName) (\(agent.status.rawValue), \(agent.where_)\(agent.isCurrent ? ", current tab" : "")"
+                + (agent.prompt.map { ", " + PromptSpeech.summary($0) } ?? "") + ")"
         }
         return Self.snapshotPrefix + items.joined(separator: "; ") + ".]"
     }
@@ -61,7 +62,7 @@ public final class AgentToolbox {
     @discardableResult
     public func listAgents() async -> [BrainAgent]? {
         guard let output = await io.exec(HostAgents.listCommand()) else { return nil }
-        agents = HostAgents.parse(output, current: io.current())
+        agents = await readPrompts(HostAgents.parse(output, current: io.current()))
         listed = true
         sessions?.ingest(output, agents: agents)
         return agents

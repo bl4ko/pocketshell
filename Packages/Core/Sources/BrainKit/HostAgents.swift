@@ -21,10 +21,11 @@ public struct BrainAgent: Equatable, Sendable, Identifiable {
     public var pid: Int?
     public var preview: String
     public var isCurrent = false
+    public var prompt: InteractivePrompt?
 
     public init(
         kind: AgentKind, name: String, location: Location, status: Status, cwd: String? = nil, pid: Int? = nil,
-        preview: String = "", isCurrent: Bool = false
+        preview: String = "", isCurrent: Bool = false, prompt: InteractivePrompt? = nil
     ) {
         self.kind = kind
         self.name = name
@@ -34,6 +35,7 @@ public struct BrainAgent: Equatable, Sendable, Identifiable {
         self.pid = pid
         self.preview = preview
         self.isCurrent = isCurrent
+        self.prompt = prompt
     }
 
     public var id: String {
@@ -187,13 +189,14 @@ public enum HostAgents {
             if let fileCwd = file.cwd, !fileCwd.isEmpty { cwd = fileCwd }
         }
         let windowName = fields[6...].joined(separator: "|")
+        let status = status(screen: screen, sessionStatus: sessionStatus)
         return BrainAgent(
             kind: kind, name: Tmux.isPlaceholderWindowName(windowName) ? "" : windowName,
             location: .tmux(
                 session: Tmux.baseSessionName(fields[3]), windowIndex: windowIndex, windowID: fields[5],
                 paneID: fields[0]),
-            status: status(screen: screen, sessionStatus: sessionStatus), cwd: cwd?.isEmpty == false ? cwd : nil,
-            pid: pid, preview: preview(screen))
+            status: status, cwd: cwd?.isEmpty == false ? cwd : nil, pid: pid, preview: preview(screen),
+            prompt: status == .waiting ? InteractivePrompt.read(screen) : nil)
     }
 
     private static func herdrAgents(_ snapshot: HerdrSnapshot, session: String) -> [BrainAgent] {
@@ -265,6 +268,7 @@ public enum HostAgents {
         rm -f "${TMPDIR:-/tmp}/psh-brain-ps.$$" "${TMPDIR:-/tmp}/psh-brain-panes.$$"
         if command -v herdr >/dev/null 2>&1; then
         for s in $(herdr session list --json 2>/dev/null | tr '{' '\\n' | grep '"running":true' | sed -n 's/.*"name":"\\([^"]*\\)".*/\\1/p'); do
+        case "$s" in "${PSH_HERDR_ONLY:-}"*) ;; *) continue ;; esac
         echo "@@psh-herdr:$s@@"
         if [ "$s" = default ]; then herdr api snapshot 2>/dev/null; else herdr --session "$s" api snapshot 2>/dev/null; fi
         echo

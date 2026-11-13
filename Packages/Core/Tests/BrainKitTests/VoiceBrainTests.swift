@@ -51,13 +51,17 @@ private final class ScriptedModel: BrainModel, @unchecked Sendable {
 private let busyScreen = "✻ Thinking… (12s · esc to interrupt)\n> \n  ? for shortcuts"
 
 @MainActor
-private func makeToolbox() throws -> AgentToolbox {
+private func makeToolbox(
+    herdrScreen: @escaping @MainActor () -> String = { "" }, sent: @escaping @MainActor (String) -> Void = { _ in }
+) throws -> AgentToolbox {
     let list = try fixture("list-agents.txt")
     return AgentToolbox(
         io: .init(
             exec: { command in
+                sent(command)
                 if command.contains("list-panes") { return list }
                 if command.contains("capture-pane") { return busyScreen }
+                if command.contains("pane read") { return herdrScreen() }
                 return ""
             },
             focus: { _ in true },
@@ -71,11 +75,16 @@ private final class StagedRig {
     var time: TimeInterval = 0
     let model: ScriptedModel
     var brain: VoiceBrain!
+    var herdrScreen = ""
+    var commands: [String] = []
 
-    init(_ model: ScriptedModel) async throws {
+    init(_ model: ScriptedModel, herdrScreen: String = "") async throws {
         self.model = model
+        self.herdrScreen = herdrScreen
+        let toolbox = try makeToolbox(
+            herdrScreen: { [weak self] in self?.herdrScreen ?? "" }, sent: { [weak self] in self?.commands.append($0) })
         brain = VoiceBrain(
-            hostID: "host-1", hostName: "devbox", ears: ears, mouth: mouth, model: model, toolbox: try makeToolbox(),
+            hostID: "host-1", hostName: "devbox", ears: ears, mouth: mouth, model: model, toolbox: toolbox,
             pollInterval: .seconds(60), clock: { [weak self] in self?.time ?? 0 })
         await brain.start()
         _ = await eventually { !self.brain.toolbox.agents.isEmpty }
@@ -670,4 +679,108 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
     log.clear()
     #expect(!log.hasTimings)
     #expect(log.last == nil)
+}
+
+private let askScreen = (try? fixture("ask-unifi.screen.txt")) ?? ""
+private let askSentence =
+    "Codex in reviewer asks about UniFi site: Turn it off site-wide? Option 1, Off site-wide, recommended. "
+    + "Option 2, Keep on. Which one?"
+
+@MainActor
+private func showPrompt(_ rig: StagedRig) async {
+    rig.herdrScreen = askScreen
+    if let agents = await rig.brain.toolbox.listAgents() { rig.brain.noteAgents(agents) }
+}
+
+@MainActor
+@Test func aWaitingPromptStopsTheReplyAsksTheQuestionAndDoesNotContinueIt() async throws {
+    let words = (1...40).map { BrainStreamEvent.text("Sentence \($0). ") }
+    let rig = try await StagedRig(
+        ScriptedModel([.success(words + [.finished("stop")])], delay: .milliseconds(20)))
+    rig.ears.phrase("tell me everything")
+    #expect(await eventually { rig.mouth.streamed.contains("Sentence 2.") })
+    let reply = try #require(rig.mouth.reply)
+    rig.mouth.hear("Sentence 1. ", reply: reply)
+
+    await showPrompt(rig)
+    #expect(rig.mouth.stops >= 1)
+    #expect(rig.mouth.spoken == [askSentence])
+    #expect(rig.brain.caption == VoiceBrain.Caption(.brain, askSentence))
+    #expect(rig.brain.waitingPrompts.map(\.agentName) == ["Codex in reviewer"])
+    #expect(rig.brain.waitingPrompts.first?.prompt.choices.map(\.label) == ["Off site-wide (Recommended)", "Keep on"])
+    let streamed = rig.mouth.streamed
+    try await Task.sleep(for: .milliseconds(200))
+    #expect(rig.mouth.streamed == streamed, "the cancelled reply must not continue")
+    #expect(rig.spoken.map(\.content) == ["tell me everything", "Sentence 1.…", askSentence])
+    #expect(rig.model.requests.count == 1)
+    rig.mouth.settle()
+    #expect(rig.brain.phase == .listening)
+}
+
+@MainActor
+@Test func aWaitingPromptWaitsUntilTheUserHasSpokenAndBeenAnswered() async throws {
+    let rig = try await StagedRig(ScriptedModel([.success([.text("Codex is fine."), .finished("stop")])]))
+    rig.ears.partial("so what about")
+    await showPrompt(rig)
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(rig.mouth.spoken.isEmpty)
+    #expect(rig.mouth.stops == 0)
+    #expect(rig.brain.waitingPrompts.count == 1, "the card shows at once")
+    rig.ears.phrase("so what about codex")
+    #expect(await eventually { rig.mouth.finishes == 1 && rig.spoken.last?.content == "Codex is fine." })
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(rig.mouth.spoken.isEmpty)
+    rig.mouth.settle()
+    rig.time = 0.4
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(rig.mouth.spoken.isEmpty)
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken == [askSentence] })
+    let request = try #require(rig.model.requests.first)
+    let note = try #require(request.last { $0.content?.hasPrefix(AgentToolbox.snapshotPrefix) == true }?.content)
+    #expect(note.contains("asks «UniFi site: UniFi auto-update"))
+    #expect(note.contains("1 Off site-wide (Recommended); 2 Keep on; 3 Type something. (free text)"))
+}
+
+@MainActor
+@Test func aPromptAlreadyWaitingWhenVoiceModeStartsIsAskedAndASpokenAnswerSendsTheOption() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([
+                .text("Keeping it on. "),
+                .toolCalls([call("c1", "answer_question", #"{"agent":"reviewer","option":"keep on"}"#)]),
+                .finished("tool_calls"),
+            ]),
+            .success([.text("Done."), .finished("stop")]),
+        ]), herdrScreen: askScreen)
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken == [askSentence] })
+    rig.mouth.settle()
+    rig.ears.phrase("keep it on")
+    #expect(await eventually { rig.commands.contains { $0.contains("pane send-text 'w1:p3' '2'") } })
+    let request = try #require(rig.model.requests.first)
+    #expect(request.contains(.assistant(askSentence)))
+    #expect(request.last == .user("keep it on"))
+}
+
+@MainActor
+@Test func tappingAPromptOptionAnswersItAndRemovesTheCard() async throws {
+    let rig = try await StagedRig(ScriptedModel([]), herdrScreen: askScreen)
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken == [askSentence] })
+    let waiting = try #require(rig.brain.waitingPrompts.first)
+    await rig.brain.answer(waiting, option: 2)
+    #expect(rig.mouth.stops >= 1, "a tap ends the spoken question")
+    #expect(rig.commands.contains { $0.contains("pane send-text 'w1:p3' '2'") })
+    #expect(rig.brain.waitingPrompts.isEmpty)
+    #expect(rig.brain.detail == "Chose Keep on for Codex in reviewer")
+    if let agents = await rig.brain.toolbox.listAgents() { rig.brain.noteAgents(agents) }
+    #expect(rig.brain.waitingPrompts.isEmpty, "a stale screen does not bring the answered card back")
+
+    rig.herdrScreen = "⏺ Done.\n> \n  ? for shortcuts"
+    let card = WaitingPrompt(agentID: waiting.agentID, agentName: waiting.agentName, prompt: waiting.prompt)
+    let sends = rig.commands.count
+    await rig.brain.answer(card, option: 1)
+    #expect(rig.brain.detail == "Codex in reviewer no longer asks that question.")
+    #expect(!rig.commands.dropFirst(sends).contains { $0.contains("send-text") })
 }

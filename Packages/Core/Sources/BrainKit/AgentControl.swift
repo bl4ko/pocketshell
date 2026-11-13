@@ -148,6 +148,16 @@ public enum AgentControl {
         let words = ["one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9]
         if let digit = words[trimmed] { return String(digit) }
         if let digit = trimmed.firstMatch(of: /^(?:option|number)\s+([1-9])$/)?.1 { return String(digit) }
+        let ordinals = ["first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "last": 0]
+        var core = trimmed.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+            .filter { !["the", "option", "number", "choice"].contains($0) }
+        if core.count == 2, core[1] == "one", ordinals[core[0]] != nil { core.removeLast() }
+        if core.count == 1, let index = Int(core[0]) ?? words[core[0]] ?? ordinals[core[0]] {
+            if index == 0, let screen, let last = InteractivePrompt.read(screen)?.choices.last {
+                return String(last.number)
+            }
+            if (1...9).contains(index) { return String(index) }
+        }
         guard let screen, !trimmed.isEmpty else { return nil }
         for line in screen.split(separator: "\n").reversed() {
             guard let match = line.firstMatch(of: /([1-9])[.)]\s+(.+)/) else { continue }

@@ -1,5 +1,6 @@
 import BrainKit
 import Combine
+import MonitorKit
 import SwiftUI
 import VoiceKit
 
@@ -46,13 +47,19 @@ struct VoiceBrainBar: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Expand voice mode")
                     .accessibilityIdentifier("voice.orb")
-                    Text(VoiceBrainText.caption(brain))
-                        .font(.callout)
-                        .foregroundStyle(PocketshellTheme.ink)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("voice.caption")
+                    if let waiting = brain.waitingPrompts.first {
+                        VoicePromptStrip(waiting: waiting) { number in
+                            Task { await brain.answer(waiting, option: number) }
+                        }
+                    } else {
+                        Text(VoiceBrainText.caption(brain))
+                            .font(.callout)
+                            .foregroundStyle(PocketshellTheme.ink)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("voice.caption")
+                    }
                     if mic.active == .voiceIsolation {
                         Image(systemName: mic.active.symbol)
                             .font(.footnote)
@@ -98,7 +105,8 @@ struct VoiceBrainFullView: View {
     var body: some View {
         let caption = VoiceBrainText.caption(brain)
         let lines = Transcript.lines(brain.conversation.messages, live: caption)
-        let orb: CGFloat = lines.isEmpty ? 220 : 120
+        let asking = brain.waitingPrompts.first
+        let orb: CGFloat = asking != nil ? 64 : lines.isEmpty ? 220 : 120
         VStack(spacing: 20) {
             HStack {
                 Button(action: onCollapse) {
@@ -118,31 +126,20 @@ struct VoiceBrainFullView: View {
                 Spacer()
                 Color.clear.frame(width: 28, height: 28)
             }
-            if lines.isEmpty { Spacer(minLength: 0) }
+            if lines.isEmpty, asking == nil { Spacer(minLength: 0) }
             VoiceOrb(phase: brain.phase, input: brain.inputLevel, output: brain.outputLevel, muted: brain.muted)
                 .frame(width: orb, height: orb)
                 .onTapGesture(perform: onCollapse)
                 .accessibilityIdentifier("voice.orb.large")
-            ScrollViewReader { proxy in
+            if let asking {
                 ScrollView {
-                    VStack(spacing: 14) {
-                        ForEach(lines) { line in
-                            TranscriptRow(line: line)
-                        }
-                        Text(caption)
-                            .font(.title3)
-                            .multilineTextAlignment(lines.isEmpty ? .center : .leading)
-                            .foregroundStyle(PocketshellTheme.ink)
-                            .frame(maxWidth: .infinity, alignment: lines.isEmpty ? .center : .leading)
-                            .accessibilityIdentifier("voice.caption.full")
-                            .id(Self.live)
+                    VoicePromptCard(waiting: asking) { number in
+                        Task { await brain.answer(asking, option: number) }
                     }
-                    .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.hidden)
-                .onAppear { proxy.scrollTo(Self.live, anchor: .bottom) }
-                .onChange(of: lines.count) { proxy.scrollTo(Self.live, anchor: .bottom) }
-                .onChange(of: caption) { proxy.scrollTo(Self.live, anchor: .bottom) }
+            } else {
+                transcript(lines: lines, caption: caption)
             }
             if let detail = brain.detail {
                 Text(detail)
@@ -160,7 +157,126 @@ struct VoiceBrainFullView: View {
         .animation(.easeOut(duration: 0.2), value: lines.isEmpty)
     }
 
+    private func transcript(lines: [TranscriptLine], caption: String) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 14) {
+                    ForEach(lines) { line in
+                        TranscriptRow(line: line)
+                    }
+                    Text(caption)
+                        .font(.title3)
+                        .multilineTextAlignment(lines.isEmpty ? .center : .leading)
+                        .foregroundStyle(PocketshellTheme.ink)
+                        .frame(maxWidth: .infinity, alignment: lines.isEmpty ? .center : .leading)
+                        .accessibilityIdentifier("voice.caption.full")
+                        .id(Self.live)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+            .onAppear { proxy.scrollTo(Self.live, anchor: .bottom) }
+            .onChange(of: lines.count) { proxy.scrollTo(Self.live, anchor: .bottom) }
+            .onChange(of: caption) { proxy.scrollTo(Self.live, anchor: .bottom) }
+        }
+    }
+
     private static let live = "live"
+}
+
+private struct VoicePromptStrip: View {
+    let waiting: WaitingPrompt
+    let onAnswer: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(waiting.agentName): \(PromptSpeech.spokenQuestion(waiting.prompt).question)")
+                .font(.caption)
+                .foregroundStyle(PocketshellTheme.ink)
+                .lineLimit(1)
+                .accessibilityIdentifier("voice.prompt.question")
+            ScrollView(.horizontal) {
+                HStack(spacing: 6) {
+                    ForEach(waiting.prompt.options, id: \.number) { option in
+                        Button {
+                            onAnswer(option.number)
+                        } label: {
+                            Text("\(option.number). \(option.label)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(option.freeText ? PocketshellTheme.secondary : PocketshellTheme.ink)
+                                .lineLimit(1)
+                                .padding(.horizontal, 8)
+                                .frame(height: 18)
+                                .background(
+                                    option.highlighted
+                                        ? PocketshellTheme.accentTint : PocketshellTheme.secondarySurface,
+                                    in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Option \(option.number), \(option.label)")
+                        .accessibilityIdentifier("voice.prompt.option.\(option.number)")
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 34)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice.prompt")
+    }
+}
+
+private struct VoicePromptCard: View {
+    let waiting: WaitingPrompt
+    let onAnswer: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(waiting.agentName + (waiting.prompt.header.map { " · \($0)" } ?? ""))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PocketshellTheme.waitingText)
+            ForEach(Array(waiting.prompt.context.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(PocketshellTheme.secondary)
+            }
+            Text(waiting.prompt.question)
+                .font(.body)
+                .foregroundStyle(PocketshellTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("voice.prompt.full.question")
+            ForEach(waiting.prompt.options, id: \.number) { option in
+                Button {
+                    onAnswer(option.number)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(option.number). \(option.label)")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(option.freeText ? PocketshellTheme.secondary : PocketshellTheme.ink)
+                        if !option.detail.isEmpty {
+                            Text(option.detail)
+                                .font(.caption)
+                                .foregroundStyle(PocketshellTheme.secondary)
+                        }
+                    }
+                    .multilineTextAlignment(.leading)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        option.highlighted ? PocketshellTheme.accentTint : PocketshellTheme.secondarySurface,
+                        in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("voice.prompt.full.option.\(option.number)")
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PocketshellTheme.surface, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice.prompt.full")
+    }
 }
 
 private struct TranscriptRow: View {

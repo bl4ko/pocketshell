@@ -188,3 +188,57 @@ func otherRepliesDoNotConfirm(_ reply: String) {
         ])
     #expect(detector.update([agent(.done), agent(.waiting, name: "web", pane: "%9")]).isEmpty)
 }
+
+private func askScreen() throws -> String {
+    try fixture("ask-unifi.screen.txt")
+}
+
+@Test func waitingPromptIsSpokenWithTheQuestionAndChoicesOnly() throws {
+    let prompt = try #require(InteractivePrompt.read(try askScreen()))
+    var queue = AgentEventQueue()
+    queue.push(AgentEvent(agentID: "a", name: "Claude in api", kind: .done))
+    queue.push(AgentEvent(agentID: "s", name: "Security", kind: .waiting, prompt: prompt))
+    #expect(queue.hasPrompt)
+    #expect(
+        queue.drainPrompts()
+            == "Security asks about UniFi site: Turn it off site-wide? Option 1, Off site-wide, recommended. "
+            + "Option 2, Keep on. Which one?")
+    #expect(queue.drain() == "Claude in api finished.")
+    let permission = try #require(InteractivePrompt.read(try fixture("claude-permission.screen.txt")))
+    #expect(
+        PromptSpeech.sentence(permission, agent: "Claude in api")
+            == "Claude in api asks for permission: Bash command, git push origin main. Do you want to proceed? "
+            + "Option 1, Yes. Option 2, Yes, and don't ask again for git push commands in /home/dev/src/api. "
+            + "Option 3, No, and tell Claude what to do differently. Which one?")
+}
+
+@Test func detectorReportsAPromptOnceAtFirstSightAndAgainWhenItChanges() throws {
+    let prompt = try #require(InteractivePrompt.read(try askScreen()))
+    var next = prompt
+    next.question = "Keep the backup schedule?"
+    var agents = HostAgents.parse(try fixture("list-agents.txt"))
+    agents[2].prompt = prompt
+    var detector = AgentEventDetector()
+    #expect(detector.update(agents).map(\.prompt) == [prompt])
+    #expect(detector.update(agents).isEmpty)
+    agents[2].prompt = nil
+    #expect(detector.update(agents).isEmpty, "a repaint that hides the prompt does not repeat it")
+    agents[2].prompt = next
+    #expect(detector.update(agents).map(\.prompt) == [next])
+    agents[2].status = .busy
+    agents[2].prompt = nil
+    _ = detector.update(agents)
+    agents[2].status = .waiting
+    agents[2].prompt = next
+    #expect(detector.update(agents).map(\.prompt) == [next], "the same question asked again is new")
+}
+
+@Test func spokenOptionWordsMapToTheirNumber() throws {
+    let screen = try askScreen()
+    #expect(AgentControl.optionDigit("the first", screen: screen) == "1")
+    #expect(AgentControl.optionDigit("second one", screen: screen) == "2")
+    #expect(AgentControl.optionDigit("option one", screen: screen) == "1")
+    #expect(AgentControl.optionDigit("keep on", screen: screen) == "2")
+    #expect(AgentControl.optionDigit("off site-wide", screen: screen) == "1")
+    #expect(AgentControl.optionDigit("the last one", screen: screen) == "2")
+}

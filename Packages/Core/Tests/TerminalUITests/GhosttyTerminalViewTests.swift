@@ -213,6 +213,94 @@
             #expect(sent == [Data([0x0d]), Data([0x7f])])
         }
 
+        @Test func trackpadStepsNearTheStartAndRepeatsWhileHeldFar() {
+            let view = makeGhostty()
+            var sent: [Data] = []
+            var now = 0.0
+            view.onSend = { sent.append($0) }
+            view.trackpadClock = { now }
+            let left = Data(view.terminal.encodeKey(.left))
+            let right = Data(view.terminal.encodeKey(.right))
+            view.beginFloatingCursor(at: CGPoint(x: 200, y: 100))
+            view.updateFloatingCursor(at: CGPoint(x: 206, y: 100))
+            view.updateFloatingCursor(at: CGPoint(x: 200, y: 140))
+            #expect(sent == [right, left])
+            now = 1
+            view.trackpadTick()
+            #expect(sent == [right, left])
+            #expect(view.trackpadTimer == nil)
+
+            view.updateFloatingCursor(at: CGPoint(x: 360, y: 100))
+            #expect(sent == [right, left, right])
+            #expect(view.trackpadTimer != nil)
+            sent.removeAll()
+            for step in 1...25 {
+                now = 1 + Double(step) * 0.01
+                view.trackpadTick()
+            }
+            #expect(sent.count >= 10)
+            #expect(sent.allSatisfy { $0 == right })
+
+            view.endFloatingCursor()
+            #expect(view.trackpadTimer == nil)
+            sent.removeAll()
+            now = 5
+            view.trackpadTick()
+            view.updateFloatingCursor(at: CGPoint(x: 100, y: 100))
+            #expect(sent.isEmpty)
+        }
+
+        @Test func trackpadRepeatsVerticallyOnTheAlternateScreen() {
+            let view = makeGhostty()
+            var sent: [Data] = []
+            var now = 0.0
+            view.onSend = { sent.append($0) }
+            view.trackpadClock = { now }
+            view.feed(Data("\u{1b}[?1049h".utf8))
+            let up = Data(view.terminal.encodeKey(.up))
+            view.beginFloatingCursor(at: CGPoint(x: 200, y: 150))
+            view.updateFloatingCursor(at: CGPoint(x: 200, y: 60))
+            #expect(sent == [up])
+            now = 1
+            view.trackpadTick()
+            #expect(sent == [up, up])
+        }
+
+        @Test func trackpadRepeatStopsOnResignAndWhenTheAppLeavesTheForeground() {
+            let view = makeGhostty()
+            var sent: [Data] = []
+            var now = 0.0
+            view.onSend = { sent.append($0) }
+            view.trackpadClock = { now }
+            view.beginFloatingCursor(at: CGPoint(x: 200, y: 100))
+            view.updateFloatingCursor(at: CGPoint(x: 360, y: 100))
+            #expect(view.trackpadTimer != nil)
+            NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+            #expect(view.trackpadTimer == nil)
+            #expect(view.trackpad == nil)
+
+            view.beginFloatingCursor(at: CGPoint(x: 200, y: 100))
+            view.updateFloatingCursor(at: CGPoint(x: 360, y: 100))
+            #expect(view.trackpadTimer != nil)
+            _ = view.resignFirstResponder()
+            #expect(view.trackpadTimer == nil)
+            sent.removeAll()
+            now = 5
+            view.trackpadTick()
+            #expect(sent.isEmpty)
+        }
+
+        @Test func trackpadTimerRepeatsOnTheMainRunLoop() async throws {
+            let view = makeGhostty()
+            var sent: [Data] = []
+            view.onSend = { sent.append($0) }
+            view.beginFloatingCursor(at: CGPoint(x: 200, y: 100))
+            view.updateFloatingCursor(at: CGPoint(x: 400, y: 100))
+            try await Task.sleep(for: .milliseconds(300))
+            view.endFloatingCursor()
+            #expect(sent.count >= 5)
+        }
+
         @Test func markedTextReportsCompositionAndCommits() {
             let view = makeGhostty()
             var sent: [Data] = []

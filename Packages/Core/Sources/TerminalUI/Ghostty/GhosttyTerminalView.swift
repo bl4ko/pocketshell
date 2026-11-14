@@ -58,7 +58,9 @@
             return interaction
         }()
         var document = TextInputDocument()
-        var floatingCursor: CGPoint?
+        var trackpad: TrackpadJoystick?
+        var trackpadTimer: Timer?
+        var trackpadClock: () -> Double = { CACurrentMediaTime() }
         weak var textInputDelegate: UITextInputDelegate?
         let progressBar = TerminalProgressBar()
 
@@ -86,6 +88,13 @@
             terminal.onProgress = { [weak self] progress in self?.progressBar.apply(progress) }
             addSubview(progressBar)
             rebuildRenderer()
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification,
+                object: nil)
+        }
+
+        @objc private func appWillResignActive() {
+            endFloatingCursor()
         }
 
         @available(*, unavailable)
@@ -98,6 +107,7 @@
                 displayLink?.invalidate()
                 caretTimer?.invalidate()
                 keyRepeat?.invalidate()
+                trackpadTimer?.invalidate()
             }
         }
 
@@ -655,6 +665,7 @@
         }
 
         override func resignFirstResponder() -> Bool {
+            endFloatingCursor()
             let resigned = super.resignFirstResponder()
             if resigned {
                 keyRepeat?.invalidate()

@@ -113,25 +113,56 @@
         }
 
         func beginFloatingCursor(at point: CGPoint) {
-            floatingCursor = point
+            endFloatingCursor()
+            trackpad = TrackpadJoystick(at: point, vertical: terminal.isAlternateScreen)
         }
 
         func updateFloatingCursor(at point: CGPoint) {
-            guard let last = floatingCursor else { return }
-            var keys: [VTKey] = []
-            if abs(point.x - last.x) > 5 { keys.append(point.x < last.x ? .left : .right) }
-            if terminal.isAlternateScreen, abs(point.y - last.y) > 2 { keys.append(point.y < last.y ? .up : .down) }
+            guard var pad = trackpad else { return }
+            let keys = pad.move(to: point, vertical: terminal.isAlternateScreen, at: trackpadClock())
+            trackpad = pad
+            sendTrackpad(keys)
+        }
+
+        func endFloatingCursor() {
+            trackpad = nil
+            trackpadTimer?.invalidate()
+            trackpadTimer = nil
+        }
+
+        func trackpadTick() {
+            guard var pad = trackpad else { return }
+            let keys = pad.tick(at: trackpadClock())
+            trackpad = pad
+            sendTrackpad(keys)
+        }
+
+        private func sendTrackpad(_ keys: [TrackpadJoystick.Key]) {
+            if trackpad?.isHolding == true, trackpadTimer == nil {
+                let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.trackpadTick() }
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                trackpadTimer = timer
+            } else if trackpad?.isHolding != true {
+                trackpadTimer?.invalidate()
+                trackpadTimer = nil
+            }
             guard !keys.isEmpty else { return }
-            floatingCursor = point
             _ = edit {
                 $0.reset()
                 return []
             }
-            for key in keys { send(Data(terminal.encodeKey(key))) }
-        }
-
-        func endFloatingCursor() {
-            floatingCursor = nil
+            for key in keys {
+                let vtKey: VTKey =
+                    switch key {
+                    case .left: .left
+                    case .right: .right
+                    case .up: .up
+                    case .down: .down
+                    }
+                send(Data(terminal.encodeKey(vtKey)))
+            }
         }
 
         func text(in range: UITextRange) -> String? {

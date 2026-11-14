@@ -253,8 +253,13 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
         sleep(1)
         XCTAssertGreaterThan(keyboard.frame.height, 200, "the software keyboard is not on screen")
-        second.tap()
-        XCTAssertTrue(second.isSelected, "the slid terminal took the tab strip tap")
+        // The slid terminal's accessibility frame still covers the strip, so only a real touch can tell.
+        second.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertEqual(
+            XCTWaiter.wait(
+                for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: second)],
+                timeout: 3),
+            .completed, "the slid terminal took the tab strip tap")
     }
 
     func testKeyboardSlidesTmuxOnlyAsFarAsTheCaret() throws {

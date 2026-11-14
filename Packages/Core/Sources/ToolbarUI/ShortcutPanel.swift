@@ -66,7 +66,7 @@
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(Palette.bar(theme))
+            .background(Palette.keyboard(theme).ignoresSafeArea())
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("terminal.shortcuts")
             .onChange(of: multiplexer, initial: true) { _, attached in

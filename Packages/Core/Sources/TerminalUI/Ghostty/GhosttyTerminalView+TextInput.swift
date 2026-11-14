@@ -52,7 +52,7 @@
             set {}
         }
         var keyboardAppearance: UIKeyboardAppearance {
-            get { .default }
+            get { themedKeyboardAppearance }
             set {}
         }
         var returnKeyType: UIReturnKeyType {

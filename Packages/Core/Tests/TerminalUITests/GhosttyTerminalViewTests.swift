@@ -25,6 +25,14 @@
     @MainActor
     @Suite(.serialized)
     struct GhosttyTerminalViewTests {
+        @Test func keyboardAppearanceFollowsTheThemeChrome() {
+            let view = makeGhostty()
+            view.applyTheme(.defaultTheme)
+            #expect(view.keyboardAppearance == .dark)
+            view.applyTheme(.pocketshellLight)
+            #expect(view.keyboardAppearance == .light)
+        }
+
         @Test func layoutSizesTheGridFromTheFont() {
             let view = makeGhostty()
             var reported: (Int, Int)?

@@ -1247,6 +1247,43 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(terminal.label, panelResizes, "the first keyboard after a launch resized the terminal")
     }
 
+    func testKeyboardShortcutPanelTakesTheThemeKeyboardColor() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; keyboard colour test skipped")
+        }
+        for (theme, background) in [("Tokyo Night", 27.6), ("Pocketshell Light", nil)] {
+            app.terminate()
+            app.launchArguments = ["-pocketshell.terminalTheme", theme]
+            app.launch()
+            openHost("localbox")
+            let toggle = app.buttons["terminal.shortcutsToggle"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+            let terminal = app.textViews["terminal.view"]
+            terminal.tap()
+            XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+            sleep(1)
+            let bottom = CGPoint(x: app.frame.midX, y: app.frame.maxY - 20)
+            let keyboard = luminance(at: bottom)
+            attachScreenshot("keyboard-\(theme)")
+            toggle.tap()
+            XCTAssertTrue(app.buttons["shortcuts.close"].waitForExistence(timeout: 5))
+            sleep(1)
+            let panel = luminance(at: bottom)
+            attachScreenshot("shortcut-panel-\(theme)")
+            XCTAssertEqual(panel, keyboard, accuracy: 12, "\(theme): the panel and the keyboard differ in colour")
+            if let background {
+                XCTAssertEqual(keyboard, background, accuracy: 4, "\(theme): the keyboard is not the theme colour")
+            }
+        }
+    }
+
+    private func attachScreenshot(_ name: String) {
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     func testKeyboardToggleKeepsToolbarColorBehindKeyboard() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed keyboard test skipped")
@@ -1257,9 +1294,9 @@ final class SmokeUITests: XCTestCase {
         let terminal = app.textViews["terminal.view"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 5))
         waitForKeyboardLayout(terminal, button: keyboardButton)
-        let bar = luminance(at: CGPoint(x: keyboardButton.frame.maxX + 3, y: keyboardButton.frame.midY))
+        let background = luminance(at: CGPoint(x: terminal.frame.maxX - 3, y: terminal.frame.maxY - 3))
         let behindKeyboard = luminance(at: CGPoint(x: keyboardButton.frame.midX, y: keyboardButton.frame.maxY + 60))
-        XCTAssertEqual(behindKeyboard, bar, accuracy: 3, "keyboard glass re-tints when the layout settles")
+        XCTAssertEqual(behindKeyboard, background, accuracy: 3, "keyboard glass re-tints when the layout settles")
     }
 
     func testKeyboardToggleKeepsFullScreenAppStill() throws {

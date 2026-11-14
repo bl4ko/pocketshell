@@ -37,6 +37,7 @@
             background: VTColor(r: 0, g: 0, b: 0), foreground: VTColor(r: 255, g: 255, b: 255),
             cursor: VTColor(r: 170, g: 170, b: 170))
         private var appliedTheme: TerminalTheme?
+        private(set) var themedKeyboardAppearance: UIKeyboardAppearance = .default
         private var displayLink: CADisplayLink?
         private var renderPending = false
         private var caret = CaretController()
@@ -163,6 +164,11 @@
             backgroundColor = UIColor(red: background)
             renderer?.setPalette(palette)
             setNeedsRender()
+            let appearance: UIKeyboardAppearance = theme.lightChrome ? .light : .dark
+            if appearance != themedKeyboardAppearance {
+                themedKeyboardAppearance = appearance
+                if isFirstResponder { reloadInputViews() }
+            }
         }
 
         var themeForeground: UIColor { UIColor(red: palette.foreground) }

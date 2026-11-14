@@ -9,6 +9,9 @@
 
         static func bar(_ theme: TerminalTheme) -> Color { themed("ECEAE3", theme, mix: 0.12) }
         static func pinned(_ theme: TerminalTheme) -> Color { themed("E5E3DA", theme, mix: 0.16) }
+        static func keyboard(_ theme: TerminalTheme) -> Color {
+            theme.lightChrome ? pinned(theme) : color(theme.background)
+        }
         static func key(_ theme: TerminalTheme) -> Color { themed("FFFFFF", theme, mix: 0.08) }
         static func border(_ theme: TerminalTheme) -> Color { themed("CFCCC0", theme, mix: 0.28) }
         static func text(_ theme: TerminalTheme) -> Color { themed("3C4045", theme, dark: theme.foreground) }

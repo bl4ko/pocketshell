@@ -12,8 +12,8 @@
         #if !targetEnvironment(macCatalyst)
             private(set) var shortcutHost: UIHostingController<ShortcutPanel>?
             private(set) var shortcutRenderCount = 0
-            let shortcutInput = UIInputView(
-                frame: CGRect(x: 0, y: 0, width: 0, height: 260), inputViewStyle: .keyboard)
+            private(set) var shortcutInput = TerminalViewController.makeShortcutInput(height: 260)
+            private var shortcutInputHeight: CGFloat = 260
 
             private struct ShortcutInputs: Equatable {
                 var keys: [ToolbarKey]
@@ -22,7 +22,12 @@
                 var category: ShortcutCategory
             }
             private var shortcutInputs: ShortcutInputs?
-            private static var typingKeyboardHeight: CGFloat = 260
+            private weak var shortcutBridge: TerminalBridge?
+            static var keyboardHeights = KeyboardHeights(defaults: .standard)
+
+            private static func makeShortcutInput(height: CGFloat) -> UIInputView {
+                UIInputView(frame: CGRect(x: 0, y: 0, width: 0, height: height), inputViewStyle: .keyboard)
+            }
 
             override func viewDidLoad() {
                 super.viewDidLoad()
@@ -31,16 +36,61 @@
                     name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
             }
 
+            override func viewDidLayoutSubviews() {
+                super.viewDidLayoutSubviews()
+                matchTypingKeyboard()
+            }
+
+            private var screenSize: CGSize? { view.window.map { $0.windowScene?.screen.bounds.size ?? $0.bounds.size } }
+
+            private var typingKeyboardHeight: CGFloat {
+                guard let screenSize else { return shortcutInputHeight }
+                return Self.keyboardHeights.height(for: screenSize) ?? KeyboardHeights.estimate(for: screenSize)
+            }
+
+            private func matchTypingKeyboard() {
+                let height = typingKeyboardHeight
+                if let bridge = shortcutBridge, let hold = bridge.keyboardHold, hold != height {
+                    bridge.keyboardHold = height
+                }
+                guard shortcutInputHeight != height else { return }
+                // UIKit pins an input view to the frame height it had when first shown; later frame changes are ignored.
+                let input = Self.makeShortcutInput(height: height)
+                if let host = shortcutHost { embed(host.view, in: input) }
+                let shown = terminalView.customInputView === shortcutInput
+                shortcutInput = input
+                shortcutInputHeight = height
+                if shown {
+                    terminalView.customInputView = input
+                    terminalView.reloadInputViews()
+                }
+            }
+
+            private func embed(_ panel: UIView, in input: UIInputView) {
+                panel.removeFromSuperview()
+                input.addSubview(panel)
+                NSLayoutConstraint.activate([
+                    panel.leadingAnchor.constraint(equalTo: input.leadingAnchor),
+                    panel.trailingAnchor.constraint(equalTo: input.trailingAnchor),
+                    panel.topAnchor.constraint(equalTo: input.topAnchor),
+                    panel.bottomAnchor.constraint(equalTo: input.bottomAnchor),
+                ])
+            }
+
             @objc private func keyboardDidChangeFrame(_ note: Notification) {
                 guard terminalView.customInputView == nil, terminalView.isFirstResponder,
                     let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
-                    let screen = view.window?.windowScene?.screen, frame.minY < screen.bounds.maxY,
+                    let screenSize, frame.minY < screenSize.height,
                     frame.height > 150  // ponytail: skips the hardware-keyboard bar
                 else { return }
-                Self.typingKeyboardHeight = frame.height
+                if Self.keyboardHeights.record(frame.height, screen: screenSize) {
+                    Self.keyboardHeights.save(to: .standard)
+                }
+                matchTypingKeyboard()
             }
 
             func updateShortcuts(bridge: TerminalBridge, keys: [ToolbarKey], theme: TerminalTheme) {
+                shortcutBridge = bridge
                 let inputs = ShortcutInputs(
                     keys: keys, theme: theme, multiplexer: terminalView.multiplexerMode,
                     category: bridge.shortcutCategory)
@@ -48,12 +98,12 @@
                     shortcutInputs = inputs
                     renderShortcuts(bridge: bridge, keys: keys, theme: theme)
                 }
+                matchTypingKeyboard()
                 let input: UIView? = bridge.shortcutsActive ? shortcutInput : nil
                 if terminalView.customInputView !== input {
                     // UIKit posts no show for the keyboard replacing a same-height panel, only the panel's hide.
-                    let hold = input == nil && terminalView.isFirstResponder ? Self.typingKeyboardHeight : nil
+                    let hold = input == nil && terminalView.isFirstResponder ? typingKeyboardHeight : nil
                     if bridge.keyboardHold != hold { bridge.keyboardHold = hold }
-                    shortcutInput.frame.size.height = Self.typingKeyboardHeight
                     terminalView.customInputView = input
                     terminalView.reloadInputViews()
                 }
@@ -81,13 +131,7 @@
                     // UIKit installs input views in its keyboard window, outside this controller's hierarchy.
                     host.view.backgroundColor = .clear
                     host.view.translatesAutoresizingMaskIntoConstraints = false
-                    shortcutInput.addSubview(host.view)
-                    NSLayoutConstraint.activate([
-                        host.view.leadingAnchor.constraint(equalTo: shortcutInput.leadingAnchor),
-                        host.view.trailingAnchor.constraint(equalTo: shortcutInput.trailingAnchor),
-                        host.view.topAnchor.constraint(equalTo: shortcutInput.topAnchor),
-                        host.view.bottomAnchor.constraint(equalTo: shortcutInput.safeAreaLayoutGuide.bottomAnchor),
-                    ])
+                    embed(host.view, in: shortcutInput)
                 }
             }
         #endif

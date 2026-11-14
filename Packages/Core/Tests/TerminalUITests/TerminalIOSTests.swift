@@ -169,6 +169,34 @@
         }
 
         @MainActor
+        @Test func shortcutPanelTakesTheTypingKeyboardHeight() {
+            let saved = TerminalViewController.keyboardHeights
+            defer { TerminalViewController.keyboardHeights = saved }
+            let screen = CGSize(width: 402, height: 874)
+            TerminalViewController.keyboardHeights = KeyboardHeights()
+            TerminalViewController.keyboardHeights.record(308, screen: screen)
+            let window = UIWindow(frame: CGRect(origin: .zero, size: screen))
+            let controller = TerminalViewController()
+            window.addSubview(controller.view)
+            let bridge = TerminalBridge()
+            let keys = [key("a")]
+            controller.updateShortcuts(bridge: bridge, keys: keys, theme: .pocketshell)
+            bridge.toggleShortcuts()
+            controller.updateShortcuts(bridge: bridge, keys: keys, theme: .pocketshell)
+            #expect(controller.terminalView.inputView === controller.shortcutInput)
+            #expect(controller.shortcutInput.frame.height == 308)
+
+            TerminalViewController.keyboardHeights.record(320, screen: screen)
+            bridge.toggleShortcuts()
+            controller.updateShortcuts(bridge: bridge, keys: keys, theme: .pocketshell)
+            bridge.toggleShortcuts()
+            controller.updateShortcuts(bridge: bridge, keys: keys, theme: .pocketshell)
+            #expect(controller.terminalView.inputView === controller.shortcutInput)
+            #expect(controller.shortcutInput.frame.height == 320)
+            #expect(controller.shortcutRenderCount == 1)
+        }
+
+        @MainActor
         @Test func shortcutInputViewFollowsBridgeWithoutRebuild() {
             let bridge = TerminalBridge()
             let controller = TerminalViewController()

@@ -1201,6 +1201,52 @@ final class SmokeUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testKeyboardShortcutPanelSwapKeepsTheTerminalSize() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; shortcut panel swap test skipped")
+        }
+        openHost("localbox")
+        let toggle = app.buttons["terminal.shortcutsToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        let terminal = app.textViews["terminal.view"]
+        let close = app.buttons["shortcuts.close"]
+        terminal.tap()
+        terminal.typeText(" ")
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        sleep(1)
+        let toolbarY = toggle.frame.minY
+        let resizes = terminal.label
+        for _ in 0..<2 {
+            toggle.tap()
+            XCTAssertTrue(close.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.keyboards.element.waitForNonExistence(timeout: 5))
+            sleep(1)
+            XCTAssertEqual(toggle.frame.minY, toolbarY, accuracy: 0.5, "the panel is not the keyboard's height")
+            XCTAssertEqual(terminal.label, resizes, "swapping to the panel resized the terminal")
+            close.tap()
+            XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+            sleep(1)
+            XCTAssertEqual(toggle.frame.minY, toolbarY, accuracy: 0.5, "the keyboard is not the panel's height")
+            XCTAssertEqual(terminal.label, resizes, "swapping to the keyboard resized the terminal")
+        }
+
+        app.terminate()
+        app.launch()
+        openHost("localbox")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertEqual(
+            toggle.frame.minY, toolbarY, accuracy: 0.5, "a panel opened before the keyboard has the wrong height")
+        let panelResizes = terminal.label
+        close.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertEqual(toggle.frame.minY, toolbarY, accuracy: 0.5)
+        XCTAssertEqual(terminal.label, panelResizes, "the first keyboard after a launch resized the terminal")
+    }
+
     func testKeyboardToggleKeepsToolbarColorBehindKeyboard() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; sshd-backed keyboard test skipped")

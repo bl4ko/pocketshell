@@ -422,6 +422,7 @@ struct TerminalScreen: View {
                 connection.appForegrounded()
             } else if phase == .background {
                 voice.stop()
+                connection.releaseHerdrZoomInBackground()
             }
         }
         .onChange(of: isActive) { _, active in

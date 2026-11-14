@@ -78,6 +78,9 @@ private func fixtureSnapshot() throws -> HerdrSnapshot {
     #expect(
         Herdr.focusCommand(session: "work", paneID: "w1:p3", in: snapshot)
             == "\(herdr) pane zoom 'w1:p3' --on && \(herdr) pane zoom 'w1:p3' --off")
+    #expect(
+        Herdr.focusCommand(session: "work", paneID: "w9:p1", in: snapshot)
+            == "\(herdr) pane zoom 'w9:p1' --on && \(herdr) pane zoom 'w9:p1' --off")
 }
 
 @Test func zoomsOnlyTheFocusedPaneOfAnUnzoomedSplitAndUndoesItsOwnZoom() throws {
@@ -98,6 +101,10 @@ private func fixtureSnapshot() throws -> HerdrSnapshot {
     #expect(Herdr.unzoomCommands(session: "work", tabIDs: ["w1:t1"], in: snapshot).isEmpty)
 
     snapshot.focusedPaneID = "w1:p2"
+    #expect(Herdr.zoomTarget(in: snapshot) == nil)
+
+    snapshot.focusedPaneID = "w1:p1"
+    snapshot.layouts = nil
     #expect(Herdr.zoomTarget(in: snapshot) == nil)
 }
 

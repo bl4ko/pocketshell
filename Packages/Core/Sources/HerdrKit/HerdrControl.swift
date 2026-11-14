@@ -222,7 +222,7 @@ extension Herdr {
     public static func focusCommand(session: String, paneID: String, in snapshot: HerdrSnapshot) -> String {
         let outline = HerdrOutline(snapshot)
         guard let tab = outline.tab(containing: paneID) else {
-            return zoomCommand(session: session, paneID: paneID, on: true)
+            return zoomFocusCommand(session: session, paneID: paneID)
         }
         if let pane = tab.panes.first(where: { $0.paneID == paneID }), pane.status != nil {
             return focusAgentCommand(session: session, paneID: paneID, tabID: tab.tabID)
@@ -230,8 +230,13 @@ extension Herdr {
         if tab.panes.count <= 1 {
             return focusTabCommand(session: session, tabID: tab.tabID)
         }
-        let zoomIn = zoomCommand(session: session, paneID: paneID, on: true)
-        return tab.zoomed ? zoomIn : "\(zoomIn) && \(zoomCommand(session: session, paneID: paneID, on: false))"
+        return tab.zoomed
+            ? zoomCommand(session: session, paneID: paneID, on: true)
+            : zoomFocusCommand(session: session, paneID: paneID)
+    }
+
+    public static func zoomFocusCommand(session: String, paneID: String) -> String {
+        "\(zoomCommand(session: session, paneID: paneID, on: true)) && \(zoomCommand(session: session, paneID: paneID, on: false))"
     }
 
     public static func zoomCommand(session: String, paneID: String, on: Bool) -> String {
@@ -240,8 +245,8 @@ extension Herdr {
 
     public static func zoomTarget(in snapshot: HerdrSnapshot) -> (paneID: String, tabID: String)? {
         let outline = HerdrOutline(snapshot)
-        guard let paneID = outline.focusedPaneID, let tab = outline.tab(containing: paneID), tab.panes.count > 1,
-            !tab.zoomed
+        guard snapshot.layouts != nil, let paneID = outline.focusedPaneID, let tab = outline.tab(containing: paneID),
+            tab.panes.count > 1, !tab.zoomed
         else { return nil }
         return (paneID, tab.tabID)
     }

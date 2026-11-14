@@ -4,9 +4,14 @@ import HerdrKit
 @MainActor
 final class HerdrState: ObservableObject {
     @Published var snapshot: HerdrSnapshot?
-    var focusMode = false
-    var zoomedTabs: Set<String> = []
+    let zoom: HerdrZoomKeeper
     var collapsedSidebarKeys: [UInt8]?
+
+    init(hostID: UUID) {
+        zoom = HerdrZoomKeeper(ledgerKey: "pocketshell.herdrZoomed.\(hostID.uuidString)")
+    }
+
+    var focusMode: Bool { zoom.focusMode }
 }
 
 extension ConnectionController {
@@ -14,36 +19,31 @@ extension ConnectionController {
         guard let snapshot = await currentHerdrSnapshot(),
             await herdrExec({ Herdr.focusCommand(session: $0, paneID: paneID, in: snapshot) }) != nil
         else { return false }
-        await zoomFocusedHerdrPane()
+        await settleHerdrZoom()
         return true
     }
 
     func focusHerdrTab(id tabID: String) async -> Bool {
         guard await herdrExec({ Herdr.focusTabCommand(session: $0, tabID: tabID) }) != nil else { return false }
-        await zoomFocusedHerdrPane()
+        await settleHerdrZoom()
         return true
     }
 
     func jumpToHerdrWorkspace(_ workspaceID: String) async -> Bool {
         guard await herdrExec({ Herdr.focusWorkspaceCommand(session: $0, workspaceID: workspaceID) }) != nil
         else { return false }
-        await zoomFocusedHerdrPane()
+        await settleHerdrZoom()
         return true
     }
 
     func setHerdrFocusMode(_ on: Bool) async {
-        herdr.focusMode = on
+        if let session = herdrTarget?.session {
+            await herdr.zoom.setFocusMode(on, session: session, exec: herdrZoomExec)
+        }
         if on {
-            await zoomFocusedHerdrPane()
+            _ = await currentHerdrSnapshot()
             await collapseHerdrSidebar()
             return
-        }
-        let zoomed = herdr.zoomedTabs
-        herdr.zoomedTabs = []
-        if !zoomed.isEmpty, let snapshot = await currentHerdrSnapshot() {
-            _ = await herdrExec { session in
-                Herdr.unzoomCommands(session: session, tabIDs: zoomed, in: snapshot).joined(separator: "; ")
-            }
         }
         if let keys = herdr.collapsedSidebarKeys {
             herdr.collapsedSidebarKeys = nil
@@ -82,7 +82,7 @@ extension ConnectionController {
             let result = Herdr.parseActionResult(output)
             if !Herdr.agentStarted(result), case .failed(_, let message) = result { return message }
         }
-        await zoomFocusedHerdrPane()
+        await settleHerdrZoom()
         return nil
     }
 
@@ -93,14 +93,25 @@ extension ConnectionController {
         return nil
     }
 
-    private func zoomFocusedHerdrPane() async {
-        guard let snapshot = await currentHerdrSnapshot(), herdr.focusMode,
-            let target = Herdr.zoomTarget(in: snapshot)
-        else { return }
-        if await herdrExec({ Herdr.zoomCommand(session: $0, paneID: target.paneID, on: true) }) != nil {
-            herdr.zoomedTabs.insert(target.tabID)
-            _ = await currentHerdrSnapshot()
+    func settleHerdrZoom() async {
+        if let session = herdrTarget?.session {
+            await herdr.zoom.settle(session: session, exec: herdrZoomExec)
         }
+        _ = await currentHerdrSnapshot()
+    }
+
+    func releaseHerdrZoomInBackground() {
+        guard let session = herdrTarget?.session, !herdr.zoom.owned(session: session).isEmpty else { return }
+        let keepAlive = BackgroundKeepAlive()
+        keepAlive.begin()
+        Task {
+            await herdr.zoom.release(session: session, exec: herdrZoomExec)
+            keepAlive.end()
+        }
+    }
+
+    var herdrZoomExec: HerdrZoomKeeper.Exec {
+        { [weak self] command in await self?.run(command) }
     }
 
     private func collapseHerdrSidebar() async {

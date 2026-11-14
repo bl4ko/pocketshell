@@ -270,9 +270,11 @@ struct HostTabsScreen: View {
             }
         }
         .onChange(of: selectedTab, initial: true) { old, _ in
-            if herdrFocus, let previous = tabs.first(where: { $0.id == old && $0.id != selectedTab }) {
+            if herdrFocus, old != selectedTab {
                 herdrFocus = false
-                Task { await previous.controller.setHerdrFocusMode(false) }
+                if let previous = tabs.first(where: { $0.id == old }) {
+                    Task { await previous.controller.setHerdrFocusMode(false) }
+                }
             }
             if let tab = tabs.first(where: { $0.id == selectedTab }) {
                 clearUnseen(tab)

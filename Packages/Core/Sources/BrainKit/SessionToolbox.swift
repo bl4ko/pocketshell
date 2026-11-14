@@ -613,7 +613,7 @@ public final class SessionToolbox {
         case .herdrTab(let host, _, let id): Herdr.focusTabCommand(session: host, tabID: id)
         case .herdrPane(let host, _, _, let pane):
             layout.snapshot(host).map { Herdr.focusCommand(session: host, paneID: pane, in: $0) }
-                ?? Herdr.zoomCommand(session: host, paneID: pane, on: true)
+                ?? Herdr.zoomFocusCommand(session: host, paneID: pane)
         case .tab, .tmuxSession, .tmuxWindow: nil
         }
     }

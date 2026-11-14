@@ -43,7 +43,7 @@ final class ConnectionController: ObservableObject {
         "pocketshell.composerDraft.\(host.id.uuidString)"
     }
     let bridge = TerminalBridge()
-    let herdr = HerdrState()
+    let herdr: HerdrState
     var onExit: (() -> Void)?
 
     private let host: HostConfig
@@ -76,6 +76,7 @@ final class ConnectionController: ObservableObject {
         self.key = key
         self.knownHosts = knownHosts
         self.hops = hops
+        herdr = HerdrState(hostID: host.id)
         composerDraft = UserDefaults.standard.string(forKey: Self.draftKey(host)) ?? ""
         composerReplacesBox = UserDefaults.standard.bool(forKey: Self.draftKey(host) + ".replacesBox")
         composerVisible = !composerDraft.isEmpty
@@ -94,6 +95,9 @@ final class ConnectionController: ObservableObject {
         monitor?.cancel()
         monitor = nil
         _ = machine.handle(.userDisconnect)
+        if let session = herdrTarget?.session {
+            await herdr.zoom.setFocusMode(false, session: session, exec: herdrZoomExec)
+        }
         await shell?.close()
         await connection?.disconnect()
         connection = nil
@@ -483,6 +487,10 @@ final class ConnectionController: ObservableObject {
         if machine.handle(.appForegrounded) == .connect {
             retryTask?.cancel()
             Task { await reconnect() }
+        } else if phase == .attached, let session = herdrTarget?.session,
+            herdr.focusMode || !herdr.zoom.owned(session: session).isEmpty
+        {
+            Task { await settleHerdrZoom() }
         }
     }
 
@@ -584,6 +592,7 @@ final class ConnectionController: ObservableObject {
             if let workspaceID {
                 _ = try? await connection.exec(Herdr.focusWorkspaceCommand(session: session, workspaceID: workspaceID))
             }
+            await herdr.zoom.settle(session: session, exec: herdrZoomExec)
             command = Herdr.attachCommand(session: session)
         case .plain(let plain):
             cloneTag = nil

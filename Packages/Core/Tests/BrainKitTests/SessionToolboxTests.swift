@@ -156,10 +156,12 @@ private func object(_ json: String) -> [String: Any] {
     let sessions = try #require(note.split(separator: "\n").last.map(String.init))
     #expect(
         sessions
-            == "[app: Sessions now: tab \"api\" (tmux work, claude, busy, current); tab \"2\" (shell); tab \"herdr\" (Herdr, waiting); "
-            + "tmux window \"backups\" in ops (unseen); tmux window \"zsh\" in work; tmux window \"build\" in work (busy); "
-            + "Herdr tab \"deploy\" in infra (waiting); Herdr pane \"reviewer\" in infra tab deploy (codex, waiting); "
-            + "Herdr pane \"server\" in infra tab deploy; Herdr tab \"logs\" in infra; Herdr tab \"1\" in pocketshell (done).]"
+            == "[app: Sessions now: tab 1 \"api\" (tmux work, claude, busy, current); tab 2 \"2\" (shell); "
+            + "tab 3 \"herdr\" (Herdr, waiting); tmux window 0 \"backups\" in ops (unseen); tmux window 0 \"zsh\" in work; "
+            + "tmux window 1 \"build\" in work (busy); "
+            + "Herdr workspace 1 \"infra\": tab 1 \"deploy\" (2 panes, waiting), tab 2 \"logs\"; "
+            + "Herdr pane \"reviewer\" in infra tab deploy (codex, waiting); Herdr pane \"server\" in infra tab deploy; "
+            + "Herdr workspace 2 \"pocketshell\": tab 1 \"1\" (claude, done).]"
     )
     await harness.toolbox.listAgents()
     #expect(harness.toolbox.snapshot == note)

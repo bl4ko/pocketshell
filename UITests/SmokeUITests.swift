@@ -1685,6 +1685,14 @@ final class SmokeUITests: XCTestCase {
         say("open a shell tab called voicetwo")
         XCTAssertTrue(tab("voicetwo").waitForExistence(timeout: 10))
 
+        say("go to the previous tab")
+        XCTAssertTrue(waitForLabel(caption, containing: "Done"))
+        let selected = NSPredicate(format: "isSelected == true")
+        XCTAssertEqual(
+            XCTWaiter.wait(
+                for: [XCTNSPredicateExpectation(predicate: selected, object: tab("voiceone"))], timeout: 10),
+            .completed, "the previous tab in the strip is shown")
+
         say("close the voicetwo tab")
         XCTAssertTrue(waitForLabel(caption, containing: "Should I close the voicetwo tab?"))
         XCTAssertTrue(tab("voicetwo").exists, "close waits for a spoken yes")

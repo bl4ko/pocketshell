@@ -328,13 +328,15 @@ public enum SessionCatalog {
                         place: .herdrWorkspace(session: name, workspaceID: workspace.workspaceID), name: label,
                         status: workspace.status.map(Self.status), parent: host, number: workspace.number,
                         unseen: workspace.status == .done, isCurrent: currentHerdr && workspace.focused))
-                for tab in workspace.tabs {
+                for (position, tab) in workspace.tabs.enumerated() {
+                    let single = tab.panes.count == 1 ? tab.panes.first : nil
                     result.append(
                         BrainSession(
                             place: .herdrTab(session: name, workspaceID: workspace.workspaceID, tabID: tab.tabID),
                             name: tab.sessionTitle ?? tab.label, aka: tab.sessionTitle == nil ? nil : tab.label,
-                            status: tab.status.map(Self.status), cwd: tab.panes.first?.cwd,
-                            parent: label, unseen: tab.status == .done,
+                            status: tab.status.map(Self.status),
+                            agent: single.flatMap { agentKinds[$0.paneID] ?? nil }, cwd: tab.panes.first?.cwd,
+                            parent: label, number: tab.number ?? position + 1, unseen: tab.status == .done,
                             isCurrent: currentHerdr && tab.focused))
                     for pane in tab.panes {
                         result.append(
@@ -388,36 +390,63 @@ public enum SessionCatalog {
                 guard case .tab(_, .tmux(_, _, let windowID)) = session.place else { return nil }
                 return windowID
             })
-        let multiPane = Dictionary(grouping: sessions.filter { $0.kind == .herdrPane }) { session -> String in
+        let paneCounts = Dictionary(grouping: sessions.filter { $0.kind == .herdrPane }) { session -> String in
             if case .herdrPane(let host, _, let tab, _) = session.place { return "\(host):\(tab)" }
             return ""
-        }.filter { $0.value.count > 1 }
-        let items = sessions.compactMap { session -> String? in
+        }.mapValues(\.count)
+        var items: [String] = []
+        var workspaces: [String: (item: Int, tabs: [String])] = [:]
+        var position = 0
+        for session in sessions {
             switch session.place {
             case .tab(_, let backend):
+                position += 1
                 let place =
                     switch backend {
                     case .shell: "shell"
                     case .tmux(let name, _, _): "tmux \(name)"
                     case .herdr: "Herdr"
                     }
-                return "tab \"\(session.name)\" (\(([place] + flags(session)).joined(separator: ", ")))"
-            case .tmuxWindow(_, _, let windowID, _):
-                guard !shownWindows.contains(windowID) else { return nil }
-                return "tmux window \"\(session.name)\" in \(session.parent ?? "")" + detail(session)
-            case .herdrTab:
-                return "Herdr tab \"\(session.name)\" in \(session.parent ?? "")" + detail(session)
+                items.append(
+                    "tab \(position) \"\(session.name)\"\(aka(session)) (\(([place] + flags(session)).joined(separator: ", ")))"
+                )
+            case .tmuxWindow(_, let index, let windowID, _):
+                guard !shownWindows.contains(windowID) else { continue }
+                items.append(
+                    "tmux window \(index) \"\(session.name)\"\(aka(session)) in \(session.parent ?? "")"
+                        + detail(session))
+            case .herdrWorkspace(let host, let id):
+                workspaces["\(host):\(id)"] = (items.count, [])
+                let place = session.parent.map { " in Herdr \($0)" } ?? ""
+                items.append(
+                    "Herdr workspace \(session.number.map(String.init) ?? "") \"\(session.name)\"\(place)"
+                        + (session.isCurrent ? " (current)" : ""))
+            case .herdrTab(let host, let workspace, let tab):
+                let panes = paneCounts["\(host):\(tab)"].flatMap { $0 > 1 ? "\($0) panes" : nil }
+                let flags = [panes].compactMap { $0 } + flags(session)
+                let number = session.number.map { "\($0) " } ?? ""
+                workspaces["\(host):\(workspace)"]?.tabs.append(
+                    "tab \(number)\"\(session.name)\"\(aka(session))"
+                        + (flags.isEmpty ? "" : " (\(flags.joined(separator: ", ")))"))
             case .herdrPane(let host, _, let tab, _):
-                guard multiPane["\(host):\(tab)"] != nil else { return nil }
-                return "Herdr pane \"\(session.name)\" in \(session.parent ?? "")" + detail(session)
-            case .tmuxSession, .herdrWorkspace:
-                return nil
+                guard (paneCounts["\(host):\(tab)"] ?? 0) > 1 else { continue }
+                items.append(
+                    "Herdr pane \"\(session.name)\"\(aka(session)) in \(session.parent ?? "")" + detail(session))
+            case .tmuxSession:
+                continue
             }
+        }
+        for workspace in workspaces.values where !workspace.tabs.isEmpty {
+            items[workspace.item] += ": " + workspace.tabs.joined(separator: ", ")
         }
         guard !items.isEmpty else { return snapshotPrefix + "none.]" }
         let shown = items.prefix(limit).joined(separator: "; ")
         let more = items.count > limit ? "; and \(items.count - limit) more, call list_sessions" : ""
         return snapshotPrefix + shown + more + ".]"
+    }
+
+    private static func aka(_ session: BrainSession) -> String {
+        session.aka.map { " aka \"\($0)\"" } ?? ""
     }
 
     private static func flags(_ session: BrainSession) -> [String] {
@@ -474,6 +503,7 @@ public enum SessionResolver {
         if let exact = sessions.first(where: { $0.id == name }) { return .found(exact) }
         let words = key.split(separator: " ").map(String.init)
         let kinds = mentionedKinds(words)
+        if let positioned = positional(words, in: sessions) { return .found(positioned) }
         let core = words.filter { !kindWords.keys.contains($0) && !fillers.contains($0) && !currentWords.contains($0) }
         let named = sessions.filter { session in
             !key.isEmpty && [session.name, session.aka].contains { AgentResolver.normalize($0 ?? "") == key }
@@ -501,6 +531,101 @@ public enum SessionResolver {
         let preferred = ranked.filter { $0.rank == bestRank }
         if preferred.count == 1 { return .found(preferred[0].session) }
         return .ambiguous(top)
+    }
+
+    static let ordinals: [String: Int] = [
+        "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+        "ninth": 9, "tenth": 10, "1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5, "6th": 6, "7th": 7, "8th": 8,
+        "9th": 9, "10th": 10,
+    ]
+    static let numbers: [String: Int] = [
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    ]
+    static let positionalNoise: Set<String> = [
+        "the", "a", "my", "to", "go", "switch", "show", "open", "me", "please", "number", "no", "herdr", "tmux", "app",
+    ]
+
+    enum Position: Equatable {
+        case ordinal(Int), number(Int), last, next, previous
+    }
+
+    static func positional(_ words: [String], in sessions: [BrainSession]) -> BrainSession? {
+        let rest = words.filter { !positionalNoise.contains($0) }
+        guard rest.count == 2,
+            let kindWord = rest.first(where: { ["tab", "window", "workspace"].contains($0) }),
+            let token = rest.first(where: { $0 != kindWord })
+        else { return nil }
+        let position: Position
+        if let value = ordinals[token] {
+            position = .ordinal(value)
+        } else if let value = Int(token) ?? numbers[token] {
+            position = .number(value)
+        } else if token == "last" {
+            position = .last
+        } else if token == "next" {
+            position = .next
+        } else if ["previous", "prev"].contains(token) {
+            position = .previous
+        } else {
+            return nil
+        }
+        let currentTab = sessions.first { $0.kind == .tab && $0.isCurrent }
+        var herdrCurrent = false
+        if case .tab(_, .herdr) = currentTab?.place { herdrCurrent = true }
+        let herdrWorkspace = sessions.first { $0.kind == .herdrWorkspace && $0.isCurrent }
+        let tmuxSession = sessions.first { $0.kind == .tmuxSession && $0.isCurrent }
+        let candidates: [BrainSession]
+        switch kindWord {
+        case "tab" where words.contains("tmux"):
+            candidates = windows(of: tmuxSession, in: sessions)
+        case "tab" where words.contains("herdr") || (herdrCurrent && !words.contains("app")):
+            candidates = tabs(of: herdrWorkspace, in: sessions)
+        case "tab":
+            candidates = sessions.filter { $0.kind == .tab }
+        case "window":
+            candidates = windows(of: tmuxSession, in: sessions)
+        default:
+            var host: String?
+            if case .herdrWorkspace(let session, _) = herdrWorkspace?.place { host = session }
+            candidates = sessions.filter {
+                guard case .herdrWorkspace(let session, _) = $0.place else { return false }
+                return host == nil || session == host
+            }
+        }
+        guard !candidates.isEmpty else { return nil }
+        let current = candidates.firstIndex(where: \.isCurrent)
+        switch position {
+        case .ordinal(let value):
+            return candidates.indices.contains(value - 1) ? candidates[value - 1] : nil
+        case .number(let value):
+            if let match = candidates.first(where: { $0.number == value || $0.name == String(value) }) {
+                return match
+            }
+            return candidates.first?.number == nil && candidates.indices.contains(value - 1)
+                ? candidates[value - 1] : nil
+        case .last:
+            return candidates.last
+        case .next:
+            return current.map { candidates[($0 + 1) % candidates.count] }
+        case .previous:
+            return current.map { candidates[($0 + candidates.count - 1) % candidates.count] }
+        }
+    }
+
+    private static func windows(of session: BrainSession?, in sessions: [BrainSession]) -> [BrainSession] {
+        guard case .tmuxSession(let name) = session?.place else { return [] }
+        return sessions.filter {
+            if case .tmuxWindow(name, _, _, _) = $0.place { return true }
+            return false
+        }
+    }
+
+    private static func tabs(of workspace: BrainSession?, in sessions: [BrainSession]) -> [BrainSession] {
+        guard case .herdrWorkspace(let host, let id) = workspace?.place else { return [] }
+        return sessions.filter {
+            if case .herdrTab(host, id, _) = $0.place { return true }
+            return false
+        }
     }
 
     static let tieRank: [BrainSession.Kind] = [.tab, .tmuxWindow, .herdrTab, .herdrPane, .tmuxSession, .herdrWorkspace]

@@ -90,6 +90,8 @@ class Handler(BaseHTTPRequestHandler):
                 name, arguments = "close", {"target": said[len("close the "):]}
             elif said in VIEW:
                 name, arguments = "view", {"action": VIEW[said]}
+            elif said.startswith("go to the "):
+                name, arguments = "focus_session", {"target": said[len("go to the "):]}
             call = {
                 "index": 0,
                 "id": "call_psh",

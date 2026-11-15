@@ -616,7 +616,8 @@ struct HostTabsScreen: View {
     }
 
     private var brainTabs: [AppTab] {
-        tabs.map { tab in
+        let groups = tabs.reduce(into: [String]()) { if !$0.contains($1.group) { $0.append($1.group) } }
+        return groups.flatMap { group in tabs.filter { $0.group == group } }.map { tab in
             let backend: AppTab.Backend
             if let tmux = tab.controller.tmuxTarget {
                 backend = .tmux(session: tmux.session, windowIndex: tmux.windowIndex, windowID: tmux.windowID)

@@ -984,7 +984,10 @@ public final class SessionToolbox {
 
     nonisolated public static let prompt = """
         The app also lists every terminal session in notes like "[app: Sessions now: ...]": the app's tabs, tmux \
-        windows that no tab shows, and Herdr tabs and split panes. "This tab" is the current tab. You can show, \
+        windows that no tab shows, and Herdr tabs and split panes. A name in quotes is the session's own name, \
+        "aka" its other name; both match. "This tab" is the current tab. For "the second tab", "tab 2", or "next \
+        tab", pass those words as the target: they mean the Herdr tab bar when the current tab shows Herdr, else \
+        the app's tab strip; "window 2" means the current tmux session's window. You can show, \
         read, type into, open, rename, and close any of them with the session tools. Use read_screen to answer what \
         a tab or window shows, and summarize it. When the user asks for a new tab, call new_session without a kind \
         unless they name one; pass a folder name as directory when they name a folder.

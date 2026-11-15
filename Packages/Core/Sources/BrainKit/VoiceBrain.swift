@@ -54,6 +54,7 @@ public final class VoiceBrain: ObservableObject {
     public var onUserTurn: ((UserTurn) -> Void)?
     public var onTurnTimed: ((TurnTiming) -> Void)?
     public var providers = BenchmarkProviders(ears: "", mouth: "", model: "")
+    public var readsReplies = true
 
     public let toolbox: AgentToolbox
     public let hostID: String
@@ -91,6 +92,8 @@ public final class VoiceBrain: ObservableObject {
     private var answered: [String: InteractivePrompt] = [:]
     private var notes: [String] = []
     private var driving: [String: TimeInterval] = [:]
+    private var replyTracker = ReplyTracker()
+    private var replyOffer: AgentReply?
 
     private struct Reply {
         let id: Int
@@ -123,6 +126,7 @@ public final class VoiceBrain: ObservableObject {
         machine = TurnTaking(now: clock())
         toolbox.onSent = { [weak self] agent, text in
             self?.detail = "Sent to \(agent.spokenName): \(text)"
+            self?.delivered(agent.id, text: text, isPrompt: true)
         }
     }
 
@@ -151,6 +155,8 @@ public final class VoiceBrain: ObservableObject {
         answered = [:]
         notes = []
         driving = [:]
+        replyTracker = ReplyTracker()
+        replyOffer = nil
         ears.onEvent = { [weak self] in self?.hear($0) }
         mouth.onEvent = { [weak self] in self?.mouthChanged($0) }
         ears.muted = muted
@@ -249,9 +255,18 @@ public final class VoiceBrain: ObservableObject {
         let shown = kept + current.filter { new in !kept.contains { $0.agentID == new.agentID } }
         if shown != waitingPrompts { waitingPrompts = shown }
         if shown.isEmpty, machine.promptOpen { feed(.promptClosed) }
+        if readsReplies {
+            for check in replyTracker.update(agents, present: Set(listed.map(\.id))) { fetchReply(check) }
+        }
         for event in detector.update(agents) {
             if event.prompt != nil, answered[event.agentID] == event.prompt { continue }
             if let prompt = event.prompt, toolbox.handedOver[event.agentID]?.sameQuestion(prompt) == true { continue }
+            if event.kind == .done,
+                replyTracker.isTracking(event.agentID)
+                    || events.replies.contains(where: { $0.agentID == event.agentID })
+            {
+                continue
+            }
             events.push(event)
             feed(event.prompt != nil ? .promptQueued : .eventQueued)
         }
@@ -268,6 +283,7 @@ public final class VoiceBrain: ObservableObject {
         }
         let label = waiting.prompt.options.first { $0.number == number }?.label ?? "option \(number)"
         answered[waiting.agentID] = waiting.prompt
+        delivered(waiting.agentID, text: label, isPrompt: false)
         events.remove(agentID: waiting.agentID)
         waitingPrompts.removeAll { $0.agentID == waiting.agentID }
         if waitingPrompts.isEmpty { feed(.promptClosed) }
@@ -351,6 +367,7 @@ public final class VoiceBrain: ObservableObject {
             mouthQuiet = clock()
             outputLevel = 0
             feed(.mouthIdle)
+            if !events.replies.isEmpty { feed(.eventQueued) }
             if !turnActive { settleTurn() }
             completeTiming()
         case .level(let level): outputLevel = level
@@ -392,10 +409,13 @@ public final class VoiceBrain: ObservableObject {
                 mouth.speak(Self.fillers[fillerIndex % Self.fillers.count])
                 fillerIndex += 1
             case .announce:
-                guard let sentence = events.drain() else { break }
-                caption = Caption(.brain, sentence)
-                append(.assistant(sentence))
-                mouth.speak(sentence)
+                if let sentence = events.drain() {
+                    caption = Caption(.brain, sentence)
+                    append(.assistant(sentence))
+                    mouth.speak(sentence)
+                } else if let reply = events.nextReply() {
+                    announce(reply)
+                }
             case .announcePrompt:
                 guard let sentence = events.drainPrompts() else {
                     _ = machine.handle(.promptClosed, at: clock())
@@ -457,12 +477,21 @@ public final class VoiceBrain: ObservableObject {
         carry = nil
         turnText = nil
         defer { refreshPendingSend() }
+        let offer = replyOffer
+        replyOffer = nil
+        if let offer, toolbox.gate.pending == nil, ReplySpeech.wantsFull(text) {
+            appendUser(text)
+            readFull(offer, id: id)
+            finish(id)
+            return
+        }
         switch toolbox.gate.resolve(userTurn: text) {
         case .confirmed(let pending):
             let driven = AgentToolbox.agentID(pending.action)
             if let driven { driving[driven] = .infinity }
             let result = await toolbox.perform(pending.action)
             if let driven { driving[driven] = clock() + Self.toolGrace }
+            noteDelivery(pending.action, result: result)
             appendUser(
                 "\(text)\n\n[app: The user confirmed \"\(pending.question)\". The action ran. Result: \(result)]")
         case .declined(let pending):
@@ -520,8 +549,10 @@ public final class VoiceBrain: ObservableObject {
                 toolbox.spokenTurns = spokenTurns
                 let driven = drivenAgent(call)
                 if let driven { driving[driven] = .infinity }
+                if call.name == "read_answer", let driven { answerAsked(driven) }
                 let result = await toolbox.call(call)
                 if let driven { driving[driven] = clock() + Self.toolGrace }
+                noteDelivery(call, result: result)
                 refreshPendingSend()
                 guard id == turnID, !Task.isCancelled else { return }
                 append(.tool(call.id, result))
@@ -567,6 +598,133 @@ public final class VoiceBrain: ObservableObject {
         let name = (arguments["agent"] as? String) ?? (arguments["target"] as? String)
         guard case .found(let agent) = AgentResolver.resolve(name, in: toolbox.agents) else { return nil }
         return agent.id
+    }
+
+    private func delivered(_ agentID: String, text: String, isPrompt: Bool) {
+        guard isOn, readsReplies else { return }
+        events.removeReply(agentID: agentID)
+        replyTracker.delivered(agentID: agentID, text: text, isPrompt: isPrompt, at: clock())
+    }
+
+    private func noteDelivery(_ call: ToolCall, result: String) {
+        guard AgentToolbox.failure(result) == nil, !result.contains("needs_confirmation") else { return }
+        let arguments = call.argumentObject
+        switch call.name {
+        case "answer_question":
+            if let agent = drivenAgent(call) { delivered(agent, text: "\(arguments["option"] ?? "")", isPrompt: false) }
+        case "send_text":
+            guard let text = arguments["text"] as? String, arguments["enter"] as? Bool == true,
+                let sessions = toolbox.sessions
+            else { return }
+            let target = (arguments["target"] as? String) ?? (arguments["agent"] as? String)
+            let agent: BrainAgent?
+            if case .found(let session) = SessionResolver.resolve(target, in: sessions.sessions) {
+                agent = ReplyTracker.agent(for: session, in: toolbox.agents)
+            } else if case .found(let named) = AgentResolver.resolve(target, in: toolbox.agents) {
+                agent = named
+            } else {
+                agent = nil
+            }
+            if let agent { delivered(agent.id, text: text, isPrompt: true) }
+        default:
+            break
+        }
+    }
+
+    private func noteDelivery(_ action: AgentAction, result: String) {
+        guard AgentToolbox.failure(result) == nil else { return }
+        switch action {
+        case .answer(let agentID, let digit):
+            delivered(agentID, text: digit, isPrompt: false)
+        case .session(.send(let target, let text, true)):
+            guard let session = toolbox.sessions?.sessions.first(where: { $0.id == target }),
+                let agent = ReplyTracker.agent(for: session, in: toolbox.agents)
+            else { return }
+            delivered(agent.id, text: text, isPrompt: true)
+        default:
+            break
+        }
+    }
+
+    private func answerAsked(_ agentID: String) {
+        events.removeReply(agentID: agentID)
+        if replyOffer?.agentID == agentID { replyOffer = nil }
+        if toolbox.agents.first(where: { $0.id == agentID })?.status != .busy { replyTracker.forget(agentID) }
+    }
+
+    private func fetchReply(_ check: ReplyTracker.Check) {
+        Task { [weak self] in
+            guard let self else { return }
+            let output = await toolbox.io.exec(AgentControl.transcriptCommand(check.agent))
+            let turns = output.flatMap { AgentTranscript.turns(kind: check.agent.kind, output: $0) }
+            guard isOn else { return }
+            switch replyTracker.resolve(check, turns: turns) {
+            case .ready(let reply):
+                events.push(reply)
+                feed(.eventQueued)
+            case .unread(let event):
+                events.push(event)
+                feed(.eventQueued)
+            case .notYet, .dropped:
+                break
+            }
+        }
+    }
+
+    private func announce(_ reply: AgentReply) {
+        guard !waitingPrompts.contains(where: { $0.agentID == reply.agentID }) else {
+            if !events.replies.isEmpty { feed(.eventQueued) }
+            return
+        }
+        replyOffer = nil
+        if reply.isShort {
+            let sentence = "\(reply.lead): \(reply.spoken)"
+            caption = Caption(.brain, sentence)
+            append(.assistant(sentence))
+            mouth.speak(sentence)
+            if reply.asks {
+                notes.append(
+                    "[app: That question came from \(reply.agentName). The user's answer to it goes to that agent.]")
+            }
+            return
+        }
+        if !reply.asks {
+            replyOffer = reply
+            machine.openOffer()
+        }
+        turnID += 1
+        let id = turnID
+        machine.startTurn(at: clock())
+        turnActive = true
+        appendUser(Self.replyNote(reply))
+        turnTask = Task { [weak self] in
+            await self?.converse(id)
+            self?.finish(id)
+        }
+    }
+
+    static func replyNote(_ reply: AgentReply) -> String {
+        func plain(_ text: String, _ limit: Int) -> String {
+            let clipped = text.count > limit ? String(text.prefix(limit)) + "…" : text
+            return clipped.replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
+        }
+        let ending =
+            reply.asks
+            ? "end with its question to the user, word for word" : "ask \"Want the full answer?\""
+        return "[app: \(reply.agentName) finished the prompt you sent, «\(plain(reply.sent, 200))». The user has not "
+            + "heard its reply yet: «\(plain(reply.answer, 6000))». Tell the user now: start with \"\(reply.lead):\", "
+            + "give a faithful spoken summary in two to four sentences that uses only what the reply says, then "
+            + "\(ending). Do not call tools.]"
+    }
+
+    private func readFull(_ reply: AgentReply, id: Int) {
+        let text = reply.spoken
+        replyID += 1
+        replies.append(Reply(id: replyID))
+        if timing?.turn == id { timing?.firstToken = clock() }
+        mouth.stream(text, reply: replyID)
+        mouth.finish()
+        appendReply(text, calls: [])
     }
 
     private func appendReply(_ reply: String, calls: [ToolCall]) {
@@ -688,6 +846,9 @@ public enum BrainPrompt {
         for a screen preview, a working directory, or when the user asks you to check again. When the user names no \
         agent, act on the agent in the current tab: omit the agent argument. Read answers with read_answer and \
         summarize them in plain speech; give details only when asked.
+
+        When a note says the user has not heard an agent's reply, tell that reply as the note asks, from it only; \
+        it is not an acknowledgement, so the short-acknowledgement rule below does not apply to it.
 
         \(SessionToolbox.prompt) \(SessionToolbox.viewPrompt)
 

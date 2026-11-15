@@ -54,6 +54,23 @@ public struct AgentEventQueue: Sendable {
         events.removeAll { $0.agentID == agentID && $0.kind == .waiting }
     }
 
+    public private(set) var replies: [AgentReply] = []
+
+    public mutating func push(_ reply: AgentReply) {
+        replies.removeAll { $0.agentID == reply.agentID }
+        events.removeAll { $0.agentID == reply.agentID && $0.kind == .done }
+        replies.append(reply)
+        replies.sort { ($0.asks ? 1 : 0, $0.sentAt) > ($1.asks ? 1 : 0, $1.sentAt) }
+    }
+
+    public mutating func removeReply(agentID: String) {
+        replies.removeAll { $0.agentID == agentID }
+    }
+
+    public mutating func nextReply() -> AgentReply? {
+        replies.isEmpty ? nil : replies.removeFirst()
+    }
+
     public mutating func drainPrompts() -> String? {
         let waiting = events.filter { $0.kind == .waiting }
         guard let first = waiting.first(where: { $0.prompt != nil }), let prompt = first.prompt else { return nil }

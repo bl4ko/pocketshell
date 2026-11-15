@@ -5,7 +5,7 @@ import VoiceKit
 
 @testable import BrainKit
 
-private final class ScriptedModel: BrainModel, @unchecked Sendable {
+final class ScriptedModel: BrainModel, @unchecked Sendable {
     private let lock = NSLock()
     private var replies: [Result<[BrainStreamEvent], BrainError>]
     private var received: [[ChatMessage]] = []

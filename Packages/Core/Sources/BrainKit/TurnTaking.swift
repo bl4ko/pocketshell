@@ -34,6 +34,7 @@ public struct TurnTaking: Equatable, Sendable {
     public static let fillerDelay: TimeInterval = 2.0
     public static let proactiveSilence: TimeInterval = 1.5
     public static let promptSilence: TimeInterval = 0.5
+    public static let offerSilence: TimeInterval = 6
 
     public private(set) var phase: Phase = .listening
     public private(set) var muted = false
@@ -49,6 +50,7 @@ public struct TurnTaking: Equatable, Sendable {
     private var promptDeferred = false
     public private(set) var promptOpen = false
     public private(set) var promptSpeaking = false
+    public private(set) var offerOpen = false
 
     public init(now: TimeInterval) {
         lastActivity = now
@@ -86,6 +88,7 @@ public struct TurnTaking: Equatable, Sendable {
             if phase == .thinking || phase == .speaking || mouthBusy { effects = [.stopMouth, .cancelBrain] }
             promptDeferred = promptPending
             promptOpen = false
+            offerOpen = false
             promptSpeaking = false
             phase = .thinking
             thinkingSince = now
@@ -159,6 +162,10 @@ public struct TurnTaking: Equatable, Sendable {
         brainDone = false
     }
 
+    public mutating func openOffer() {
+        offerOpen = true
+    }
+
     private mutating func askIfPossible(_ now: TimeInterval) -> [Effect] {
         guard promptPending, !interrupted, phase != .userSpeaking else { return [] }
         let busy = phase == .thinking || phase == .speaking || mouthBusy
@@ -180,9 +187,10 @@ public struct TurnTaking: Equatable, Sendable {
 
     private mutating func announceIfQuiet(_ now: TimeInterval) -> [Effect] {
         guard eventsPending, !interrupted, !promptOpen, phase == .listening, !mouthBusy,
-            now - lastActivity >= Self.proactiveSilence
+            now - lastActivity >= (offerOpen ? Self.offerSilence : Self.proactiveSilence)
         else { return [] }
         eventsPending = false
+        offerOpen = false
         brainDone = true
         return [.announce]
     }

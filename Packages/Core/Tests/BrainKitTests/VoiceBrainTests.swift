@@ -248,7 +248,7 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
             delay: .milliseconds(30)))
     await rig.brain.start()
     rig.phrase("tell me everything")
-    #expect(await eventually { rig.mouth.spoken.contains("Sentence 2.") })
+    #expect(await eventually { rig.brain.caption?.text.contains("Sentence 2.") == true })
     rig.phrase("wait, what about codex")
     #expect(await eventually { rig.mouth.spoken.contains("Sure, Codex.") })
     #expect(!rig.mouth.spoken.contains("Sentence 30."))

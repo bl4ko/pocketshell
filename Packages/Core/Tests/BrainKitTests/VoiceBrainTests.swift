@@ -9,6 +9,7 @@ final class ScriptedModel: BrainModel, @unchecked Sendable {
     private let lock = NSLock()
     private var replies: [Result<[BrainStreamEvent], BrainError>]
     private var received: [[ChatMessage]] = []
+    private var receivedTools: [[ToolDefinition]] = []
     private var warmed = 0
     let delay: Duration
 
@@ -18,6 +19,7 @@ final class ScriptedModel: BrainModel, @unchecked Sendable {
     }
 
     var requests: [[ChatMessage]] { lock.withLock { received } }
+    var toolLists: [[ToolDefinition]] { lock.withLock { receivedTools } }
     var warmUps: Int { lock.withLock { warmed } }
 
     func warmUp() {
@@ -27,6 +29,7 @@ final class ScriptedModel: BrainModel, @unchecked Sendable {
     func stream(_ messages: [ChatMessage], tools: [ToolDefinition]) -> AsyncThrowingStream<BrainStreamEvent, Error> {
         let reply = lock.withLock { () -> Result<[BrainStreamEvent], BrainError> in
             received.append(messages)
+            receivedTools.append(tools)
             return replies.isEmpty ? .success([.text("Okay."), .finished("stop")]) : replies.removeFirst()
         }
         let delay = delay
@@ -109,6 +112,7 @@ private final class Rig {
     let mouth = TimedMouth(secondsPerCharacter: 0.001)
     var commands: [String] = []
     var unsent: String?
+    var agentList: String?
     var time: TimeInterval = 0
     let model: ScriptedModel
     var brain: VoiceBrain!
@@ -123,7 +127,7 @@ private final class Rig {
             io: .init(
                 exec: { [weak self] command in
                     self?.commands.append(command)
-                    if command.contains("list-panes") { return list }
+                    if command.contains("list-panes") { return self?.agentList ?? list }
                     if command.contains("capture-pane") { return busyScreen }
                     return ""
                 },
@@ -1143,4 +1147,80 @@ private func recalled(_ rig: StagedRig, request: Int) throws -> [String: Any] {
     #expect(
         try recalled(rig, request: 1)["error"] as? String
             == "Conversation logs are off in Settings, so earlier replies cannot be read.")
+}
+
+private func requestBody(_ messages: [ChatMessage], tools: [ToolDefinition]) throws -> String {
+    let client = OpenAIChatClient(baseURL: URL(string: "https://brain.invalid/v1")!, apiKey: "k", model: "m")
+    return String(decoding: try #require(client.request(messages, tools: tools).httpBody), as: UTF8.self)
+}
+
+private func messagesPart(_ body: String) throws -> Substring {
+    let end = try #require(body.range(of: "],\"model\":\"m\",\"stream\":true,\"tools\":[", options: .backwards))
+    return body[..<end.lowerBound]
+}
+
+private func toolsPart(_ body: String) throws -> Substring {
+    let start = try #require(body.range(of: ",\"tools\":[", options: .backwards))
+    return body[start.upperBound...]
+}
+
+@Test func toolSchemasEncodeToTheSameBytesEveryTime() throws {
+    let bodies = try Set((0..<20).map { _ in try requestBody([.system("sys")], tools: VoiceBrain.tools) })
+    #expect(bodies.count == 1)
+    let body = try #require(bodies.first)
+    let names = VoiceBrain.tools.map(\.name)
+    #expect(names.contains(ConversationRecall.name))
+    let object = try JSONDecoder().decode([String: JSONValue].self, from: Data(body.utf8))
+    guard case .array(let decoded)? = object["tools"] else {
+        Issue.record("no tools in \(body.prefix(200))")
+        return
+    }
+    let rebuilt = decoded.compactMap { tool -> ToolDefinition? in
+        guard case .object(let wrapper) = tool, case .object(let function)? = wrapper["function"],
+            case .string(let name)? = function["name"], case .string(let description)? = function["description"],
+            let parameters = function["parameters"]
+        else { return nil }
+        return ToolDefinition(name: name, description: description, parameters: parameters)
+    }
+    #expect(rebuilt.map(\.name) == names)
+    #expect(try requestBody([.system("sys")], tools: rebuilt) == body)
+}
+
+@MainActor
+@Test func consecutiveRequestsOfAConversationShareTheirWholePrefix() async throws {
+    let story = (1...30).map { BrainStreamEvent.text("Sentence \($0). ") }
+    let rig = try Rig(
+        ScriptedModel(
+            [
+                .success([.text("Let me look."), .toolCalls([call("c1", "list_agents")]), .finished("tool_calls")]),
+                .success([.text("Claude in api is busy."), .finished("stop")]),
+                .success([.text("Checking."), .toolCalls([call("c2", "list_agents")]), .finished("tool_calls")]),
+                .success([.text("It is still busy."), .finished("stop")]),
+                .success(story + [.finished("stop")]),
+                .success([.text("Sure, Codex."), .finished("stop")]),
+            ], delay: .milliseconds(20)))
+    await rig.brain.start()
+    rig.phrase("what are my agents doing")
+    #expect(await eventually { rig.mouth.spoken.contains("Claude in api is busy.") })
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.agentList = try fixture("list-agents.txt").replacingOccurrences(of: "|api@@", with: "|backend@@")
+    rig.phrase("check again")
+    #expect(await eventually { rig.mouth.spoken.contains("It is still busy.") })
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.phrase("tell me everything")
+    #expect(await eventually { rig.brain.caption?.text.contains("Sentence 2.") == true })
+    rig.phrase("wait, what about codex")
+    #expect(await eventually { rig.mouth.spoken.contains("Sure, Codex.") })
+
+    let requests = rig.model.requests
+    #expect(requests.count == 6)
+    let snapshots = Set(requests.joined().compactMap(\.content).filter { $0.hasPrefix(AgentToolbox.snapshotPrefix) })
+    #expect(snapshots.count == 2)
+    #expect(rig.brain.conversation.messages.contains { $0.content?.hasSuffix("…") == true })
+    let bodies = try zip(requests, rig.model.toolLists).map { try requestBody($0, tools: $1) }
+    #expect(Set(try bodies.map(toolsPart)).count == 1)
+    for (previous, next) in zip(bodies, bodies.dropFirst()) {
+        let prefix = try messagesPart(previous)
+        #expect(next.hasPrefix(prefix + ","))
+    }
 }

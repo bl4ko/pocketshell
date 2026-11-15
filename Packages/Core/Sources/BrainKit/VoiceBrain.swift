@@ -575,7 +575,7 @@ public final class VoiceBrain: ObservableObject {
             do {
                 let stream = model.stream(
                     conversation.request(system: systemPrompt),
-                    tools: AgentToolbox.definitions + SessionToolbox.definitions + [ConversationRecall.definition])
+                    tools: Self.tools)
                 for try await event in stream {
                     guard id == turnID, !Task.isCancelled else { return }
                     if timing?.turn == id, timing?.firstToken == nil { timing?.firstToken = clock() }
@@ -948,6 +948,9 @@ public final class VoiceBrain: ObservableObject {
             noteAgents(agents)
         }
     }
+
+    nonisolated public static let tools =
+        AgentToolbox.definitions + SessionToolbox.definitions + [ConversationRecall.definition]
 
     public var systemPrompt: String {
         BrainPrompt.system(hostName: hostName)

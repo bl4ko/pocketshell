@@ -211,7 +211,9 @@ public struct OpenAIChatClient: BrainModel {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         if !apiKey.isEmpty { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
-        request.httpBody = try JSONEncoder().encode(ChatRequest(model: model, messages: messages, tools: tools))
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        request.httpBody = try encoder.encode(ChatRequest(model: model, messages: messages, tools: tools))
         return request
     }
 

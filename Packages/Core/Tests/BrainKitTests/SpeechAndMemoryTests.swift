@@ -41,8 +41,11 @@ import Testing
     #expect(conversation.summary?.contains("request 1") == true)
     #expect(conversation.summary?.contains("request 4") == true)
     let request = conversation.request(system: "sys")
-    #expect(request.first?.role == .system)
-    #expect(request.first?.content?.contains("request 3") == true)
+    #expect(request.first == .system("sys"))
+    #expect(request[1].role == .user)
+    #expect(request[1].content?.hasPrefix("[app: Earlier in this conversation") == true)
+    #expect(request[1].content?.contains("request 3") == true)
+    #expect(Array(request.dropFirst(2)) == conversation.messages)
 }
 
 @Test func historyTruncatesHugeToolResults() {

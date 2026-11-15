@@ -55,9 +55,7 @@ public struct Conversation: Codable, Equatable, Sendable {
     }
 
     public func request(system: String) -> [ChatMessage] {
-        var prompt = system
-        if let summary { prompt += "\n\n" + summary }
-        return [.system(prompt)] + messages
+        [.system(system)] + (summary.map { [.user("[app: \($0)]")] } ?? []) + messages
     }
 
     private var characters: Int {

@@ -85,9 +85,7 @@ public final class AgentToolbox {
             guard let agents = await listAgents() else { return Self.error("The host is not connected.") }
             return Self.json(["agents": agents.map(Self.summary)])
         case "read_answer":
-            return await withAgent(name) { agent in
-                await self.readAnswer(agent, full: arguments["which"] as? String == "full")
-            }
+            return await withAgent(name) { await self.readAnswer($0, arguments) }
         case "send_prompt":
             let text = (arguments["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return Self.error("text is empty") }
@@ -240,20 +238,80 @@ public final class AgentToolbox {
         }
     }
 
-    private func readAnswer(_ agent: BrainAgent, full: Bool) async -> String {
-        guard let output = await io.exec(AgentControl.transcriptCommand(agent)) else {
+    private func readAnswer(_ agent: BrainAgent, _ arguments: [String: Any]) async -> String {
+        let name = agent.spokenName
+        let which = (arguments["which"] as? String ?? "last").lowercased()
+        let back = max(0, Self.integer(arguments["back"]) ?? 0)
+        let query = ((arguments["query"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let listing = which == "list" || query != nil
+        guard let output = await io.exec(AgentControl.transcriptCommand(agent, wide: listing || back > 0)) else {
             return Self.error("The host is not connected.")
         }
-        guard let answer = AgentTranscript.parse(kind: agent.kind, output: output) else {
-            return Self.error("No transcript found for \(agent.spokenName).")
+        guard let turns = AgentTranscript.turns(kind: agent.kind, output: output) else {
+            return Self.error("No transcript found for \(name).")
         }
-        let text = (full ? answer.full : answer.last) ?? ""
-        let limit = full ? 12000 : 6000
-        return Self.json([
-            "agent": agent.spokenName, "status": agent.status.rawValue,
-            "prompt": String((answer.prompt ?? "").prefix(600)),
-            "answer": text.count > limit ? "…" + String(text.suffix(limit)) : text,
-        ])
+        if listing {
+            var indexed = turns.indices.reversed().map { (back: turns.count - 1 - $0, turn: turns[$0]) }
+            if let query {
+                let words = AgentResolver.normalize(query).split(separator: " ")
+                indexed = indexed.filter { entry in
+                    let text = AgentResolver.normalize((entry.turn.prompt ?? "") + " " + (entry.turn.answer.full ?? ""))
+                    return words.allSatisfy { text.contains($0) }
+                }
+                guard !indexed.isEmpty else {
+                    return Self.error(
+                        "No turn of \(name) mentions «\(query)» in the part of the transcript the app read.")
+                }
+            }
+            let count = min(max(Self.integer(arguments["count"]) ?? 5, 1), 20)
+            return Self.json([
+                "agent": name, "total": turns.count, "turns": indexed.prefix(count).map(Self.entry),
+                "note": "Read one turn in full with back.",
+            ])
+        }
+        guard back < turns.count else {
+            return Self.error("The app read \(turns.count) turns of \(name); back must be below \(turns.count).")
+        }
+        let turn = turns[turns.count - 1 - back]
+        let full = which == "full"
+        let clipped = Self.clip((full ? turn.answer.full : turn.answer.last) ?? "", limit: full ? 12000 : 6000)
+        var result: [String: Any] = [
+            "agent": name, "status": agent.status.rawValue, "back": back,
+            "prompt": String((turn.prompt ?? "").prefix(600)), "answer": clipped.text,
+        ]
+        if let time = turn.time { result["time"] = time }
+        if turn.afterCompaction { result["after_compaction"] = true }
+        if clipped.truncated {
+            result["truncated"] = true
+            result["note"] = "The middle of the answer was cut to fit."
+        }
+        return Self.json(result)
+    }
+
+    static func entry(_ item: (back: Int, turn: AgentTurn)) -> [String: Any] {
+        var entry: [String: Any] = [
+            "back": item.back,
+            "prompt": clip(item.turn.prompt ?? "(started before the part the app read)", limit: 120).text,
+            "answer": clip(item.turn.answer.last ?? "", limit: 200).text,
+        ]
+        if let time = item.turn.time { entry["time"] = time }
+        if item.turn.afterCompaction { entry["after_compaction"] = true }
+        return entry
+    }
+
+    static func clip(_ text: String, limit: Int) -> (text: String, truncated: Bool) {
+        guard text.count > limit else { return (text, false) }
+        let head = limit * 2 / 5
+        return (
+            String(text.prefix(head)) + " …[\(text.count - limit) characters cut]… "
+                + String(text.suffix(limit - head)),
+            true
+        )
+    }
+
+    static func integer(_ value: Any?) -> Int? {
+        (value as? Int) ?? (value as? Double).map(Int.init) ?? (value as? String).flatMap { Int($0) }
     }
 
     static func summary(_ agent: BrainAgent) -> [String: Any] {
@@ -300,8 +358,20 @@ public final class AgentToolbox {
             "list_agents",
             "Refresh the agent list: status, working directory, and a short preview of each agent's screen.", [:]),
         tool(
-            "read_answer", "Read an agent's last answer, or its full last turn, from its transcript.",
-            ["agent": agentParameter, "which": .object(["type": "string", "enum": .array(["last", "full"])])]),
+            "read_answer",
+            "Read an agent's answers from its session transcript. By default the latest answer; back 1 is the "
+                + "answer before the latest, back 2 the one before that. which full returns the whole turn. which "
+                + "list returns recent turns (back, time, prompt, start of the answer) so you can pick one and read it "
+                + "with back; query finds turns whose prompt or answer contain the words. For \"the answer before "
+                + "that\", \"what did it say about X earlier\", or a summary of several answers: list or query first, "
+                + "then read with back.",
+            [
+                "agent": agentParameter,
+                "which": .object(["type": "string", "enum": .array(["last", "full", "list"])]),
+                "back": .object(["type": "integer", "description": "0 is the latest turn, 1 the one before."]),
+                "count": .object(["type": "integer", "description": "Turns to list, at most 20."]),
+                "query": .object(["type": "string", "description": "Words to find in earlier prompts or answers."]),
+            ]),
         tool(
             "send_prompt",
             "Type the user's own words into an agent's input box and submit them. Text that is not near verbatim is "

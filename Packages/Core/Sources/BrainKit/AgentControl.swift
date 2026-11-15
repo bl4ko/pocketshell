@@ -127,14 +127,15 @@ public enum AgentControl {
             + " && \(tmux) send-keys -t \"$p\" Enter && echo \"$p\""
     }
 
-    public static func transcriptCommand(_ agent: BrainAgent) -> String {
+    public static func transcriptCommand(_ agent: BrainAgent, wide: Bool = false) -> String {
         switch agent.location {
         case .tmux:
-            return AgentTranscript.command(kind: agent.kind, pid: agent.pid, rootCommand: nil, cwd: agent.cwd)
+            return AgentTranscript.command(
+                kind: agent.kind, pid: agent.pid, rootCommand: nil, cwd: agent.cwd, wide: wide)
         case .herdr(let session, let pane, _, _):
             return AgentTranscript.command(
                 kind: agent.kind, pid: agent.pid,
-                rootCommand: Herdr.paneShellPIDCommand(session: session, paneID: pane), cwd: agent.cwd)
+                rootCommand: Herdr.paneShellPIDCommand(session: session, paneID: pane), cwd: agent.cwd, wide: wide)
         }
     }
 

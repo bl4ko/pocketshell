@@ -1,0 +1,16 @@
+{"timestamp":"2026-11-14T10:00:00.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}
+{"timestamp":"2026-11-14T10:00:00.100Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions\n\nBe brief."}]}}
+{"timestamp":"2026-11-14T10:00:00.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"List the open issues"}]}}
+{"timestamp":"2026-11-14T10:00:00.300Z","type":"event_msg","payload":{"type":"user_message","message":"List the open issues"}}
+{"timestamp":"2026-11-14T10:00:03.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"There are three open issues."}],"phase":"final_answer"}}
+{"timestamp":"2026-11-14T10:00:03.100Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","last_agent_message":"There are three open issues."}}
+{"timestamp":"2026-11-14T10:30:00.000Z","type":"compacted","payload":{"message":"Summary of earlier work."}}
+{"timestamp":"2026-11-14T10:31:00.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t2"}}
+{"timestamp":"2026-11-14T10:31:00.100Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Fix the login test"}]}}
+{"timestamp":"2026-11-14T10:31:00.200Z","type":"event_msg","payload":{"type":"user_message","message":"Fix the login test"}}
+{"timestamp":"2026-11-14T10:31:05.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Looking at the login test."}}
+{"timestamp":"2026-11-14T10:31:40.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t2","last_agent_message":"The login test now waits for the session cookie."}}
+{"timestamp":"2026-11-14T10:40:00.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t3"}}
+{"timestamp":"2026-11-14T10:40:00.100Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Release notes for the login fix?"}]}}
+{"timestamp":"2026-11-14T10:40:09.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Fixed: the login test no longer races the session cookie."}],"phase":"final_answer"}}
+{"timestamp":"2026-11-14T10:40:09.100Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t3","last_agent_message":"Fixed: the login test no longer races the session cookie."}}

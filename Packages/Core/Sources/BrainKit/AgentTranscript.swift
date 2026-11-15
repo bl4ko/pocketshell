@@ -16,9 +16,39 @@ public struct AgentAnswer: Equatable, Sendable {
     public var full: String? { blocks.isEmpty ? final : blocks.joined(separator: "\n\n") }
 }
 
+public struct AgentTurn: Equatable, Sendable {
+    public var prompt: String?
+    public var blocks: [String]
+    public var final: String?
+    public var time: String?
+    public var afterCompaction: Bool
+
+    public init(
+        prompt: String? = nil, blocks: [String] = [], final: String? = nil, time: String? = nil,
+        afterCompaction: Bool = false
+    ) {
+        self.prompt = prompt
+        self.blocks = blocks
+        self.final = final
+        self.time = time
+        self.afterCompaction = afterCompaction
+    }
+
+    public var answer: AgentAnswer { AgentAnswer(prompt: prompt, blocks: blocks, final: final) }
+}
+
 public enum AgentTranscript {
-    public static func command(kind: AgentKind, pid: Int?, rootCommand: String?, cwd: String?) -> String {
-        let arguments = [kind.rawValue, pid.map(String.init) ?? "", rootCommand ?? "", cwd ?? ""]
+    public static let narrowWindow = (lines: 1500, bytes: 600_000)
+    public static let wideWindow = (lines: 20000, bytes: 1_500_000)
+
+    public static func command(kind: AgentKind, pid: Int?, rootCommand: String?, cwd: String?, wide: Bool = false)
+        -> String
+    {
+        let window = wide ? wideWindow : narrowWindow
+        let arguments = [
+            kind.rawValue, pid.map(String.init) ?? "", rootCommand ?? "", cwd ?? "", String(window.lines),
+            String(window.bytes),
+        ]
         return "sh -c \(HostAgents.shellQuote(script)) sh "
             + arguments.map(HostAgents.shellQuote).joined(separator: " ")
     }
@@ -30,6 +60,10 @@ public enum AgentTranscript {
     }
 
     public static func parse(kind: AgentKind, output: String) -> AgentAnswer? {
+        turns(kind: kind, output: output).map { $0.last?.answer ?? AgentAnswer(prompt: nil, blocks: []) }
+    }
+
+    public static func turns(kind: AgentKind, output: String) -> [AgentTurn]? {
         guard transcriptPath(output) != nil else { return nil }
         let lines = output.split(separator: "\n").filter { !$0.hasPrefix("@@psh-") }
         let objects = lines.compactMap { line -> [String: Any]? in
@@ -37,70 +71,93 @@ public enum AgentTranscript {
             return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         }
         switch kind {
-        case .claude: return parseClaude(objects)
-        case .codex: return parseCodex(objects)
+        case .claude: return claudeTurns(objects)
+        case .codex: return codexTurns(objects)
         }
     }
 
-    static func parseClaude(_ objects: [[String: Any]]) -> AgentAnswer {
-        var answer = AgentAnswer(prompt: nil, blocks: [])
+    static func claudeTurns(_ objects: [[String: Any]]) -> [AgentTurn] {
+        var turns: [AgentTurn] = []
+        var compacted = false
         for object in objects {
             guard object["isSidechain"] as? Bool != true, object["isMeta"] as? Bool != true,
                 let message = object["message"] as? [String: Any]
             else { continue }
+            if object["isCompactSummary"] as? Bool == true {
+                compacted = true
+                continue
+            }
             switch object["type"] as? String {
             case "user":
-                if let text = message["content"] as? String {
-                    if isPrompt(text) { answer = AgentAnswer(prompt: text, blocks: []) }
-                } else if let items = message["content"] as? [[String: Any]] {
+                var text = message["content"] as? String
+                if let items = message["content"] as? [[String: Any]] {
                     guard !items.contains(where: { $0["type"] as? String == "tool_result" }) else { continue }
-                    let text = items.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
+                    text = items.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
                         .joined(separator: "\n")
-                    if isPrompt(text) { answer = AgentAnswer(prompt: text, blocks: []) }
                 }
+                guard let text, isPrompt(text) else { continue }
+                turns.append(AgentTurn(prompt: text, time: object["timestamp"] as? String, afterCompaction: compacted))
+                compacted = false
             case "assistant":
                 for item in message["content"] as? [[String: Any]] ?? [] where item["type"] as? String == "text" {
-                    if let text = (item["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    guard let text = (item["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
                         !text.isEmpty
-                    {
-                        answer.blocks.append(text)
-                    }
+                    else { continue }
+                    if turns.isEmpty { turns.append(AgentTurn(time: object["timestamp"] as? String)) }
+                    turns[turns.count - 1].blocks.append(text)
                 }
             default:
                 break
             }
         }
-        return answer
+        return turns
     }
 
-    static func parseCodex(_ objects: [[String: Any]]) -> AgentAnswer {
-        var answer = AgentAnswer(prompt: nil, blocks: [])
-        var events: [String] = []
+    static func codexTurns(_ objects: [[String: Any]]) -> [AgentTurn] {
+        var turns: [AgentTurn] = []
+        var events: [[String]] = []
+        var compacted = false
+        func start(_ object: [String: Any], prompt: String? = nil) {
+            turns.append(AgentTurn(prompt: prompt, time: object["timestamp"] as? String, afterCompaction: compacted))
+            events.append([])
+            compacted = false
+        }
         for object in objects {
+            if object["type"] as? String == "compacted" {
+                compacted = true
+                continue
+            }
             guard let payload = object["payload"] as? [String: Any] else { continue }
-            let type = payload["type"] as? String
-            switch (object["type"] as? String, type) {
+            let fresh = turns.last.map { $0.prompt == nil && $0.blocks.isEmpty && $0.final == nil } ?? false
+            switch (object["type"] as? String, payload["type"] as? String) {
             case ("event_msg", "task_started"):
-                answer = AgentAnswer(prompt: nil, blocks: [])
-                events = []
+                if !fresh { start(object) }
             case ("event_msg", "task_complete"):
-                if let text = payload["last_agent_message"] as? String, !text.isEmpty { answer.final = text }
+                if let text = payload["last_agent_message"] as? String, !text.isEmpty, !turns.isEmpty {
+                    turns[turns.count - 1].final = text
+                }
             case ("event_msg", "user_message"):
-                if let text = payload["message"] as? String, isPrompt(text) {
-                    answer = AgentAnswer(prompt: text, blocks: [])
-                    events = []
+                guard let text = payload["message"] as? String, isPrompt(text) else { continue }
+                if fresh || turns.last?.prompt == text, !turns.isEmpty {
+                    turns[turns.count - 1].prompt = text
+                } else {
+                    start(object, prompt: text)
                 }
             case ("event_msg", "agent_message"):
-                if let text = payload["message"] as? String, !text.isEmpty { events.append(text) }
+                if let text = payload["message"] as? String, !text.isEmpty, !events.isEmpty {
+                    events[events.count - 1].append(text)
+                }
             case ("response_item", "message"):
                 let items = payload["content"] as? [[String: Any]] ?? []
                 let text = items.compactMap { $0["text"] as? String }.joined(separator: "\n")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 switch payload["role"] as? String {
                 case "assistant" where !text.isEmpty:
-                    answer.blocks.append(text)
-                case "user" where isPrompt(text) && answer.prompt == nil:
-                    answer.prompt = text
+                    if turns.isEmpty { start(object) }
+                    turns[turns.count - 1].blocks.append(text)
+                case "user" where isPrompt(text):
+                    if turns.isEmpty { start(object) }
+                    if turns[turns.count - 1].prompt == nil { turns[turns.count - 1].prompt = text }
                 default:
                     break
                 }
@@ -108,19 +165,20 @@ public enum AgentTranscript {
                 break
             }
         }
-        if answer.blocks.isEmpty { answer.blocks = events }
-        return answer
+        for index in turns.indices where turns[index].blocks.isEmpty { turns[index].blocks = events[index] }
+        return turns
     }
 
     static func isPrompt(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && !trimmed.hasPrefix("<") && !trimmed.hasPrefix("# AGENTS.md")
             && !trimmed.hasPrefix("Caveat:") && !trimmed.hasPrefix("[Request interrupted")
+            && !trimmed.hasPrefix("[app:")
     }
 
     static let script = """
         \(HostAgents.path)
-        kind=$1 pid=$2 root=$3 cwd=$4
+        kind=$1 pid=$2 root=$3 cwd=$4 n=${5:-1500} b=${6:-600000}
         if [ -z "$pid" ] && [ -n "$root" ]; then
         r=$(eval "$root" 2>/dev/null | head -n 1)
         case $r in ''|*[!0-9]*) r= ;; esac
@@ -154,11 +212,11 @@ public enum AgentTranscript {
         head -n 1 "$t" | grep -qF "\\"cwd\\":\\"$cwd\\"" && { f=$t; break; }
         done
         fi
-        filter='"type":"(task_started|task_complete|message|user_message|agent_message)"'
+        filter='"type":"(task_started|task_complete|message|user_message|agent_message|compacted)"'
         fi
         [ -n "$f" ] && [ -r "$f" ] || { echo "@@psh-none@@"; exit 0; }
         echo "@@psh-file:$f@@"
-        tail -n 1500 "$f" | grep -E "$filter" | tail -c 600000
+        tail -n "$n" "$f" | grep -E "$filter" | awk '!/"isSidechain":true/ && !/"type":"tool_result"/ && !((/"type":"tool_use"/ || /"type":"thinking"/) && !/"type":"text"/)' | tail -c "$b"
         exit 0
         """
 }

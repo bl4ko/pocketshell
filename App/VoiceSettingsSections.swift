@@ -14,6 +14,7 @@ struct VoiceSettingsSections: View {
     @AppStorage(BrainSettings.turnEndKey) private var turnEnd = TurnEnd.balanced
     @AppStorage(BrainSettings.saveAudioKey) private var saveAudio = false
     @AppStorage(BrainSettings.readRepliesKey) private var readReplies = ""
+    @AppStorage(BrainSettings.logsKey) private var logsRaw = ""
     @State private var brainKeySaved = PasswordVault.get(account: BrainSettings.apiKeyAccount) != nil
     @State private var sonioxKeySaved = BrainSettings.sonioxKey != nil
     @State private var systemVoices: [VoiceChoice] = []
@@ -26,6 +27,7 @@ struct VoiceSettingsSections: View {
         Group {
             brainSection
             speechSection
+            logsSection
             benchmarkSection
         }
         .onAppear {
@@ -122,6 +124,26 @@ struct VoiceSettingsSections: View {
                 mouth.wrappedValue == .soniox || ears.wrappedValue == .soniox
                     ? "Soniox streams audio to soniox.com and bills per use. Without a key, on-device speech is used."
                     : "On-device speech needs no key. Add voices in Settings, Accessibility, Spoken Content.")
+        }
+    }
+
+    private var logsSection: some View {
+        Section {
+            Toggle(
+                "Save conversation logs",
+                isOn: Binding(get: { logsRaw != "off" }, set: { logsRaw = $0 ? "on" : "off" })
+            )
+            .accessibilityIdentifier("settings.logs.save")
+            Button("Share logs…") { share(BenchmarkExport.logs) }
+                .accessibilityIdentifier("settings.logs.share")
+            Button("Delete logs", role: .destructive) { BrainSettings.logStore.deleteAll() }
+                .accessibilityIdentifier("settings.logs.delete")
+        } header: {
+            Text("Conversation logs")
+        } footer: {
+            Text(
+                "Each voice session is saved on this device for 30 days and copied to "
+                    + "~/.local/share/pocketshell/voice-logs on the host. Keys are never saved.")
         }
     }
 
@@ -249,11 +271,21 @@ enum BenchmarkExport {
     static func audio() throws -> URL {
         let archive = BrainSettings.audioArchive
         guard !archive.entries.isEmpty else { throw Empty() }
-        let target = exportDirectory().appendingPathComponent("pocketshell-voice-audio.zip")
+        return try zip(archive.directory, name: "pocketshell-voice-audio.zip")
+    }
+
+    static func logs() throws -> URL {
+        let store = BrainSettings.logStore
+        guard !store.isEmpty else { throw Empty() }
+        return try zip(store.directory, name: "pocketshell-voice-logs.zip")
+    }
+
+    private static func zip(_ directory: URL, name: String) throws -> URL {
+        let target = exportDirectory().appendingPathComponent(name)
         try? FileManager.default.removeItem(at: target)
         var coordinated: NSError?
         var copyError: Error?
-        NSFileCoordinator().coordinate(readingItemAt: archive.directory, options: .forUploading, error: &coordinated) {
+        NSFileCoordinator().coordinate(readingItemAt: directory, options: .forUploading, error: &coordinated) {
             zip in
             do {
                 try FileManager.default.copyItem(at: zip, to: target)

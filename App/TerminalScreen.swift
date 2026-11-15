@@ -346,7 +346,7 @@ struct TerminalScreen: View {
                             onToggleSelect: { connection.bridge.toggleSelectMode() },
                             onVoice: voiceBrainToggle,
                             onCompose: {
-                                voiceBrain.end()
+                                voiceBrain.end(reason: "composer opened")
                                 connection.composerVisible = true
                             },
                             onAttach: {
@@ -471,7 +471,7 @@ struct TerminalScreen: View {
             voice.stop()
             return
         }
-        voiceBrain.end()
+        voiceBrain.end(reason: "dictation started")
         voiceNotice = nil
         voice.onPhrase = { handleVoice($0) }
         Task {

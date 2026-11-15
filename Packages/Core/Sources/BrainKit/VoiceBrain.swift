@@ -55,6 +55,7 @@ public final class VoiceBrain: ObservableObject {
     public var onTurnTimed: ((TurnTiming) -> Void)?
     public var providers = BenchmarkProviders(ears: "", mouth: "", model: "")
     public var readsReplies = true
+    public var log: ConversationLog?
 
     public let toolbox: AgentToolbox
     public let hostID: String
@@ -95,6 +96,7 @@ public final class VoiceBrain: ObservableObject {
     private var driving: [String: TimeInterval] = [:]
     private var replyTracker = ReplyTracker()
     private var replyOffer: AgentReply?
+    private var logNotes: [String] = []
 
     private struct Reply {
         let id: Int
@@ -128,6 +130,7 @@ public final class VoiceBrain: ObservableObject {
         toolbox.onSent = { [weak self] agent, text in
             self?.detail = "Sent to \(agent.spokenName): \(text)"
             self?.delivered(agent.id, text: text, isPrompt: true)
+            self?.record(.sent(agent: agent.spokenName, text: text))
         }
     }
 
@@ -192,8 +195,11 @@ public final class VoiceBrain: ObservableObject {
         turnTask = Task { [weak self] in await self?.greet(id) }
     }
 
-    public func end() {
+    public func end(reason: String = "ended") {
         guard mode != .off else { return }
+        if let held = toolbox.gate.pending {
+            record(.confirmation(.dropped, question: held.question, action: Self.describe(held.action)))
+        }
         mode = .off
         turnTask?.cancel()
         turnTask = nil
@@ -216,11 +222,16 @@ public final class VoiceBrain: ObservableObject {
         phase = .listening
         inputLevel = 0
         outputLevel = 0
+        record(.sessionEnd(reason: reason))
         onEnded?()
     }
 
     public func notice(_ text: String) {
         detail = text
+    }
+
+    public func record(_ event: ConversationEvent) {
+        log?.record(event)
     }
 
     public func setMuted(_ on: Bool) {
@@ -232,6 +243,7 @@ public final class VoiceBrain: ObservableObject {
     public func audioInterrupted(_ began: Bool) {
         guard isOn, began != interrupted else { return }
         interrupted = began
+        record(.interruption(began: began))
         feed(.interrupted(began))
         if began {
             mouth.stop()
@@ -271,6 +283,10 @@ public final class VoiceBrain: ObservableObject {
             {
                 continue
             }
+            record(
+                .agentEvent(
+                    agent: event.name, kind: event.kind == .waiting ? "waiting" : "done",
+                    question: event.prompt?.question, options: event.prompt?.options.map(\.label) ?? []))
             events.push(event)
             feed(event.prompt != nil ? .promptQueued : .eventQueued)
         }
@@ -281,11 +297,13 @@ public final class VoiceBrain: ObservableObject {
         if machine.promptSpeaking { mouth.stop() }
         let result = await toolbox.answerPrompt(agentID: waiting.agentID, number: number, expected: waiting.prompt)
         guard isOn else { return }
-        if let failure = AgentToolbox.failure(result) {
+        let label = waiting.prompt.options.first { $0.number == number }?.label ?? "option \(number)"
+        let failure = AgentToolbox.failure(result)
+        record(.promptAnswered(agent: waiting.agentName, option: number, label: label, failure: failure))
+        if let failure {
             detail = failure
             return
         }
-        let label = waiting.prompt.options.first { $0.number == number }?.label ?? "option \(number)"
         answered[waiting.agentID] = waiting.prompt
         delivered(waiting.agentID, text: label, isPrompt: false)
         events.remove(agentID: waiting.agentID)
@@ -335,9 +353,11 @@ public final class VoiceBrain: ObservableObject {
                 && !answersPrompt(text, start: span?.start)
             partialSince = nil
             guard !echoed else {
+                record(.echoDropped(text: text))
                 feed(.userPartial(""))
                 break
             }
+            record(.userPhrase(text: text, speechStart: span?.start, speechEnd: span?.end))
             heard = (clock(), span?.start, span?.end)
             feed(.userPhrase(text))
             heard = nil
@@ -346,6 +366,7 @@ public final class VoiceBrain: ObservableObject {
         case .level(let level):
             inputLevel = level
         case .failed(let message):
+            record(.earsFailed(message))
             caption = Caption(.app, message)
         }
     }
@@ -365,6 +386,7 @@ public final class VoiceBrain: ObservableObject {
         switch event {
         case .started:
             mouthQuiet = nil
+            record(.mouth(speaking: true))
             feed(.mouthStarted)
         case .upcoming(let text):
             agentSegment = true
@@ -382,6 +404,7 @@ public final class VoiceBrain: ObservableObject {
             if timing?.firstAudio == nil { timing?.firstAudio = clock() }
         case .idle:
             mouthQuiet = clock()
+            record(.mouth(speaking: false))
             outputLevel = 0
             feed(.mouthIdle)
             if !events.replies.isEmpty { feed(.eventQueued) }
@@ -392,6 +415,7 @@ public final class VoiceBrain: ObservableObject {
     }
 
     private func settleTurn() {
+        logHeard(cut: false)
         replies = []
         turnText = nil
         endAgentSegment()
@@ -407,6 +431,7 @@ public final class VoiceBrain: ObservableObject {
         guard isOn else { return }
         let effects = machine.handle(input, at: clock())
         phase = machine.phase
+        logCut(input, effects)
         if effects.contains(.cancelBrain) {
             turnTask?.cancel()
             turnTask = nil
@@ -423,10 +448,12 @@ public final class VoiceBrain: ObservableObject {
             case .respond(let text):
                 respond(text)
             case .playFiller:
+                record(.spoken(.filler, text: Self.fillers[fillerIndex % Self.fillers.count]))
                 mouth.speak(Self.fillers[fillerIndex % Self.fillers.count])
                 fillerIndex += 1
             case .announce:
                 if let sentence = events.drain() {
+                    record(.spoken(.announcement, text: sentence))
                     caption = Caption(.brain, sentence)
                     append(.assistant(sentence))
                     mouth.speak(sentence)
@@ -438,6 +465,7 @@ public final class VoiceBrain: ObservableObject {
                     _ = machine.handle(.promptClosed, at: clock())
                     break
                 }
+                record(.spoken(.prompt, text: sentence))
                 caption = Caption(.brain, sentence)
                 append(.assistant(sentence))
                 asking = ("", sentence.components(separatedBy: PromptSpeech.closing).count - 1, nil)
@@ -450,12 +478,13 @@ public final class VoiceBrain: ObservableObject {
     private func respond(_ text: String) {
         caption = Caption(.user, text)
         if Self.isStopCommand(text) {
-            end()
+            end(reason: "voice command")
             return
         }
         turnID += 1
         let id = turnID
         if case .dictation = mode {
+            record(.dictation(text: text))
             onDictation?(text)
             feed(.brainDone)
             return
@@ -495,6 +524,7 @@ public final class VoiceBrain: ObservableObject {
         }
         carry = nil
         turnText = nil
+        record(.turn(id: id, text: text))
         defer { refreshPendingSend() }
         let offer = replyOffer
         replyOffer = nil
@@ -511,9 +541,16 @@ public final class VoiceBrain: ObservableObject {
             let result = await toolbox.perform(pending.action)
             if let driven { driving[driven] = clock() + Self.toolGrace }
             noteDelivery(pending.action, result: result)
+            record(
+                .confirmation(
+                    .accepted, question: pending.question, action: Self.describe(pending.action), by: "voice",
+                    result: result))
             appendUser(
                 "\(text)\n\n[app: The user confirmed \"\(pending.question)\". The action ran. Result: \(result)]")
         case .declined(let pending):
+            record(
+                .confirmation(
+                    .declined, question: pending.question, action: Self.describe(pending.action), by: "voice"))
             appendUser("\(text)\n\n[app: The user did not confirm \"\(pending.question)\". Nothing was done.]")
         case .none:
             appendUser(text)
@@ -526,13 +563,15 @@ public final class VoiceBrain: ObservableObject {
 
     private func converse(_ id: Int) async {
         guard let model else { return }
-        for _ in 0..<6 {
+        for round in 1...6 {
             var reply = ""
             var calls: [ToolCall] = []
             streamingReply = ""
             replyID += 1
             let segment = replyID
             replies.append(Reply(id: segment))
+            record(.request(turn: id, round: round, messages: conversation.messages.count + 1, notes: logNotes))
+            logNotes = []
             do {
                 let stream = model.stream(
                     conversation.request(system: systemPrompt),
@@ -562,6 +601,7 @@ public final class VoiceBrain: ObservableObject {
             guard id == turnID, !Task.isCancelled else { return }
             streamingReply = nil
             mouth.finish()
+            record(.reply(turn: id, reply: segment, generated: reply, toolCalls: calls.map(\.name)))
             appendReply(reply, calls: calls)
             guard !calls.isEmpty else { return }
             for call in calls {
@@ -569,9 +609,16 @@ public final class VoiceBrain: ObservableObject {
                 let driven = drivenAgent(call)
                 if let driven { driving[driven] = .infinity }
                 if call.name == "read_answer", let driven { answerAsked(driven) }
+                let started = clock()
+                let held = toolbox.gate.pending
                 let result = await toolbox.call(call)
                 if let driven { driving[driven] = clock() + Self.toolGrace }
                 noteDelivery(call, result: result)
+                record(
+                    .toolCall(
+                        turn: id, id: call.id, name: call.name, arguments: call.arguments, result: result,
+                        ms: Int(((clock() - started) * 1000).rounded())))
+                logHold(after: held)
                 refreshPendingSend()
                 guard id == turnID, !Task.isCancelled else { return }
                 append(.tool(call.id, result))
@@ -585,10 +632,17 @@ public final class VoiceBrain: ObservableObject {
         refreshPendingSend()
         if machine.phase == .speaking { mouth.stop() }
         guard send else {
+            record(
+                .confirmation(
+                    .declined, question: pending.question, action: Self.describe(pending.action), by: "tap"))
             notes.append("[app: The user tapped Cancel for \"\(pending.question)\". Nothing was sent.]")
             return
         }
         let result = await toolbox.perform(pending.action)
+        record(
+            .confirmation(
+                .accepted, question: pending.question, action: Self.describe(pending.action), by: "tap",
+                result: result))
         if let failure = AgentToolbox.failure(result) { detail = failure }
         notes.append("[app: The user tapped Send for \"\(pending.question)\". Result: \(result)]")
     }
@@ -698,6 +752,7 @@ public final class VoiceBrain: ObservableObject {
         replyOffer = nil
         if reply.isShort {
             let sentence = "\(reply.lead): \(reply.spoken)"
+            record(.spoken(.reply, text: sentence))
             caption = Caption(.brain, sentence)
             append(.assistant(sentence))
             mouth.speak(sentence)
@@ -743,6 +798,7 @@ public final class VoiceBrain: ObservableObject {
         if timing?.turn == id { timing?.firstToken = clock() }
         mouth.stream(text, reply: replyID)
         mouth.finish()
+        record(.reply(turn: id, reply: replyID, generated: text, toolCalls: []))
         appendReply(text, calls: [])
     }
 
@@ -753,13 +809,22 @@ public final class VoiceBrain: ObservableObject {
 
     private func appendUser(_ text: String) {
         let noted = conversation.messages.last { $0.content?.hasPrefix(AgentToolbox.snapshotPrefix) == true }
-        if let note = toolbox.snapshot, noted?.content != note { append(.user(note)) }
+        if let note = toolbox.snapshot, noted?.content != note {
+            append(.user(note))
+            logNotes.append(note)
+        }
         for note in notes { append(.user(note)) }
+        logNotes += notes
+        if text.contains("[app:") { logNotes.append(text) }
         notes = []
         append(.user(text))
     }
 
     private func sealTurn(speaking: Bool) {
+        if let partial = streamingReply, let last = replies.last {
+            record(.reply(turn: turnID, reply: last.id, generated: partial, toolCalls: []))
+        }
+        logHeard(cut: true)
         let inFlight = streamingReply != nil
         streamingReply = nil
         let messages = conversation.messages
@@ -813,11 +878,13 @@ public final class VoiceBrain: ObservableObject {
         timing = nil
         let result = clockState.timing(done: clock(), date: now(), providers: providers)
         lastTiming = result
+        record(.timing(result))
         onTurnTimed?(result)
     }
 
     private func fallBack(_ error: Error) {
         let message = (error as? BrainError)?.spoken ?? "Something went wrong with the brain."
+        record(.brainError("\(error)"))
         timing = nil
         mode = .dictation(message)
         pollTask?.cancel()
@@ -828,6 +895,33 @@ public final class VoiceBrain: ObservableObject {
 
     private func append(_ message: ChatMessage) {
         conversation.append(message, at: now())
+    }
+
+    static func describe(_ action: AgentAction) -> String {
+        if case .sendPrompt(let agent, let text) = action { return "sendPrompt(\(agent)): \(text)" }
+        return String(describing: action)
+    }
+
+    private func logHeard(cut: Bool) {
+        let open = streamingReply != nil ? replies.last?.id : nil
+        for reply in replies where !reply.heard.isEmpty || (cut && (reply.appended || reply.id == open)) {
+            record(.heard(reply: reply.id, text: reply.heard.trimmingCharacters(in: .whitespacesAndNewlines), cut: cut))
+        }
+    }
+
+    private func logHold(after previous: PendingConfirmation?) {
+        guard let held = toolbox.gate.pending, held != previous else { return }
+        record(.confirmation(.held, question: held.question, action: Self.describe(held.action)))
+    }
+
+    private func logCut(_ input: TurnTaking.Input, _ effects: [TurnTaking.Effect]) {
+        let stopped = effects.contains(.stopMouth)
+        let cancelled = effects.contains(.cancelBrain)
+        guard stopped || cancelled else { return }
+        var partial: String?
+        if case .userPartial(let text) = input { partial = text }
+        let cause = String(describing: input).prefix { $0 != "(" }
+        record(.bargeIn(cause: String(cause), partial: partial, stoppedMouth: stopped, cancelledBrain: cancelled))
     }
 
     private func poll() async {

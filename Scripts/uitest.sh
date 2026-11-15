@@ -16,6 +16,8 @@ HERDR_SELECT=""
 unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID TMUX
 export TMUX_TMPDIR="$DIR/tmux"
 mkdir -p "$TMUX_TMPDIR"
+VOICE_LOGS="$DIR/voice-logs"
+mkdir -p "$VOICE_LOGS"
 herdr_select() { herdr --session "psh-uitest-sel-$$" "$@"; }
 cleanup() {
     if [ -n "$HERDR_SELECT" ]; then
@@ -50,7 +52,7 @@ UsePAM no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 LogLevel QUIET
-SetEnv TMUX_TMPDIR=$TMUX_TMPDIR PSH_HERDR_ONLY=psh-uitest
+SetEnv TMUX_TMPDIR=$TMUX_TMPDIR PSH_HERDR_ONLY=psh-uitest PSH_VOICE_LOGS=$VOICE_LOGS
 EOF
 
 /usr/sbin/sshd -D -f "$DIR/sshd_config" &
@@ -322,6 +324,7 @@ TEST_RUNNER_PS_TEST_HERDR_SELECT="$HERDR_SELECT" \
 TEST_RUNNER_PS_TEST_FAKE_AGENT="$DIR/fakeagent" \
 TEST_RUNNER_PS_TEST_BRAIN_URL="http://127.0.0.1:$BRAIN_PORT/v1" \
 TEST_RUNNER_PS_TEST_BRAIN_KEY="psh-test-key" \
+TEST_RUNNER_PS_TEST_VOICE_LOGS="$VOICE_LOGS" \
 xcodebuild test \
   -scheme pocketshell \
   -derivedDataPath "${PS_TEST_DERIVED:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-uitest}" \

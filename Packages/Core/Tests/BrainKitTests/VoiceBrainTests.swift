@@ -1016,3 +1016,50 @@ private func sentTexts(_ rig: StagedRig) -> [String] {
     rig.time += 1
     #expect(await eventually { rig.mouth.spoken.contains(askSentence) })
 }
+
+@MainActor
+@Test func aTurnWithAToolCallAndAHeldReadBackIsLoggedInOrder() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("psh-log-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.text("Sending. "), try sendCall(inventedPrompt), .finished("tool_calls")]),
+            .success([.text("Send it?"), .finished("stop")]),
+            .success([.text("Sent."), .finished("stop")]),
+        ]))
+    let log = ConversationLog(store: ConversationLogStore(directory: root), hostID: "host-1")
+    rig.brain.log = log
+    rig.ears.phrase("work in subagents", start: 1, end: 2)
+    #expect(await eventually { rig.mouth.finishes == 2 && rig.brain.pendingSend != nil })
+    rig.mouth.hear("Send it?", reply: rig.mouth.reply)
+    rig.mouth.settle()
+    rig.ears.phrase("yes send it")
+    #expect(await eventually { rig.mouth.finishes == 3 })
+    rig.brain.end(reason: "end button")
+    log.close()
+    log.drain()
+
+    let events = try String(contentsOf: log.fileURL, encoding: .utf8).split(separator: "\n").map {
+        try #require(try JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+    }
+    let shown = events.filter { !["mouth", "timing"].contains($0["type"] as? String) }
+    #expect(
+        shown.map { $0["type"] as? String } == [
+            "user_phrase", "turn", "request", "reply", "tool_call", "confirmation", "request", "reply", "heard",
+            "user_phrase", "turn", "sent", "confirmation", "request", "reply", "heard", "session_end",
+        ])
+    #expect(shown[0]["text"] as? String == "work in subagents")
+    #expect((shown[2]["notes"] as? [String])?.first?.hasPrefix(AgentToolbox.snapshotPrefix) == true)
+    #expect(shown[3]["tool_calls"] as? [String] == ["send_prompt"])
+    #expect(shown[4]["name"] as? String == "send_prompt")
+    #expect((shown[4]["result"] as? String)?.contains("needs_confirmation") == true)
+    #expect(shown[5]["state"] as? String == "held")
+    #expect((shown[5]["action"] as? String)?.contains(inventedPrompt) == true)
+    #expect(shown[8]["text"] as? String == "Send it?")
+    #expect(shown[11]["text"] as? String == inventedPrompt)
+    #expect(shown[12]["state"] as? String == "accepted")
+    #expect(shown[12]["by"] as? String == "voice")
+    #expect(shown[15]["text"] as? String == "")
+    #expect(shown[15]["cut"] as? Bool == true)
+    #expect(shown[16]["reason"] as? String == "end button")
+}

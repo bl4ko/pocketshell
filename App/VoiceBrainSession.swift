@@ -22,6 +22,7 @@ enum BrainSettings {
     static let readRepliesKey = "pocketshell.brainReadReplies"
     static let sonioxKeyAccount = "pocketshell.soniox.apiKey"
     static let saveAudioKey = "pocketshell.benchmarkSaveAudio"
+    static let logsKey = "pocketshell.voiceLogs"
 
     static var isUITest: Bool { ProcessInfo.processInfo.environment["PS_UI_TEST"] == "1" }
 
@@ -33,6 +34,41 @@ enum BrainSettings {
 
     static var audioArchive: TurnAudioArchive {
         TurnAudioArchive(directory: benchmarkDirectory.appendingPathComponent("audio"))
+    }
+
+    static var logsEnabled: Bool { UserDefaults.standard.string(forKey: logsKey) != "off" }
+
+    static var logStore: ConversationLogStore {
+        ConversationLogStore(directory: URL.applicationSupportDirectory.appendingPathComponent("VoiceLogs"))
+    }
+
+    static func sessionInfo(host: HostConfig, providers: BenchmarkProviders) -> ConversationSessionInfo {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        var machine = utsname()
+        uname(&machine)
+        let model = withUnsafeBytes(of: &machine.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        let defaults = UserDefaults.standard
+        let endpoint = connection?.url
+        return ConversationSessionInfo(
+            build: "\(version) (\(build))", device: model,
+            system: ProcessInfo.processInfo.operatingSystemVersionString, host: host.name,
+            hostID: host.id.uuidString, providers: providers,
+            settings: [
+                "endpoint": endpoint.map { "\($0.scheme ?? "")://\($0.host ?? "")" } ?? "",
+                "turn_end": turnEnd.rawValue,
+                "ears_setting": defaults.string(forKey: earsKey) ?? "",
+                "mouth_setting": defaults.string(forKey: mouthKey) ?? "",
+                "system_voice": defaults.string(forKey: voiceKey) ?? "",
+                "save_audio": defaults.bool(forKey: saveAudioKey) ? "on" : "off",
+                "read_replies": readsReplies ? "on" : "off",
+                "ui_test": isUITest ? "1" : "0",
+            ])
+    }
+
+    static var secrets: [String] {
+        [connection?.key, sonioxKey, PasswordVault.get(account: apiKeyAccount)].compactMap { $0 }
     }
 
     static var sonioxKey: String? {
@@ -79,6 +115,7 @@ final class VoiceBrainSession: ObservableObject {
     private(set) var testEars: TextEars?
     private var audio: AnyObject?
     private var report_: () -> String = { "-" }
+    private var mirror: ConversationLogMirror?
     #if !targetEnvironment(macCatalyst)
         private let activity = VoiceActivityController()
     #endif
@@ -141,31 +178,74 @@ final class VoiceBrainSession: ObservableObject {
         let fallbackMouth = parts.fallbackMouth
         let onUserTurn = parts.onUserTurn
         brain.onUserTurn = { [weak brain, weak fallbackMouth] turn in
-            if let brain, let fallbackMouth, !fallbackMouth.usingFallback { brain.providers.mouth = providers.mouth }
+            if let brain, let fallbackMouth, !fallbackMouth.usingFallback, brain.providers.mouth != providers.mouth {
+                brain.providers.mouth = providers.mouth
+                brain.record(.fallback(part: "mouth", message: "back on \(providers.mouth)"))
+            }
             onUserTurn?(turn)
         }
         parts.fallbackEars?.onNotice = { [weak brain] notice in
+            brain?.record(.fallback(part: "ears", message: notice))
             brain?.notice(notice)
             brain?.providers.ears = "iphone-fallback"
         }
         fallbackMouth?.onNotice = { [weak brain] notice in
+            brain?.record(.fallback(part: "mouth", message: notice))
             brain?.notice(notice)
             brain?.providers.mouth = "iphone-fallback"
         }
         parts.interruptions? { [weak brain] began in brain?.audioInterrupted(began) }
-        brain.onEnded = { MicModeMonitor.shared.voiceModeEnded() }
+        let conversationLog = startLog(brain: brain, host: host, providers: providers, exec: exec)
+        brain.onEnded = { [weak self] in
+            MicModeMonitor.shared.voiceModeEnded()
+            self?.finishLog(conversationLog)
+        }
         self.brain = brain
         #if !targetEnvironment(macCatalyst)
             activity.follow(brain)
         #endif
         Task {
             await brain.start()
-            if let notice = selection.notice { brain.notice(notice) }
+            if let notice = selection.notice {
+                brain.record(.notice(notice))
+                brain.notice(notice)
+            }
         }
     }
 
-    func end() {
-        brain?.end()
+    func end(reason: String) {
+        brain?.end(reason: reason)
+    }
+
+    private func startLog(
+        brain: VoiceBrain, host: HostConfig, providers: BenchmarkProviders,
+        exec: @escaping @MainActor (String) async -> String?
+    ) -> ConversationLog? {
+        mirror?.stop()
+        mirror = nil
+        guard BrainSettings.logsEnabled else { return nil }
+        let store = BrainSettings.logStore
+        let hostID = host.id.uuidString
+        let log = ConversationLog(store: store, hostID: hostID, secrets: BrainSettings.secrets)
+        log.record(.sessionStart(BrainSettings.sessionInfo(host: host, providers: providers)))
+        brain.log = log
+        let mirror = ConversationLogMirror(
+            store: store, hostID: hostID,
+            root: BrainSettings.isUITest ? ConversationLogMirror.testRoot : ConversationLogMirror.homeRoot, exec: exec)
+        mirror.start()
+        self.mirror = mirror
+        return log
+    }
+
+    private func finishLog(_ log: ConversationLog?) {
+        guard let log else { return }
+        log.close()
+        let mirror = mirror
+        mirror?.stop()
+        Task {
+            await Task.detached { log.drain() }.value
+            await mirror?.sync()
+        }
     }
 
     struct Parts {

@@ -398,7 +398,7 @@ private struct VoiceBrainControls: View {
             .accessibilityLabel(brain.muted ? "Unmute" : "Mute")
             .accessibilityIdentifier("voice.mute")
             Button {
-                brain.end()
+                brain.end(reason: "end button")
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(compact ? .title2 : .largeTitle)

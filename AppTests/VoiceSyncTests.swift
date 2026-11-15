@@ -40,7 +40,7 @@ struct VoiceSyncTests {
         BrainSettings.baseURLKey: "https://example.com/v1", BrainSettings.modelKey: "small",
         BrainSettings.earsKey: "soniox", BrainSettings.mouthKey: "soniox",
         BrainSettings.sonioxVoiceKey: "Grace", BrainSettings.turnEndKey: "fast",
-        BrainSettings.readRepliesKey: "off",
+        BrainSettings.readRepliesKey: "off", BrainSettings.logsKey: "on",
     ]
     private let later = Date().addingTimeInterval(3600)
 
@@ -74,6 +74,23 @@ struct VoiceSyncTests {
         #expect(phone.settings[BrainSettings.modelKey] == "large")
         #expect(phone.settings[BrainSettings.sonioxVoiceKey] == nil)
         #expect(phone.settings[BrainSettings.baseURLKey] == "https://example.com/v1")
+    }
+
+    @Test func theConversationLogSwitchSyncsAndAnUntouchedDeviceKeepsItOn() {
+        let phone = Device(configured)
+        let pad = Device()
+        pad.sync.receive(settings: phone.sync.settings())
+        #expect(pad.defaults.string(forKey: BrainSettings.logsKey) == "on")
+
+        phone.defaults.set("off", forKey: BrainSettings.logsKey)
+        let edited = phone.sync.settings(now: later)
+        #expect(edited.fields[BrainSettings.logsKey] == .init(value: "off", updatedAt: later))
+        pad.sync.receive(settings: edited)
+        #expect(pad.defaults.string(forKey: BrainSettings.logsKey) == "off")
+
+        let fresh = Device()
+        #expect(phone.sync.receive(settings: fresh.sync.settings()))
+        #expect(phone.defaults.string(forKey: BrainSettings.logsKey) == "off", "an empty device never turns it back on")
     }
 
     @Test func settingsOutsideTheSyncedSetStayLocal() {

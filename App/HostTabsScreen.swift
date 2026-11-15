@@ -290,7 +290,7 @@ struct HostTabsScreen: View {
             activeController?.nudgeTmuxSizing()
         }
         .onDisappear {
-            voiceBrain.end()
+            voiceBrain.end(reason: "left host screen")
             monitor.visibleWindowKey = nil
             for tab in tabs {
                 Task {
@@ -536,7 +536,7 @@ struct HostTabsScreen: View {
 
     private func toggleVoiceBrain() {
         guard !voiceBrain.isOn else {
-            voiceBrain.end()
+            voiceBrain.end(reason: "voice toggle")
             return
         }
         voiceBrain.start(

@@ -1660,6 +1660,20 @@ final class SmokeUITests: XCTestCase {
         app.buttons["voice.end"].tap()
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: bar)
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed)
+
+        if let logs = ProcessInfo.processInfo.environment["PS_TEST_VOICE_LOGS"] {
+            let mirrored = NSPredicate { _, _ in
+                let files = FileManager.default.enumerator(atPath: logs)?.allObjects as? [String] ?? []
+                return files.filter { $0.hasSuffix(".jsonl") }.contains { file in
+                    let text = (try? String(contentsOfFile: logs + "/" + file, encoding: .utf8)) ?? ""
+                    return text.contains(#""type":"session_start""#) && text.contains("what are my agents doing")
+                        && text.contains(#""type":"session_end""#)
+                }
+            }
+            XCTAssertEqual(
+                XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: mirrored, object: nil)], timeout: 20),
+                .completed, "the conversation log reaches the test host's temp dir, never the real home")
+        }
     }
 
     func testVoiceBrainOpensAndClosesTabsByVoice() throws {

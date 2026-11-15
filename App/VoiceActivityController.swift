@@ -24,7 +24,7 @@
                 guard let brain else { return }
                 brain.setMuted(!brain.muted)
             }
-            VoiceActivityActions.end = { [weak brain] in brain?.end() }
+            VoiceActivityActions.end = { [weak brain] in brain?.end(reason: "live activity") }
             observation = brain.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self, weak brain] _ in
                 MainActor.assumeIsolated { self?.sync(brain) }
             }

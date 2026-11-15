@@ -24,6 +24,7 @@ public struct AgentReply: Equatable, Sendable {
     public var asks: Bool { ReplySpeech.endsWithQuestion(answer) }
 
     public static func lead(_ agent: BrainAgent) -> String {
+        if agent.title != nil { return agent.spokenName }
         let place = agent.name.isEmpty ? (agent.cwd.map { ($0 as NSString).lastPathComponent } ?? "") : agent.name
         let word = place.isEmpty ? agent.kind.displayName : place
         return word.prefix(1).uppercased() + word.dropFirst()

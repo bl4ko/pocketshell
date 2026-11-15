@@ -384,3 +384,10 @@ private let longAnswer = """
     _ = machine.handle(.userPhrase("no thanks"), at: 8)
     #expect(!machine.offerOpen)
 }
+
+@Test func theLeadIsTheSessionTitleNameOrElseThePlace() throws {
+    var agent = HostAgents.parse(try fixture("list-agents.txt"))[0]
+    #expect(AgentReply.lead(agent) == "Api")
+    agent.title = "CPAMC"
+    #expect(AgentReply.lead(agent) == "Claude CPAMC")
+}

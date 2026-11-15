@@ -285,3 +285,28 @@ private let info = ConversationSessionInfo(
     #expect(ConversationLogMirror.size(from: "nothing") == nil)
     #expect(ConversationLogMirror.size(from: nil) == nil)
 }
+
+@Test func recallListsRecentExchangesNewestLastAndFlagsLongReads() {
+    let long = "start " + String(repeating: "word ", count: 2000) + "finish"
+    let exchanges = (1...12).map { index in
+        RecallExchange(
+            session: "s", turn: index, time: "t\(index)", user: "question \(index)",
+            generated: index == 12 ? long : "Answer \(index).")
+    }
+    func decode(_ text: String) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]) ?? [:]
+    }
+    let listed = decode(
+        ConversationRecall.answer(["action": "list", "count": 3], exchanges: exchanges, excluding: ("s", 12)))
+    let entries = listed["exchanges"] as? [[String: Any]] ?? []
+    #expect(listed["total"] as? Int == 11)
+    #expect(entries.map { $0["back"] as? Int } == [3, 2, 1])
+    #expect(entries.last?["reply"] as? String == "Answer 11.")
+    let read = decode(ConversationRecall.answer(["action": "read", "index": 12], exchanges: exchanges, excluding: nil))
+    #expect(read["truncated"] as? Bool == true)
+    #expect((read["reply"] as? String)?.hasPrefix("start") == true)
+    #expect((read["reply"] as? String)?.hasSuffix("finish") == true)
+    #expect(
+        decode(ConversationRecall.answer(["action": "read", "back": 40], exchanges: exchanges, excluding: nil))["error"]
+            != nil)
+}

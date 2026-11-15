@@ -575,7 +575,7 @@ public final class VoiceBrain: ObservableObject {
             do {
                 let stream = model.stream(
                     conversation.request(system: systemPrompt),
-                    tools: AgentToolbox.definitions + SessionToolbox.definitions)
+                    tools: AgentToolbox.definitions + SessionToolbox.definitions + [ConversationRecall.definition])
                 for try await event in stream {
                     guard id == turnID, !Task.isCancelled else { return }
                     if timing?.turn == id, timing?.firstToken == nil { timing?.firstToken = clock() }
@@ -611,7 +611,8 @@ public final class VoiceBrain: ObservableObject {
                 if call.name == "read_answer", let driven { answerAsked(driven) }
                 let started = clock()
                 let held = toolbox.gate.pending
-                let result = await toolbox.call(call)
+                let result =
+                    call.name == ConversationRecall.name ? await recall(call, turn: id) : await toolbox.call(call)
                 if let driven { driving[driven] = clock() + Self.toolGrace }
                 noteDelivery(call, result: result)
                 record(
@@ -666,7 +667,9 @@ public final class VoiceBrain: ObservableObject {
     }
 
     private func drivenAgent(_ call: ToolCall) -> String? {
-        guard !["list_agents", "list_sessions", "view"].contains(call.name) else { return nil }
+        guard !["list_agents", "list_sessions", "view", ConversationRecall.name].contains(call.name) else {
+            return nil
+        }
         let arguments = call.argumentObject
         let name = (arguments["agent"] as? String) ?? (arguments["target"] as? String)
         guard case .found(let agent) = AgentResolver.resolve(name, in: toolbox.agents) else { return nil }
@@ -902,6 +905,20 @@ public final class VoiceBrain: ObservableObject {
         return String(describing: action)
     }
 
+    private func recall(_ call: ToolCall, turn: Int) async -> String {
+        guard let log else {
+            return AgentToolbox.error("Conversation logs are off in Settings, so earlier replies cannot be read.")
+        }
+        let host = hostID
+        let date = now()
+        let exchanges = await Task.detached {
+            log.drain()
+            return ConversationRecall.exchanges(
+                ConversationRecall.files(store: log.store, host: host, now: date, current: log.fileURL))
+        }.value
+        return ConversationRecall.answer(call.argumentObject, exchanges: exchanges, excluding: (log.sessionID, turn))
+    }
+
     private func logHeard(cut: Bool) {
         let open = streamingReply != nil ? replies.last?.id : nil
         for reply in replies where !reply.heard.isEmpty || (cut && (reply.appended || reply.id == open)) {
@@ -968,6 +985,9 @@ public enum BrainPrompt {
         You can switch the model of an agent session yourself: call set_model with the model the user names, and \
         get_model when they ask which model an agent uses. Never tell the user to open a menu or a model picker. The \
         change is for that session only. When the result has choices, say the likely ones briefly and ask which.
+
+        When the user asks what you said before or earlier, or to sum up this conversation, call \
+        recall_conversation: your memory here is shortened, the log has every reply and marks the ones cut off.
 
         Before any tool call, first say a short lead-in in the same reply, for example "Let me look." or "OK, \
         asking Claude." Keep it under six words and do not use the same one twice in a row. Then call the tool.

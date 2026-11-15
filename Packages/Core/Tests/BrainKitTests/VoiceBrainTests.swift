@@ -1063,3 +1063,84 @@ private func sentTexts(_ rig: StagedRig) -> [String] {
     #expect(shown[15]["cut"] as? Bool == true)
     #expect(shown[16]["reason"] as? String == "end button")
 }
+
+private let recallWords = [
+    "apple", "banana", "cherry", "damson", "elder", "fig", "grape", "huckle", "indigo", "jujube", "kiwi", "lemon",
+    "mango", "nectar", "olive", "papaya", "quince", "raisin", "sloe", "tangelo", "ugli", "vanilla",
+]
+
+private func recallCall(_ id: String, _ arguments: String) -> Result<[BrainStreamEvent], BrainError> {
+    .success([.toolCalls([call(id, ConversationRecall.name, arguments)]), .finished("tool_calls")])
+}
+
+@MainActor
+private func recalled(_ rig: StagedRig, request: Int) throws -> [String: Any] {
+    let content = try #require(rig.model.requests[request].last { $0.role == .tool }?.content)
+    return try #require(try JSONSerialization.jsonObject(with: Data(content.utf8)) as? [String: Any])
+}
+
+@MainActor
+@Test func theBrainRecallsItsOwnEarlierRepliesAfterTheHistoryWasTrimmed() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("psh-log-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    var script: [Result<[BrainStreamEvent], BrainError>] = recallWords.enumerated().map { index, word in
+        .success([.text("Answer \(index + 1) is \(word)."), .finished("stop")])
+    }
+    script.append(.success([.text("The first part. The second part was never heard."), .finished("stop")]))
+    script += [
+        recallCall("r1", #"{"action":"read","back":1}"#),
+        .success([.text("I said the first part."), .finished("stop")]),
+        recallCall("r2", #"{"action":"read","back":3}"#), .success([.text("Answer twenty two."), .finished("stop")]),
+        recallCall("r3", #"{"action":"query","words":"apple"}"#), .success([.text("Apple."), .finished("stop")]),
+    ]
+    let rig = try await StagedRig(ScriptedModel(script))
+    rig.brain.log = ConversationLog(store: ConversationLogStore(directory: root), hostID: "host-1")
+
+    for turn in 1...22 {
+        rig.ears.phrase("question \(turn)")
+        #expect(await eventually { rig.mouth.finishes == turn })
+        rig.mouth.settle()
+    }
+    #expect(!rig.brain.conversation.messages.contains { $0.content?.contains("Answer 1 is") == true })
+
+    rig.ears.phrase("question 23")
+    #expect(await eventually { rig.mouth.finishes == 23 })
+    let cutReply = try #require(rig.mouth.reply)
+    rig.mouth.hear("The first part. ", reply: cutReply)
+    rig.ears.partial("stop")
+
+    rig.ears.phrase("what did you say before that")
+    #expect(await eventually { rig.model.requests.count == 25 && rig.mouth.finishes == 25 })
+    let cut = try recalled(rig, request: 24)
+    #expect(cut["user"] as? String == "question 23")
+    #expect(cut["reply"] as? String == "The first part.")
+    #expect(cut["cut"] as? Bool == true)
+    #expect(cut["not_heard"] as? String == "The second part was never heard.")
+    rig.mouth.settle()
+
+    rig.ears.phrase("and before that")
+    #expect(await eventually { rig.model.requests.count == 27 && rig.mouth.finishes == 27 })
+    let earlier = try recalled(rig, request: 26)
+    #expect(earlier["reply"] as? String == "Answer 22 is vanilla.")
+    #expect(earlier["cut"] as? Bool == false)
+    rig.mouth.settle()
+
+    rig.ears.phrase("when did you mention apples")
+    #expect(await eventually { rig.model.requests.count == 29 })
+    let found = try #require(try recalled(rig, request: 28)["exchanges"] as? [[String: Any]])
+    #expect(found.count == 1)
+    #expect(found.first?["user"] as? String == "question 1")
+    #expect(found.first?["reply"] as? String == "Answer 1 is apple.")
+    #expect(found.first?["index"] as? Int == 1)
+}
+
+@MainActor
+@Test func recallSaysSoWhenLogsAreOff() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([recallCall("r1", #"{"action":"list"}"#), .success([.text("Sorry."), .finished("stop")])]))
+    rig.ears.phrase("what did you say before")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    #expect(
+        try recalled(rig, request: 1)["error"] as? String
+            == "Conversation logs are off in Settings, so earlier replies cannot be read.")
+}

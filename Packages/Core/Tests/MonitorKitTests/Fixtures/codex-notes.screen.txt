@@ -1,0 +1,39 @@
+
+  >_ OpenAI Codex (v0.169.0)
+     ~/code/demo
+
+• Model changed to mock-model medium for Plan mode.
+
+
+› ask me two questions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Question 1/2 (1 unanswered)
+  Which realm should the alert watch?
+
+    1. Home               Home realm
+    2. Lab                Lab realm
+  › 3. None of the above  Optionally, add details in notes (tab)
+
+  › use the staging realm
+
+  tab or esc to clear notes | enter to submit answer

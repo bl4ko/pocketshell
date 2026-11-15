@@ -1,0 +1,40 @@
+
+
+⏺ Noted.
+
+✻ Crunched for 0s · done 12:46 PM
+
+❯ many
+
+⏺ User declined to answer questions
+  ⎿  · Which region should the new bucket live in? (eu-central-1 / eu-west-1 / us-east-1 /
+     ap-south-1)
+
+✻ Sautéed for 0s · done 12:47 PM
+
+❯ multi
+
+⏺ Noted.
+
+✻ Brewed for 0s · done 12:47 PM
+
+❯ plan multi
+────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Checks  ✔ Submit  →
+
+Which checks should run before release?
+
+  1. [ ] Unit tests
+         swift test
+  2. [✔] UI tests
+         Simulator e2e
+  3. [✔] Lint
+         swift format lint
+  4. [ ] Coverage
+         llvm-cov report
+  5. [✔] fuzz the parser
+❯    Submit
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · ctrl+g to edit in Nvim · Esc to cancel

@@ -18,6 +18,17 @@ import Testing
     #expect(AgentStatus.classify(pane) == .waiting)
 }
 
+@Test func codexQuestionOverlayIsWaitingThoughItOffersEscToInterrupt() {
+    let pane = """
+          Question 1/2 (2 unanswered)
+          Which realm should the alert watch?
+          › 1. Home               Home realm
+            2. Lab                Lab realm
+          tab to add notes | enter to submit answer | ←/→ to navigate questions | esc to interrupt
+        """
+    #expect(AgentStatus.classify(pane) == .waiting)
+}
+
 @Test func classifyIdleOtherwise() {
     #expect(AgentStatus.classify("$ ") == .idle)
     #expect(AgentStatus.classify("") == .idle)

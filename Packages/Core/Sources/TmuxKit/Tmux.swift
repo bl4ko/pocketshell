@@ -97,6 +97,7 @@ public enum AgentStatus: Equatable, Sendable {
             (baseTail.joined(separator: "\n").lowercased().contains("enter to view")
             ? lines.suffix(40) : baseTail).joined(separator: "\n")
         let lowered = tail.lowercased()
+        if lowered.contains(/enter to submit (answer|all)/) { return .waiting }
         if lowered.contains("compacting conversation") || lowered.contains(/esc\b.{0,12}interrupt/) {
             return .busy
         }

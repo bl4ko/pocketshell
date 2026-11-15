@@ -1,0 +1,16 @@
+ ☐ Region
+
+Which region should the new bucket live in?
+
+❯ 1. eu-central-1
+     Frankfurt
+  2. eu-west-1
+     Ireland
+  3. us-east-1
+     Virginia
+↓ 4. ap-south-1
+     Mumbai
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

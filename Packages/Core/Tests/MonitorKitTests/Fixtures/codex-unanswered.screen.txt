@@ -1,0 +1,39 @@
+
+  >_ OpenAI Codex (v0.169.0)
+     ~/code/demo
+
+• Model changed to mock-model medium for Plan mode.
+
+
+› ask me two questions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Submit with unanswered questions?
+  1 unanswered question
+
+  › 1. Proceed  Submit with 1 unanswered question
+    2. Go back  Return to the first unanswered question
+
+  Press enter to confirm or esc to go back

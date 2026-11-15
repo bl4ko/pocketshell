@@ -763,7 +763,7 @@ private func showPrompt(_ rig: StagedRig) async {
     #expect(await eventually { rig.mouth.spoken == [askSentence] })
     rig.mouth.settle()
     rig.ears.phrase("keep it on")
-    #expect(await eventually { rig.commands.contains { $0.contains("pane send-text 'w1:p3' '2'") } })
+    #expect(await eventually { rig.commands.contains { $0.contains("agent send-keys 'w1:p3' down") } })
     let request = try #require(rig.model.requests.first)
     #expect(request.contains(.assistant(askSentence)))
     #expect(request.last == .user("keep it on"))

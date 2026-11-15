@@ -148,8 +148,10 @@ public enum PromptSpeech {
             .compactMap { $0 }.map { $0 + ": " }.joined() + prompt.question
         let options = prompt.options.map { option in
             "\(option.number) \(option.label)" + (option.freeText ? " (free text)" : "")
+                + (option.checked.map { $0 ? " (checked)" : " (unchecked)" } ?? "")
         }
-        return "asks «\(clip(question, 300))», options: " + options.joined(separator: "; ")
+        let many = prompt.isMultiSelect ? " (several answers allowed)" : ""
+        return "asks «\(clip(question, 300))»\(many), options: " + options.joined(separator: "; ")
     }
 
     public static func spokenQuestion(_ prompt: InteractivePrompt) -> (about: String?, question: String) {

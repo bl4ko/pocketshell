@@ -9,6 +9,20 @@ public enum AgentKey: String, Equatable, Sendable, CaseIterable {
     case enter
 }
 
+public enum MenuKey: String, Equatable, Sendable {
+    case up, down, left, right, space, tab, enter, esc
+
+    var tmuxName: String {
+        switch self {
+        case .esc: "Escape"
+        case .enter: "Enter"
+        case .tab: "Tab"
+        case .space: "Space"
+        default: rawValue.prefix(1).uppercased() + rawValue.dropFirst()
+        }
+    }
+}
+
 public enum AgentControl {
     static let tmux = "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux"
 
@@ -62,14 +76,16 @@ public enum AgentControl {
     }
 
     public static func arrowCommand(_ agent: BrainAgent, up: Bool, count: Int) -> String {
+        keysCommand(agent, Array(repeating: up ? .up : .down, count: max(count, 1)))
+    }
+
+    public static func keysCommand(_ agent: BrainAgent, _ keys: [MenuKey]) -> String {
         switch agent.location {
         case .tmux(_, _, _, let pane):
-            let keys = Array(repeating: up ? "Up" : "Down", count: max(count, 1)).joined(separator: " ")
-            return "\(tmux) send-keys -t \(HostAgents.shellQuote(pane)) \(keys)"
+            return "\(tmux) send-keys -t \(HostAgents.shellQuote(pane)) \(keys.map(\.tmuxName).joined(separator: " "))"
         case .herdr(let session, let pane, _, _):
-            let keys = Array(repeating: up ? "up" : "down", count: max(count, 1)).joined(separator: " ")
-            return "\(Herdr.commandPrefix(session: session)) agent send-keys \(HostAgents.shellQuote(pane)) \(keys)"
-                + " 2>&1 || true"
+            return "\(Herdr.commandPrefix(session: session)) agent send-keys \(HostAgents.shellQuote(pane))"
+                + " \(keys.map(\.rawValue).joined(separator: " ")) 2>&1 || true"
         }
     }
 

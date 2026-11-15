@@ -251,6 +251,7 @@ public final class VoiceBrain: ObservableObject {
         if shown.isEmpty, machine.promptOpen { feed(.promptClosed) }
         for event in detector.update(agents) {
             if event.prompt != nil, answered[event.agentID] == event.prompt { continue }
+            if let prompt = event.prompt, toolbox.handedOver[event.agentID]?.sameQuestion(prompt) == true { continue }
             events.push(event)
             feed(event.prompt != nil ? .promptQueued : .eventQueued)
         }
@@ -458,7 +459,10 @@ public final class VoiceBrain: ObservableObject {
         defer { refreshPendingSend() }
         switch toolbox.gate.resolve(userTurn: text) {
         case .confirmed(let pending):
+            let driven = AgentToolbox.agentID(pending.action)
+            if let driven { driving[driven] = .infinity }
             let result = await toolbox.perform(pending.action)
+            if let driven { driving[driven] = clock() + Self.toolGrace }
             appendUser(
                 "\(text)\n\n[app: The user confirmed \"\(pending.question)\". The action ran. Result: \(result)]")
         case .declined(let pending):

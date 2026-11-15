@@ -5,6 +5,7 @@ import TmuxKit
 public enum AgentAction: Equatable, Sendable {
     case sendPrompt(agentID: String, text: String)
     case answer(agentID: String, digit: String)
+    case choose(agentID: String, choice: PromptChoice)
     case key(agentID: String, key: AgentKey)
     case focus(agentID: String)
     case start(kind: AgentKind, directory: String?)
@@ -91,11 +92,16 @@ public enum SafetyPolicy {
             }
         case .answer(_, let digit):
             let label = AgentControl.optionLabel(digit, screen: screen)
+            if let label, let effect = effect(of: label) {
+                return "Should I choose «\(Self.short(label))» for \(name)? \(effect)"
+            }
             let choice = label.map { "option \(digit), \(Self.short($0))," } ?? "option \(digit)"
             if screen == nil || approval || mentionsRisk((screen ?? "") + " " + (label ?? "")) {
                 return "Should I choose \(choice) for \(name)?"
             }
             return nil
+        case .choose(_, let choice):
+            return question(for: choice, name: name, approval: approval, screen: screen)
         case .start(let kind, let directory):
             return "Should I start a new \(kind.displayName) session"
                 + (directory.map { " in \(($0 as NSString).lastPathComponent)" } ?? "") + "?"
@@ -104,6 +110,50 @@ public enum SafetyPolicy {
         case .session:
             return nil
         }
+    }
+
+    static func question(for choice: PromptChoice, name: String, approval: Bool, screen: String?) -> String? {
+        switch choice.action {
+        case .cancel, .toggle:
+            return nil
+        case .submit:
+            guard let prompt = screen.flatMap(InteractivePrompt.read),
+                prompt.reviewIncomplete || prompt.isSubmitConfirmation
+            else { return nil }
+            let open = prompt.tabs.filter { !$0.answered }.map(\.label)
+            return "Not every question is answered"
+                + (open.isEmpty ? "" : " (\(open.joined(separator: ", ")) still open)")
+                + ". Should I submit \(name)'s answers anyway?"
+        case .select:
+            for label in choice.labels {
+                if let effect = effect(of: label) { return "Should I choose «\(short(label))» for \(name)? \(effect)" }
+            }
+            let picked =
+                choice.labels.map { "«\(short($0))»" } + (choice.text.map { ["the answer «\(short($0))»"] } ?? [])
+            let words = choice.labels.joined(separator: " ") + " " + (choice.text ?? "")
+            guard screen == nil || approval || mentionsRisk((screen ?? "") + " " + words) else { return nil }
+            return "Should I choose \(picked.joined(separator: " and ")) for \(name)?"
+        }
+    }
+
+    public static func effect(of label: String) -> String? {
+        let text = label.lowercased().replacingOccurrences(of: "’", with: "'")
+        if ["bypass", "skip permissions", "dangerously", "full access"].contains(where: text.contains) {
+            return "From then on it runs every action without asking."
+        }
+        if text.contains("auto mode") {
+            return "It switches to auto mode: from then on it decides by itself which actions run without asking."
+        }
+        if text.contains("auto-accept") || text.contains("accept edits") {
+            return "From then on it edits files without asking."
+        }
+        if ["don't ask again", "always allow", "allow always", "remember"].contains(where: text.contains) {
+            return "It will not ask again before actions like this one."
+        }
+        if text.contains("allow") && text.contains("session") {
+            return "It will not ask again before actions like this one for the rest of this session."
+        }
+        return nil
     }
 
     public static func isApprovalPrompt(_ screen: String) -> Bool {

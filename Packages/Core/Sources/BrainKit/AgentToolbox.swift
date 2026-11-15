@@ -30,6 +30,7 @@ public final class AgentToolbox {
     }
 
     public private(set) var agents: [BrainAgent] = []
+    public internal(set) var handedOver: [String: InteractivePrompt] = [:]
     public private(set) var listed = false
     public var gate = ConfirmationGate()
     public var onSent: ((BrainAgent, String) -> Void)?
@@ -98,14 +99,7 @@ public final class AgentToolbox {
                 return await self.request(action, agent: agent)
             }
         case "answer_question":
-            let option = "\(arguments["option"] ?? "")"
-            return await withAgent(name) { agent in
-                let screen = await self.io.exec(AgentControl.screenCommand(agent))
-                guard let digit = AgentControl.optionDigit(option, screen: screen) else {
-                    return Self.error("No option matches \(option). Read the agent's screen options first.")
-                }
-                return await self.request(.answer(agentID: agent.id, digit: digit), agent: agent, screen: screen)
-            }
+            return await withAgent(name) { await self.answerQuestion($0, arguments) }
         case "send_key":
             if let sessions, arguments["target"] != nil || AgentKey(rawValue: arguments["key"] as? String ?? "") == nil
             {
@@ -179,6 +173,8 @@ public final class AgentToolbox {
         case .answer(_, let digit):
             command = AgentControl.textCommand(agent, text: digit)
             done = "Answered."
+        case .choose(_, let choice):
+            return await choose(agent, choice)
         case .key(_, let key):
             command = AgentControl.keyCommand(agent, key: key)
             done = "Done."
@@ -206,14 +202,14 @@ public final class AgentToolbox {
         return Self.done(done)
     }
 
-    private func request(_ action: AgentAction, agent: BrainAgent?, screen: String? = nil) async -> String {
+    func request(_ action: AgentAction, agent: BrainAgent?, screen: String? = nil) async -> String {
         if let question = SafetyPolicy.question(for: action, agent: agent, screen: screen) {
             return hold(action, question: question)
         }
         return await perform(action)
     }
 
-    private func hold(_ action: AgentAction, question: String) -> String {
+    func hold(_ action: AgentAction, question: String) -> String {
         gate.hold(action, question: question)
         let instruction =
             question.hasPrefix(PromptFidelity.readBackPrefix)
@@ -272,7 +268,9 @@ public final class AgentToolbox {
 
     static func agentID(_ action: AgentAction) -> String? {
         switch action {
-        case .sendPrompt(let id, _), .answer(let id, _), .key(let id, _), .focus(let id), .close(let id): id
+        case .sendPrompt(let id, _), .answer(let id, _), .choose(let id, _), .key(let id, _), .focus(let id),
+            .close(let id):
+            id
         case .start, .session: nil
         }
     }
@@ -320,11 +318,27 @@ public final class AgentToolbox {
             required: ["text"]),
         tool(
             "answer_question",
-            "Choose an option in a question, permission, or selection prompt the agent shows.",
+            "Answer the question, permission, or selection menu an agent shows, the way the user would with the keys. "
+                + "select chooses one option, or on a multi-select question checks exactly the options named and "
+                + "submits; toggle only flips the named checkboxes; submit sends a multi-select question or the "
+                + "final review; cancel presses Esc. text types the user's own words into the free-text option "
+                + "(Type something / None of the above) and submits them. One call answers the current question; "
+                + "the result shows the next question of a multi-question dialog, which the app submits only once "
+                + "every question is answered.",
             [
                 "agent": agentParameter,
                 "option": .object(["type": "string", "description": "Option number, or words from its label."]),
-            ], required: ["option"]),
+                "options": .object([
+                    "type": "array", "items": .object(["type": "string"]),
+                    "description": "Several options for a multi-select question.",
+                ]),
+                "text": .object([
+                    "type": "string", "description": "The user's own words for the free-text option, not a paraphrase.",
+                ]),
+                "action": .object([
+                    "type": "string", "enum": .array(PromptChoice.Action.allCases.map { .string($0.rawValue) }),
+                ]),
+            ]),
         tool(
             "send_key",
             "Press a key in an agent, or with target in any tab, window, or pane: esc cancels or interrupts, ctrl_c "

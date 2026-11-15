@@ -68,3 +68,93 @@ private func screen(_ name: String) throws -> String {
     let gap = "Pick one?\n❯ 1. a\n  3. c\n\nEnter to select · Esc to cancel"
     #expect(InteractivePrompt.read(gap) == nil)
 }
+
+@Test func claudeSingleQuestionFromVersion322ReadsTheTypedAnswerRow() throws {
+    let prompt = try #require(InteractivePrompt.read(try screen("claude-ask-single.screen")))
+    #expect(prompt.header == "Cache" && prompt.question == "Which database should the cache use?")
+    #expect(prompt.options.map(\.label) == ["Redis", "Postgres", "SQLite", "Type something.", "Chat about this"])
+    #expect(prompt.listed.map(\.number) == [1, 2, 3, 4])
+    #expect(prompt.options[3].isTypeSomething && !prompt.isMultiSelect && prompt.tabs.isEmpty)
+    #expect(!prompt.moreAbove && !prompt.moreBelow)
+    let typed = try #require(InteractivePrompt.read(try screen("claude-ask-single-typed.screen")))
+    #expect(typed.highlighted == 4 && typed.options[3].label == "use the redis cluster in eu")
+    #expect(typed.sameQuestion(prompt) && !typed.options[3].isTypeSomething)
+}
+
+@Test func claudeScrolledListsReadTheVisibleWindowAndKnowRowsAreHidden() throws {
+    let top = try #require(InteractivePrompt.read(try screen("claude-ask-scroll-top.screen")))
+    #expect(top.listed.map(\.number) == [1, 2, 3, 4])
+    #expect(top.options.last?.isChat == true && top.options.last?.number == 6)
+    #expect(!top.moreAbove && top.moreBelow && top.highlighted == 1)
+    let bottom = try #require(InteractivePrompt.read(try screen("claude-ask-scroll-bottom.screen")))
+    #expect(bottom.listed.map(\.number) == [2, 3, 4, 5])
+    #expect(bottom.moreAbove && !bottom.moreBelow && bottom.highlighted == 5)
+    #expect(bottom.listed.last?.isTypeSomething == true)
+}
+
+@Test func claudeMultiSelectReadsCheckboxesAndTheSubmitButton() throws {
+    let fresh = try #require(InteractivePrompt.read(try screen("claude-ask-multi.screen")))
+    #expect(fresh.isMultiSelect && fresh.tabs == [.init(label: "Checks", answered: false)] && fresh.header == "Checks")
+    #expect(fresh.listed.map(\.label) == ["Unit tests", "UI tests", "Lint", "Coverage", "Type something"])
+    #expect(fresh.listed.allSatisfy { $0.checked == false })
+    #expect(fresh.options[0].detail == "swift test")
+    #expect(fresh.button == .init(label: "Submit", highlighted: false))
+    let submit = try #require(InteractivePrompt.read(try screen("claude-ask-multi-submit.screen")))
+    #expect(submit.highlighted == nil && submit.button == .init(label: "Submit", highlighted: true))
+    #expect(submit.listed.filter { $0.checked == true }.map(\.label) == ["UI tests", "Lint", "fuzz the parser"])
+    #expect(submit.tabs == [.init(label: "Checks", answered: true)])
+}
+
+@Test func claudeMultiQuestionTabsAndTheReviewStep() throws {
+    let second = try #require(InteractivePrompt.read(try screen("claude-ask-tabs-q2.screen")))
+    #expect(second.question == "Which features should ship in v1?" && second.header == nil)
+    #expect(second.tabs.map(\.label) == ["Auth", "Features", "Logs"])
+    #expect(second.tabs.map(\.answered) == [true, false, false])
+    #expect(second.button?.label == "Next")
+    let next = try #require(InteractivePrompt.read(try screen("claude-ask-tabs-q2-next.screen")))
+    #expect(next.button?.highlighted == true && next.sameQuestion(second))
+
+    let open = try #require(InteractivePrompt.read(try screen("claude-ask-review-unanswered.screen")))
+    #expect(open.isReview && open.reviewIncomplete)
+    #expect(open.options.map(\.label) == ["Submit answers", "Cancel"] && open.highlighted == 1)
+    #expect(open.tabs.map(\.answered) == [true, true, false])
+    #expect(open.context.contains("Which features should ship in v1?"))
+    let done = try #require(InteractivePrompt.read(try screen("claude-ask-review-complete.screen")))
+    #expect(done.isReview && !done.reviewIncomplete && done.tabs.allSatisfy(\.answered))
+    #expect(!done.sameQuestion(second))
+}
+
+@Test func unnumberedArrowListsReadTheHighlightedRow() throws {
+    let trust = try #require(InteractivePrompt.read(try screen("claude-trust.screen")))
+    #expect(!trust.numbered && trust.options.map(\.label) == ["No, exit", "Yes, I trust this folder"])
+    #expect(trust.highlighted == 1)
+    let key = try #require(InteractivePrompt.read(try screen("claude-apikey.screen")))
+    #expect(key.question == "Do you want to use this API key?")
+    #expect(key.options.map(\.label) == ["Yes", "No (recommended)"] && key.highlighted == 2)
+}
+
+@Test func claudePermissionFromVersion322AndTheCodexSubmitConfirmation() throws {
+    let permission = try #require(InteractivePrompt.read(try screen("claude-permission-auto.screen")))
+    #expect(permission.question == "Do you want to proceed?")
+    #expect(permission.options.map(\.number) == [1, 2, 3, 4] && permission.options.last?.label == "No")
+    let confirm = try #require(InteractivePrompt.read(try screen("codex-unanswered.screen")))
+    #expect(confirm.isSubmitConfirmation && confirm.options.map(\.label) == ["Proceed", "Go back"])
+    let codex = try #require(InteractivePrompt.read(try screen("codex-question.screen")))
+    #expect(codex.progress?.index == 2 && codex.progress?.total == 3)
+    #expect(codex.options.last?.isTypeSomething == true)
+}
+
+extension InteractivePrompt {
+    fileprivate var listed: [Option] { options.filter { !$0.isChat } }
+}
+
+@Test func codexQuestionsFromVersion169ReadProgressAndNotes() throws {
+    let question = try #require(InteractivePrompt.read(try screen("codex-question-169.screen")))
+    #expect(question.header == "Question 1/2 (2 unanswered)" && question.progress?.total == 2)
+    #expect(question.question == "Which realm should the alert watch?")
+    #expect(question.options.map(\.label) == ["Home", "Lab", "None of the above"] && question.highlighted == 1)
+    let notes = try #require(InteractivePrompt.read(try screen("codex-notes.screen")))
+    #expect(notes.highlighted == 3 && notes.sameQuestion(question))
+    #expect(notes.progress?.index == 1 && notes.question == question.question)
+    #expect(try screen("codex-notes.screen").contains("to clear notes"))
+}

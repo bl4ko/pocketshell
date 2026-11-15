@@ -312,6 +312,14 @@ public enum AgentModelSwitch {
     struct Driver {
         let agent: BrainAgent
         let io: IO
+        let menu: MenuDriver<ModelPicker>
+
+        init(agent: BrainAgent, io: IO) {
+            self.agent = agent
+            self.io = io
+            menu = MenuDriver(
+                agent: agent, exec: io.exec, sleep: io.sleep, parse: ModelPicker.parse, same: { $0.step == $1.step })
+        }
 
         var notOpened: String { "\(agent.kind.displayName) did not open its model menu. Nothing changed." }
 
@@ -343,62 +351,22 @@ public enum AgentModelSwitch {
         }
 
         func wait(_ condition: (ModelPicker) -> Bool) async -> ModelPicker? {
-            for _ in 0..<12 {
-                await io.sleep(.milliseconds(150))
-                guard let screen = await io.exec(AgentControl.screenCommand(agent)),
-                    let picker = ModelPicker.parse(screen), condition(picker)
-                else { continue }
-                return picker
-            }
-            return nil
+            await menu.wait(condition)
         }
 
         func move(from picker: ModelPicker, to number: Int) async -> ModelPicker? {
-            guard let highlighted = picker.highlighted else { return nil }
-            if highlighted == number { return picker }
-            let command = AgentControl.arrowCommand(
-                agent, up: number < highlighted, count: abs(number - highlighted))
-            guard await io.exec(command) != nil else { return nil }
-            return await wait { $0.step == picker.step && $0.highlighted == number }
+            await menu.move(from: picker, to: number)
         }
 
         func collect(_ first: ModelPicker) async -> (rows: [ModelRow], last: ModelPicker) {
-            var rows: [Int: ModelRow] = [:]
-            func merge(_ picker: ModelPicker) {
-                for row in picker.rows where rows[row.number] == nil { rows[row.number] = row }
-            }
-            merge(first)
-            var picker = first
-            func sorted() -> [ModelRow] {
-                rows.values.sorted { $0.number < $1.number }.map {
+            let (rows, last) = await menu.collect(first)
+            return (
+                rows.map {
                     var row = $0
                     row.isHighlighted = false
                     return row
-                }
-            }
-            guard first.moreAbove || first.moreBelow else { return (sorted(), picker) }
-            if let top = await move(from: picker, to: 1) {
-                picker = top
-                merge(top)
-            } else {
-                return (sorted(), picker)
-            }
-            guard await io.exec(AgentControl.arrowCommand(agent, up: true, count: 1)) != nil,
-                let bottom = await wait({ $0.step == .model && $0.highlighted != 1 }),
-                let total = bottom.highlighted
-            else { return (sorted(), picker) }
-            picker = bottom
-            merge(bottom)
-            var previous: Int?
-            for _ in 0..<12 {
-                guard let missing = (1...total).last(where: { rows[$0] == nil }) else { break }
-                let target = missing == previous ? missing : max(1, missing - max(1, picker.rows.count) + 1)
-                previous = missing
-                guard let moved = await move(from: picker, to: target) else { break }
-                picker = moved
-                merge(moved)
-            }
-            return (sorted(), picker)
+                }, last
+            )
         }
     }
 }

@@ -1,0 +1,28 @@
+
+ ▐▛███▛█   Claude Code v2.1.322
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   ~/code/demo
+
+▎ Auto mode is now Claude Code's default permission mode.
+▎ Auto mode lets Claude handle permission prompts automatically. Claude checks each tool call for
+▎ risky actions and prompt injection before executing, runs the ones it assesses as lower-risk, and
+▎ blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+
+❯ single
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Cache
+
+Which database should the cache use?
+
+  1. Redis
+     In-memory, already deployed in the cluster.
+  2. Postgres
+     One less service; slower.
+  3. SQLite
+     Local file per pod.
+❯ 4. use the redis cluster in eu
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · ctrl+g to edit in Nvim · Esc to cancel

@@ -13,6 +13,7 @@ struct VoiceSettingsSections: View {
     @AppStorage(BrainSettings.mouthKey) private var mouthRaw = ""
     @AppStorage(BrainSettings.turnEndKey) private var turnEnd = TurnEnd.balanced
     @AppStorage(BrainSettings.saveAudioKey) private var saveAudio = false
+    @AppStorage(BrainSettings.readRepliesKey) private var readReplies = ""
     @State private var brainKeySaved = PasswordVault.get(account: BrainSettings.apiKeyAccount) != nil
     @State private var sonioxKeySaved = BrainSettings.sonioxKey != nil
     @State private var systemVoices: [VoiceChoice] = []
@@ -65,6 +66,12 @@ struct VoiceSettingsSections: View {
             KeychainKeyRow(
                 title: "API key", account: BrainSettings.apiKeyAccount, saved: $brainKeySaved, id: "settings.brain.key")
             BrainModelRows(endpoint: brainURL, keySaved: brainKeySaved)
+            Toggle(
+                "Read replies aloud",
+                isOn: Binding(
+                    get: { BrainSettings.readsReplies(readReplies) }, set: { readReplies = $0 ? "on" : "off" })
+            )
+            .accessibilityIdentifier("settings.brain.readReplies")
         } header: {
             Text("Voice brain")
         } footer: {

@@ -21,7 +21,7 @@ final class VoiceSync: ObservableObject {
 
     static let settingKeys = [
         BrainSettings.baseURLKey, BrainSettings.modelKey, BrainSettings.earsKey, BrainSettings.mouthKey,
-        BrainSettings.sonioxVoiceKey, BrainSettings.turnEndKey,
+        BrainSettings.sonioxVoiceKey, BrainSettings.turnEndKey, BrainSettings.readRepliesKey,
     ]
     static let keyAccounts = [BrainSettings.apiKeyAccount, BrainSettings.sonioxKeyAccount]
     static let settingsStateKey = "pocketshell.voiceSync.settings"

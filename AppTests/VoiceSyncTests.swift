@@ -40,6 +40,7 @@ struct VoiceSyncTests {
         BrainSettings.baseURLKey: "https://example.com/v1", BrainSettings.modelKey: "small",
         BrainSettings.earsKey: "soniox", BrainSettings.mouthKey: "soniox",
         BrainSettings.sonioxVoiceKey: "Grace", BrainSettings.turnEndKey: "fast",
+        BrainSettings.readRepliesKey: "off",
     ]
     private let later = Date().addingTimeInterval(3600)
 
@@ -162,5 +163,17 @@ struct VoiceSyncTests {
         #expect(VoiceSyncNote.note(sync: false, credentials: true).contains("stay on this device"))
         #expect(VoiceSyncNote.note(sync: true, credentials: false).contains("Keys stay on this device"))
         #expect(VoiceSyncNote.note(sync: true, credentials: true) == "Settings and keys sync through iCloud Keychain.")
+    }
+
+    @Test func readingRepliesIsOnUntilAnyDeviceTurnsItOff() {
+        #expect(BrainSettings.readsReplies(nil))
+        #expect(BrainSettings.readsReplies(""))
+        #expect(BrainSettings.readsReplies("on"))
+        #expect(!BrainSettings.readsReplies("off"))
+        let phone = Device()
+        let pad = Device()
+        phone.defaults.set("off", forKey: BrainSettings.readRepliesKey)
+        pad.sync.receive(settings: phone.sync.settings(now: later))
+        #expect(!BrainSettings.readsReplies(pad.defaults.string(forKey: BrainSettings.readRepliesKey)))
     }
 }

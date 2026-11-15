@@ -19,6 +19,7 @@ enum BrainSettings {
     static let mouthKey = "pocketshell.speechMouth"
     static let sonioxVoiceKey = "pocketshell.sonioxVoice"
     static let turnEndKey = "pocketshell.speechTurnEnd"
+    static let readRepliesKey = "pocketshell.brainReadReplies"
     static let sonioxKeyAccount = "pocketshell.soniox.apiKey"
     static let saveAudioKey = "pocketshell.benchmarkSaveAudio"
 
@@ -46,6 +47,10 @@ enum BrainSettings {
     static var turnEnd: TurnEnd {
         UserDefaults.standard.string(forKey: turnEndKey).flatMap(TurnEnd.init(rawValue:)) ?? .balanced
     }
+
+    static var readsReplies: Bool { readsReplies(UserDefaults.standard.string(forKey: readRepliesKey)) }
+
+    static func readsReplies(_ raw: String?) -> Bool { raw != "off" }
 
     static func selection() -> SpeechSelection {
         let defaults = UserDefaults.standard
@@ -129,6 +134,7 @@ final class VoiceBrainSession: ObservableObject {
             toolbox: toolbox, store: ConversationStore(directory: directory), audio: parts.lifecycle)
         let providers = BrainSettings.providers(selection)
         brain.providers = providers
+        brain.readsReplies = BrainSettings.readsReplies
         brain.onDictation = onDictation
         let log = BrainSettings.benchmarkLog
         brain.onTurnTimed = { timing in Task.detached { log.append(timing) } }

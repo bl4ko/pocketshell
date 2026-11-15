@@ -50,7 +50,8 @@ public final class FallbackMouth: VoiceMouth {
     private let fallback: VoiceMouth
     private let clock: @MainActor () -> TimeInterval
     private let cooldown: TimeInterval
-    private var fallingBack = false
+    private var pinned: Bool?
+    private var replyOpen = false
     private var failedAt: TimeInterval?
 
     public init(
@@ -67,40 +68,46 @@ public final class FallbackMouth: VoiceMouth {
     }
 
     public var usingFallback: Bool {
-        disabled || fallingBack || failedAt.map { clock() < $0 + cooldown } == true
+        pinned ?? (disabled || failedAt.map { clock() < $0 + cooldown } == true)
+    }
+
+    private var active: VoiceMouth {
+        let useFallback = usingFallback
+        pinned = useFallback
+        return useFallback ? fallback : primary
     }
 
     public func speak(_ text: String) {
-        if usingFallback {
-            fallback.speak(text)
-        } else {
-            primary.speak(text)
-        }
+        active.speak(text)
     }
 
     public func stream(_ delta: String, reply: Int) {
-        if usingFallback {
-            fallback.stream(delta, reply: reply)
-        } else {
-            primary.stream(delta, reply: reply)
-        }
+        replyOpen = true
+        active.stream(delta, reply: reply)
     }
 
     public func finish() {
         primary.finish()
         fallback.finish()
+        replyOpen = false
+        release()
     }
 
     public func stop() {
         primary.stop()
         fallback.stop()
-        fallingBack = false
+        replyOpen = false
+        pinned = nil
         settle()
+    }
+
+    private func release() {
+        if !replyOpen, !primary.isSpeaking, !fallback.isSpeaking { pinned = nil }
     }
 
     private func primaryFailed(_ error: SonioxError, _ unspoken: [Utterance], _ open: Int?) {
         failures += 1
-        fallingBack = true
+        pinned = true
         failedAt = clock()
         if error.kind == .auth { disabled = true }
         onNotice?(error.notice + ", using on-device voice")
@@ -112,6 +119,7 @@ public final class FallbackMouth: VoiceMouth {
             fallback.stream(item.text, reply: reply)
             if index < unspoken.count - 1 || open != reply { fallback.finish() }
         }
+        release()
     }
 
     private func forward(_ event: MouthEvent) {
@@ -124,10 +132,10 @@ public final class FallbackMouth: VoiceMouth {
     }
 
     private func settle() {
+        release()
         let speaking = primary.isSpeaking || fallback.isSpeaking
         guard speaking != isSpeaking else { return }
         isSpeaking = speaking
-        if !speaking { fallingBack = false }
         onEvent?(speaking ? .started : .idle)
     }
 }

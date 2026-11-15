@@ -397,6 +397,7 @@
             var unspoken: [Utterance] = []
             for id in order {
                 guard var stream = streams[id] else { continue }
+                if stream.offset == nil { stream.marks = [] }
                 Self.report(&stream, at: .infinity, into: &events)
                 let rest = Self.remainder(of: stream.text, after: stream.marks)
                 if !rest.isEmpty { unspoken.append(Utterance(rest, reply: stream.reply)) }

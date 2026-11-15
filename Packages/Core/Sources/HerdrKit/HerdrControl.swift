@@ -1,4 +1,5 @@
 import Foundation
+import Models
 
 public struct HerdrOutline: Equatable, Sendable {
     public struct Pane: Equatable, Sendable, Identifiable {
@@ -12,6 +13,8 @@ public struct HerdrOutline: Equatable, Sendable {
         public var focused: Bool
         public var cwd: String?
         public var label: String?
+        public var sessionTitle: String?
+        public var name: String
     }
 
     public struct Tab: Equatable, Sendable, Identifiable {
@@ -19,10 +22,31 @@ public struct HerdrOutline: Equatable, Sendable {
         public var tabID: String
         public var workspaceID: String
         public var label: String
+        public var number: Int?
         public var status: HerdrAgentStatus?
         public var focused: Bool
         public var zoomed: Bool
         public var panes: [Pane]
+
+        public var hasDefaultLabel: Bool {
+            label.isEmpty || label.allSatisfy(\.isNumber)
+        }
+
+        public var sessionTitle: String? {
+            panes.count == 1 ? panes[0].sessionTitle : nil
+        }
+
+        public var displayName: String {
+            sessionTitle ?? (hasDefaultLabel ? "Tab \(number.map(String.init) ?? label)" : label)
+        }
+
+        public var singlePaneRow: (title: String, detail: String)? {
+            guard panes.count == 1, let pane = panes.first else { return nil }
+            let label = hasDefaultLabel ? nil : label
+            let title = pane.sessionTitle ?? label ?? pane.title
+            let parts = [label, pane.title] + pane.detail.components(separatedBy: " · ")
+            return (title, HerdrOutline.detail(parts, excluding: [title]))
+        }
     }
 
     public struct Workspace: Equatable, Sendable, Identifiable {
@@ -67,18 +91,18 @@ public struct HerdrOutline: Equatable, Sendable {
             let hasAgent = agent != nil || pane.agent != nil
             let kind = agent?.displayAgent ?? pane.agent ?? agent?.agent
             let cwd = pane.foregroundCwd ?? pane.cwd
-            let title =
+            let name =
                 [agent?.name, pane.label, kind, cwd.map(Self.folderName)]
                 .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
                 .first { !$0.isEmpty } ?? "shell"
-            let detail = [kind == title ? nil : kind, agent?.title, cwd.map(Self.shortPath)]
-                .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-                .joined(separator: " · ")
+            let sessionTitle = hasAgent ? agent?.sessionTitle : nil
+            let title = sessionTitle ?? name
+            let detail = Self.detail([name, kind, agent?.title, cwd.map(Self.shortPath)], excluding: [title])
             return Pane(
                 paneID: pane.paneID, tabID: pane.tabID, workspaceID: pane.workspaceID, title: title, detail: detail,
                 status: hasAgent ? agent?.status ?? pane.status : nil,
-                focused: focusedPaneID.map { $0 == pane.paneID } ?? pane.focused, cwd: cwd, label: pane.label)
+                focused: focusedPaneID.map { $0 == pane.paneID } ?? pane.focused, cwd: cwd, label: pane.label,
+                sessionTitle: sessionTitle, name: name)
         }
 
         func outlineTab(_ tab: HerdrTab) -> Tab {
@@ -89,7 +113,7 @@ public struct HerdrOutline: Equatable, Sendable {
             let outlined = ordered.map(outlinePane)
             let agentStatus = outlined.contains { $0.status != nil } ? tab.status : nil
             return Tab(
-                tabID: tab.tabID, workspaceID: tab.workspaceID, label: tab.label,
+                tabID: tab.tabID, workspaceID: tab.workspaceID, label: tab.label, number: tab.number,
                 status: agentStatus ?? Self.mostUrgent(outlined.compactMap(\.status)),
                 focused: snapshot.focusedTabID.map { $0 == tab.tabID } ?? outlined.contains(where: \.focused),
                 zoomed: layout?.zoomed ?? false, panes: outlined)
@@ -163,6 +187,19 @@ public struct HerdrOutline: Equatable, Sendable {
             return kept.tabs.isEmpty ? nil : kept
         }
         return result
+    }
+
+    public static func detail(_ parts: [String?], excluding shown: [String?] = []) -> String {
+        var seen = shown.compactMap { $0?.lowercased() }
+        var kept: [String] = []
+        for part in parts {
+            guard let part = part?.trimmingCharacters(in: .whitespaces), !part.isEmpty,
+                !seen.contains(part.lowercased())
+            else { continue }
+            seen.append(part.lowercased())
+            kept.append(part)
+        }
+        return kept.joined(separator: " · ")
     }
 
     static func mostUrgent(_ statuses: [HerdrAgentStatus]) -> HerdrAgentStatus? {

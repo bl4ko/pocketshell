@@ -62,7 +62,7 @@ let package = Package(
             ], swiftSettings: strict),
         .target(name: "ReconnectKit", dependencies: ["Models"], swiftSettings: strict),
         .target(name: "TmuxKit", dependencies: ["Models"], swiftSettings: strict),
-        .target(name: "HerdrKit", swiftSettings: strict),
+        .target(name: "HerdrKit", dependencies: ["Models"], swiftSettings: strict),
         .target(
             name: "TerminalUI",
             dependencies: [

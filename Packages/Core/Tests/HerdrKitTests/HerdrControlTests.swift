@@ -344,3 +344,79 @@ private func withoutAgents(_ snapshot: HerdrSnapshot, in paneIDs: Set<String>? =
     #expect(agents.filtered(by: "reviewer").panes.map(\.paneID) == ["w1:p3"])
     #expect(agents.filtered(by: "~").panes.map(\.paneID) == ["w1:p1", "w1:p3"])
 }
+
+private let titledSnapshot = """
+    {"result":{"snapshot":{"version":"0.9.5","protocol":3,"focused_workspace_id":"w1","focused_tab_id":"w1:t1",
+      "focused_pane_id":"w1:p1",
+      "workspaces":[{"workspace_id":"w1","label":"github","focused":true,"agent_status":"done","number":1}],
+      "agents":[
+        {"pane_id":"w1:p1","workspace_id":"w1","tab_id":"w1:t1","agent":"claude","agent_status":"done",
+         "focused":true,"cwd":"/Users/me/github","foreground_cwd":"/Users/me/github",
+         "terminal_title":"✳ CPAMC","terminal_title_stripped":"CPAMC"},
+        {"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t2","agent":"codex","agent_status":"idle",
+         "focused":false,"cwd":"/Users/me/github","terminal_title":"⠋ QBIT-FIX | github"},
+        {"pane_id":"w1:p3","workspace_id":"w1","tab_id":"w1:t3","agent":"claude","agent_status":"idle",
+         "focused":false,"terminal_title":"✳ Claude Code","terminal_title_stripped":"Claude Code"},
+        {"pane_id":"w1:p5","workspace_id":"w1","tab_id":"w1:t4","agent":"claude","agent_status":"working",
+         "focused":false,"terminal_title_stripped":"Mini rack | shelf"}
+      ],
+      "tabs":[
+        {"tab_id":"w1:t1","workspace_id":"w1","label":"cpamc","number":1,"agent_status":"done","pane_count":1},
+        {"tab_id":"w1:t2","workspace_id":"w1","label":"2","number":2,"agent_status":"idle","pane_count":1},
+        {"tab_id":"w1:t3","workspace_id":"w1","label":"3","number":3,"agent_status":"idle","pane_count":1},
+        {"tab_id":"w1:t4","workspace_id":"w1","label":"print","number":4,"agent_status":"working","pane_count":2}
+      ],
+      "panes":[
+        {"pane_id":"w1:p1","workspace_id":"w1","tab_id":"w1:t1","agent":"claude","agent_status":"done","focused":true,
+         "cwd":"/Users/me/github"},
+        {"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t2","agent":"codex","agent_status":"idle","focused":false,
+         "cwd":"/Users/me/github"},
+        {"pane_id":"w1:p3","workspace_id":"w1","tab_id":"w1:t3","agent":"claude","agent_status":"idle","focused":false,
+         "cwd":"/Users/me/github"},
+        {"pane_id":"w1:p4","workspace_id":"w1","tab_id":"w1:t4","agent_status":"unknown","focused":false,
+         "cwd":"/Users/me/github","label":"logs"},
+        {"pane_id":"w1:p5","workspace_id":"w1","tab_id":"w1:t4","agent":"claude","agent_status":"working",
+         "focused":false,"cwd":"/Users/me/github"}
+      ]
+    }}}
+    """
+
+@Test func agentPanesAndSinglePaneTabsShowTheAgentSessionTitle() throws {
+    let snapshot = try #require(Herdr.parseSnapshot(titledSnapshot))
+    #expect(snapshot.agents.map(\.sessionTitle) == ["CPAMC", "QBIT-FIX", nil, "Mini rack | shelf"])
+    let tabs = try #require(HerdrOutline(snapshot).workspaces.first?.tabs)
+
+    #expect(tabs[0].panes[0].title == "CPAMC")
+    #expect(tabs[0].panes[0].name == "claude")
+    #expect(tabs[0].panes[0].detail == "claude · …/me/github")
+    #expect(tabs[0].singlePaneRow?.title == "CPAMC")
+    #expect(tabs[0].singlePaneRow?.detail == "claude · …/me/github")
+    #expect(tabs[1].singlePaneRow?.title == "QBIT-FIX")
+    #expect(tabs[1].singlePaneRow?.detail == "codex · …/me/github")
+    #expect(tabs[2].singlePaneRow?.title == "claude")
+    #expect(tabs[2].displayName == "Tab 3")
+    #expect(tabs[0].displayName == "CPAMC")
+    #expect(tabs[3].singlePaneRow == nil)
+    #expect(tabs[3].panes.map(\.title) == ["logs", "Mini rack | shelf"])
+    #expect(tabs[3].sessionTitle == nil)
+    #expect(tabs.map(\.number) == [1, 2, 3, 4])
+}
+
+@Test func switcherSearchFindsAgentsByTheirSessionTitle() throws {
+    let outline = HerdrOutline(try #require(Herdr.parseSnapshot(titledSnapshot)))
+    #expect(outline.filtered(by: "cpamc").panes.map(\.paneID) == ["w1:p1"])
+    #expect(outline.filtered(by: "shelf").panes.map(\.paneID) == ["w1:p5"])
+    #expect(outline.filtered(by: "codex").panes.map(\.paneID) == ["w1:p2"])
+}
+
+@Test func namedTabsKeepTheirLabelUnderTheTitle() throws {
+    var snapshot = try #require(Herdr.parseSnapshot(titledSnapshot))
+    snapshot.tabs?[1].label = "infra"
+    let tab = try #require(HerdrOutline(snapshot).workspaces.first?.tabs[1])
+    #expect(tab.singlePaneRow?.title == "QBIT-FIX")
+    #expect(tab.singlePaneRow?.detail == "infra · codex · …/me/github")
+    snapshot.agents[1].terminalTitle = nil
+    let untitled = try #require(HerdrOutline(snapshot).workspaces.first?.tabs[1])
+    #expect(untitled.singlePaneRow?.title == "infra")
+    #expect(untitled.singlePaneRow?.detail == "codex · …/me/github")
+}

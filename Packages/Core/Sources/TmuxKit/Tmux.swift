@@ -7,14 +7,22 @@ public struct TmuxWindow: Equatable, Hashable, Sendable, Identifiable {
     public var active: Bool
     // tmux window_id (@N): stable across renumber-windows, unlike the index.
     public var windowID: String?
+    public var command: String?
+    public var title: String?
 
     public var id: Int { index }
 
-    public init(index: Int, name: String, active: Bool, windowID: String? = nil) {
+    public var shownName: String { title ?? name }
+
+    public init(
+        index: Int, name: String, active: Bool, windowID: String? = nil, command: String? = nil, title: String? = nil
+    ) {
         self.index = index
         self.name = name
         self.active = active
         self.windowID = windowID
+        self.command = command
+        self.title = title
     }
 }
 
@@ -126,9 +134,11 @@ public enum AgentStatus: Equatable, Sendable {
 public enum Tmux {
     static let tmux = "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux"
 
-    // window_name goes last: it is the only field that can contain '|'.
+    // tmux drops tabs from pane titles and rejects them in window names, so a tab
+    // separates the two fields that can contain '|'.
     public static func listWindowsCommand(session: String) -> String {
-        "\(tmux) list-windows -t \(shellQuote(session)) -F '#{window_index}|#{window_id}|#{window_active}|#{window_name}'"
+        "\(tmux) list-windows -t \(shellQuote(session)) -F "
+            + "'#{window_index}|#{window_id}|#{window_active}|#{pane_current_command}|#{host}|#{pane_title}\t#{window_name}'"
     }
 
     public static func listSessionsCommand() -> String {
@@ -344,6 +354,16 @@ public enum Tmux {
 
     public static func parseWindows(_ output: String) -> [TmuxWindow] {
         output.split(separator: "\n").compactMap { line in
+            if let tab = line.firstIndex(of: "\t") {
+                let parts = line[..<tab].split(separator: "|", maxSplits: 5, omittingEmptySubsequences: false)
+                guard parts.count == 6, let index = Int(parts[0]), parts[1].hasPrefix("@"), let active = flag(parts[2])
+                else { return nil }
+                let command = String(parts[3])
+                return TmuxWindow(
+                    index: index, name: String(line[line.index(after: tab)...]), active: active,
+                    windowID: String(parts[1]), command: command,
+                    title: sessionTitle(paneTitle: String(parts[5]), command: command, host: String(parts[4])))
+            }
             let parts = line.split(separator: "|", omittingEmptySubsequences: false)
             guard parts.count >= 4,
                 let index = Int(parts[0]),
@@ -355,6 +375,16 @@ public enum Tmux {
         }
     }
 
+    // tmux sets pane_title to the hostname until the program sets one; shells set
+    // prompt titles, so only a pane running something else names a session.
+    public static func sessionTitle(paneTitle: String, command: String, host: String, cwd: String? = nil) -> String? {
+        guard !isInteractiveShell(command) else { return nil }
+        guard let title = SessionTitle.clean(paneTitle, host: host, cwd: cwd), !isPlaceholderWindowName(title),
+            title != command
+        else { return nil }
+        return title
+    }
+
     // automatic-rename sets window_name to "[tmux]" while a pane is in copy
     // mode and "[dead]" when it died - transient placeholders, never real names.
     public static func isPlaceholderWindowName(_ name: String) -> Bool {
@@ -362,14 +392,16 @@ public enum Tmux {
     }
 
     public static func liveWindowName(terminalTitle: String?, windowName: String, agentRunning: Bool) -> String {
-        guard agentRunning, let terminalTitle else { return windowName }
-        let title = terminalTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty || isPlaceholderWindowName(title) ? windowName : title
+        guard agentRunning, let title = SessionTitle.clean(terminalTitle), !isPlaceholderWindowName(title) else {
+            return windowName
+        }
+        return title
     }
 
     public static func windowDisplayName(window: TmuxWindow, session: String, records: [TabRecord]) -> String {
         let record = records.first { $0.tmuxSession == session && $0.windowIndex == window.index }
         if let name = record?.name, !name.isEmpty { return name }
+        if let title = window.title { return title }
         if let name = record?.windowName, !isPlaceholderWindowName(name) { return name }
         if !isPlaceholderWindowName(window.name) { return window.name }
         return "window \(window.index)"

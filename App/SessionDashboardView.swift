@@ -17,7 +17,7 @@ struct DashboardRow: View {
                 Circle()
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
-                Text("\(item.window.index): \(item.window.name)")
+                Text("\(item.window.index): \(item.window.shownName)")
                     .font(.subheadline.weight(.medium))
                 Text(statusLabel)
                     .font(.caption2)

@@ -1,4 +1,5 @@
 import Foundation
+import Models
 
 public struct HerdrSession: Codable, Equatable, Sendable, Identifiable {
     public var name: String
@@ -77,14 +78,25 @@ public struct HerdrAgent: Codable, Equatable, Sendable, Identifiable {
     public var title: String?
     public var status: HerdrAgentStatus
     public var focused: Bool
+    public var terminalTitle: String?
+    public var terminalTitleStripped: String?
+    public var cwd: String?
+    public var foregroundCwd: String?
 
     enum CodingKeys: String, CodingKey {
         case paneID = "pane_id"
         case workspaceID = "workspace_id"
         case tabID = "tab_id"
-        case agent, name, title, focused
+        case agent, name, title, focused, cwd
         case displayAgent = "display_agent"
         case status = "agent_status"
+        case terminalTitle = "terminal_title"
+        case terminalTitleStripped = "terminal_title_stripped"
+        case foregroundCwd = "foreground_cwd"
+    }
+
+    public var sessionTitle: String? {
+        SessionTitle.clean(terminalTitleStripped ?? terminalTitle, cwd: foregroundCwd ?? cwd)
     }
 }
 

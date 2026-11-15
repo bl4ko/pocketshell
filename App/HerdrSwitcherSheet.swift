@@ -180,13 +180,8 @@ struct HerdrSwitcherSheet: View {
 
     @ViewBuilder
     private func tabRows(_ shownTab: HerdrOutline.Tab, whole tab: HerdrOutline.Tab) -> some View {
-        if tab.panes.count == 1, let pane = tab.panes.first {
-            let named = !Self.isDefaultLabel(tab.label)
-            paneButton(
-                pane, title: named ? tab.label : pane.title,
-                detail: [named ? pane.title : nil, pane.detail].compactMap { $0 }.filter { !$0.isEmpty }
-                    .joined(separator: " · "),
-                tab: tab)
+        if let pane = tab.panes.first, let row = tab.singlePaneRow {
+            paneButton(pane, title: row.title, detail: row.detail, tab: tab)
         } else {
             Button {
                 jump { await controller.focusHerdrTab(id: tab.tabID) }

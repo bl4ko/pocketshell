@@ -1651,7 +1651,7 @@ struct TmuxJumpSheet: View {
         let items = windowsBySession[session.name] ?? []
         guard !query.isEmpty, !session.name.localizedCaseInsensitiveContains(query) else { return items }
         return items.filter { item in
-            [item.window.name, item.preview, item.status.label]
+            [item.window.name, item.window.title ?? "", item.preview, item.status.label]
                 .contains { $0.localizedCaseInsensitiveContains(query) }
         }
     }
@@ -1753,10 +1753,17 @@ struct TmuxJumpSheet: View {
                 .fill(item.status.chromeColor)
                 .frame(width: 7, height: 7)
                 .shadow(color: item.status == .waiting ? item.status.chromeColor.opacity(0.4) : .clear, radius: 4)
-            Text("\(item.window.index): \(item.window.name)")
+            Text("\(item.window.index): \(item.window.shownName)")
                 .font(PocketshellTheme.mono(12, weight: .semibold))
                 .foregroundStyle(PocketshellTheme.body)
                 .lineLimit(1)
+            if item.window.title != nil, !Tmux.isPlaceholderWindowName(item.window.name) {
+                Text(item.window.name)
+                    .font(PocketshellTheme.mono(10))
+                    .foregroundStyle(PocketshellTheme.muted)
+                    .lineLimit(1)
+                    .layoutPriority(-1)
+            }
             Text(item.status.label)
                 .font(PocketshellTheme.mono(10))
                 .foregroundStyle(item.status.chromeTextColor)

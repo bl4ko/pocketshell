@@ -708,7 +708,7 @@ struct WindowDashboardSheet: View {
                             Button {
                                 Task { await connection.selectWindow(window) }
                             } label: {
-                                Text("\(window.index): \(window.name)")
+                                Text("\(window.index): \(window.shownName)")
                             }
                         }
                     }

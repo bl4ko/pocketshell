@@ -341,7 +341,7 @@ final class SessionMonitor: ObservableObject {
                 let key = Self.herdrAgentKey(hostID: host.id, session: session.name, paneID: agent.paneID)
                 result.herdrKeys.insert(key)
                 let workspace = workspaces[agent.workspaceID]
-                let title = agent.displayAgent ?? agent.agent ?? "agent"
+                let title = agent.sessionTitle ?? agent.displayAgent ?? agent.agent ?? "agent"
                 let workspaceLabel = workspace?.label ?? agent.workspaceID
                 let previous = lastHerdrStatus[key]
                 if agent.status == .working || agent.status == .idle { unseenFinished.remove(key) }

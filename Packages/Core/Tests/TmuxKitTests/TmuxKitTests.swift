@@ -13,8 +13,47 @@ import Models
 @Test func listWindowsCommandUsesPipeFormat() {
     #expect(
         Tmux.listWindowsCommand(session: "claude")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'claude' -F '#{window_index}|#{window_id}|#{window_active}|#{window_name}'"
+            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'claude' -F "
+            + "'#{window_index}|#{window_id}|#{window_active}|#{pane_current_command}|#{host}|#{pane_title}\t#{window_name}'"
     )
+}
+
+@Test func parseWindowsReadsTheAgentSessionTitle() {
+    let output = [
+        "0|@1|1|zsh|box.lan|dev@box: ~\tzsh",
+        "1|@2|0|2.1.322|box.lan|✳ CPAMC\tclaude",
+        "2|@3|0|codex|box.lan|⠋ QBIT-FIX | infra\tweb|tools",
+        "3|@4|0|node|box.lan|box.lan\tnode",
+        "4|@5|0|node|box.lan|box\t[tmux]",
+        "5|@6|0|vim|box.lan|\tvim",
+    ].joined(separator: "\n")
+    let windows = Tmux.parseWindows(output)
+    #expect(windows.map(\.title) == [nil, "CPAMC", "QBIT-FIX | infra", nil, nil, nil])
+    #expect(windows.map(\.name) == ["zsh", "claude", "web|tools", "node", "[tmux]", "vim"])
+    #expect(windows.map(\.shownName) == ["zsh", "CPAMC", "QBIT-FIX | infra", "node", "[tmux]", "vim"])
+    #expect(windows[1].command == "2.1.322")
+    #expect(windows[1].windowID == "@2")
+}
+
+@Test func windowDisplayNameShowsTheSessionTitleUnlessTheUserNamedTheTab() {
+    let window = TmuxWindow(index: 1, name: "claude", active: false, title: "CPAMC")
+    #expect(Tmux.windowDisplayName(window: window, session: "dev", records: []) == "CPAMC")
+    let saved = [TabRecord(tmuxSession: "dev", windowIndex: 1, windowName: "claude")]
+    #expect(Tmux.windowDisplayName(window: window, session: "dev", records: saved) == "CPAMC")
+    let named = [TabRecord(name: "mine", tmuxSession: "dev", windowIndex: 1, windowName: "claude")]
+    #expect(Tmux.windowDisplayName(window: window, session: "dev", records: named) == "mine")
+}
+
+@Test func sessionTitleIgnoresShellsHostnamesAndEmptyTitles() {
+    #expect(Tmux.sessionTitle(paneTitle: "✳ POCKETSHELL", command: "claude", host: "mini.local") == "POCKETSHELL")
+    #expect(Tmux.sessionTitle(paneTitle: "mini.local", command: "claude", host: "mini.local") == nil)
+    #expect(Tmux.sessionTitle(paneTitle: "mini", command: "claude", host: "mini.local") == nil)
+    #expect(Tmux.sessionTitle(paneTitle: "user@mini: ~/src", command: "bash", host: "mini.local") == nil)
+    #expect(Tmux.sessionTitle(paneTitle: "", command: "claude", host: "mini.local") == nil)
+    #expect(Tmux.sessionTitle(paneTitle: "✳ Claude Code", command: "claude", host: "mini.local") == nil)
+    #expect(Tmux.sessionTitle(paneTitle: "htop", command: "htop", host: "mini.local") == nil)
+    #expect(
+        Tmux.sessionTitle(paneTitle: "FIX | github", command: "codex", host: "m", cwd: "/Users/me/github") == "FIX")
 }
 
 @Test func parseWindowsParsesIndexIDActiveName() {
@@ -190,10 +229,7 @@ import Models
 }
 
 @Test func sessionNameWithSingleQuoteIsEscaped() {
-    #expect(
-        Tmux.listWindowsCommand(session: "a'b")
-            == "PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\" tmux list-windows -t 'a'\\''b' -F '#{window_index}|#{window_id}|#{window_active}|#{window_name}'"
-    )
+    #expect(Tmux.listWindowsCommand(session: "a'b").contains("tmux list-windows -t 'a'\\''b' -F '#{window_index}|"))
 }
 
 @Test func nextPaneKeysIsPrefixO() {
@@ -381,6 +417,7 @@ import Models
 
 @Test func liveWindowNameUsesTerminalTitleOnlyForRunningApps() {
     #expect(Tmux.liveWindowName(terminalTitle: " new agent ", windowName: "old", agentRunning: true) == "new agent")
+    #expect(Tmux.liveWindowName(terminalTitle: "✶ CPAMC", windowName: "old", agentRunning: true) == "CPAMC")
     #expect(Tmux.liveWindowName(terminalTitle: "stale", windowName: "shell", agentRunning: false) == "shell")
     #expect(Tmux.liveWindowName(terminalTitle: "[tmux]", windowName: "agent", agentRunning: true) == "agent")
 }

@@ -1,0 +1,20 @@
+@@psh-windows@@
+1	1	dev	0	@1	%1	zsh	/home/dev	box.lan	dev@box: ~	zsh
+1	0	dev	1	@2	%2	2.1.322	/home/dev/src/api	box.lan	✳ CPAMC	claude
+1	0	dev	2	@3	%3	codex	/home/dev/src/web	box.lan	⠋ QBIT-FIX | web	web|tools
+1	0	dev	3	@4	%4	node	/home/dev	box.lan	box	node
+@@psh-tmux:%2|5101|claude|dev|1|@2|claude@@
+@@psh-cwd@@
+/home/dev/src/api
+@@psh-screen@@
+> 
+  ? for shortcuts
+@@psh-tmux:%3|5202|codex|dev|2|@3|web|tools@@
+@@psh-cwd@@
+/home/dev/src/web
+@@psh-screen@@
+› Ask Codex to do anything
+
+  86% context left
+@@psh-herdr:default@@
+{"id": "cli:api:snapshot", "result": {"snapshot": {"version": "0.9.5", "protocol": 3, "focused_workspace_id": "w2", "focused_tab_id": "w2:t1", "focused_pane_id": "w2:p1", "workspaces": [{"workspace_id": "w1", "number": 1, "label": "infra", "agent_status": "done", "focused": false}, {"workspace_id": "w2", "number": 2, "label": "pocketshell", "agent_status": "working", "focused": true}], "agents": [{"agent": "claude", "agent_status": "done", "cwd": "/home/dev", "foreground_cwd": "/home/dev", "focused": false, "pane_id": "w1:p1", "tab_id": "w1:t1", "workspace_id": "w1", "terminal_title": "✳ HW-PROXY | iris", "terminal_title_stripped": "HW-PROXY | iris"}, {"agent": "claude", "agent_status": "working", "cwd": "/home/dev/pocketshell", "foreground_cwd": "/home/dev/pocketshell", "focused": true, "pane_id": "w2:p1", "tab_id": "w2:t1", "workspace_id": "w2", "terminal_title": "◐ POCKETSHELL", "terminal_title_stripped": "POCKETSHELL"}], "tabs": [{"tab_id": "w1:t1", "workspace_id": "w1", "label": "hw", "number": 1, "agent_status": "done", "pane_count": 1, "focused": false}, {"tab_id": "w2:t1", "workspace_id": "w2", "label": "pocketshell", "number": 1, "agent_status": "working", "pane_count": 1, "focused": true}, {"tab_id": "w2:t2", "workspace_id": "w2", "label": "2", "number": 2, "agent_status": "unknown", "pane_count": 1, "focused": false}], "panes": [{"agent": "claude", "agent_status": "done", "cwd": "/home/dev", "foreground_cwd": "/home/dev", "focused": false, "pane_id": "w1:p1", "tab_id": "w1:t1", "workspace_id": "w1", "terminal_title": "✳ HW-PROXY | iris", "terminal_title_stripped": "HW-PROXY | iris"}, {"agent": "claude", "agent_status": "working", "cwd": "/home/dev/pocketshell", "foreground_cwd": "/home/dev/pocketshell", "focused": true, "pane_id": "w2:p1", "tab_id": "w2:t1", "workspace_id": "w2"}, {"agent_status": "unknown", "cwd": "/home/dev/pocketshell", "foreground_cwd": "/home/dev/pocketshell", "focused": false, "pane_id": "w2:p2", "tab_id": "w2:t2", "workspace_id": "w2"}], "layouts": []}}}

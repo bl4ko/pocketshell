@@ -1,5 +1,6 @@
 import Foundation
 import HerdrKit
+import Models
 import MonitorKit
 import TmuxKit
 
@@ -62,6 +63,9 @@ public struct BrainSession: Equatable, Sendable, Identifiable {
 
     public var place: Place
     public var name: String
+    public var aka: String? {
+        didSet { if SessionTitle.same(aka, name) { aka = nil } }
+    }
     public var status: BrainAgent.Status?
     public var agent: String?
     public var command: String?
@@ -72,11 +76,13 @@ public struct BrainSession: Equatable, Sendable, Identifiable {
     public var isCurrent = false
 
     public init(
-        place: Place, name: String, status: BrainAgent.Status? = nil, agent: String? = nil, command: String? = nil,
-        cwd: String? = nil, parent: String? = nil, number: Int? = nil, unseen: Bool = false, isCurrent: Bool = false
+        place: Place, name: String, aka: String? = nil, status: BrainAgent.Status? = nil, agent: String? = nil,
+        command: String? = nil, cwd: String? = nil, parent: String? = nil, number: Int? = nil, unseen: Bool = false,
+        isCurrent: Bool = false
     ) {
         self.place = place
         self.name = name
+        self.aka = SessionTitle.same(aka, name) ? nil : aka
         self.status = status
         self.agent = agent
         self.command = command
@@ -132,6 +138,7 @@ public struct HostLayout: Equatable, Sendable {
         public var path: String
         public var active: Bool
         public var name: String
+        public var title: String?
     }
 
     public var windows: [Window] = []
@@ -162,9 +169,9 @@ public struct HostLayout: Equatable, Sendable {
     static let windowsScript =
         "echo '@@psh-windows@@'; tmux list-panes -a -F "
         + "'#{pane_active}\t#{window_active}\t#{session_name}\t#{window_index}\t#{window_id}\t#{pane_id}"
-        + "\t#{pane_current_command}\t#{pane_current_path}\t#{window_name}' 2>/dev/null"
+        + "\t#{pane_current_command}\t#{pane_current_path}\t#{host}\t#{pane_title}\t#{window_name}' 2>/dev/null"
 
-    public static func parse(_ output: String) -> HostLayout {
+    private static func sections(_ output: String) -> [(marker: String, lines: [Substring])] {
         var sections: [(marker: String, lines: [Substring])] = []
         for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
             if line.hasPrefix("@@psh-"), line.hasSuffix("@@") {
@@ -173,20 +180,42 @@ public struct HostLayout: Equatable, Sendable {
                 sections[sections.count - 1].lines.append(line)
             }
         }
+        return sections
+    }
+
+    private static func paneFields(_ line: Substring) -> [String]? {
+        let fields = line.split(separator: "\t", maxSplits: 10, omittingEmptySubsequences: false).map(String.init)
+        guard fields.count == 11, Int(fields[3]) != nil, fields[4].hasPrefix("@") else { return nil }
+        return fields
+    }
+
+    public static func paneTitles(_ output: String) -> [String: String] {
+        var titles: [String: String] = [:]
+        for section in sections(output) where section.marker == windowsMarker {
+            for line in section.lines {
+                guard let fields = paneFields(line),
+                    let title = SessionTitle.clean(fields[9], host: fields[8], cwd: fields[7])
+                else { continue }
+                titles[fields[5]] = title
+            }
+        }
+        return titles
+    }
+
+    public static func parse(_ output: String) -> HostLayout {
         var layout = HostLayout()
         var seen: [String: Int] = [:]
-        for section in sections {
+        for section in sections(output) {
             if section.marker == windowsMarker {
                 for line in section.lines {
-                    let fields = line.split(separator: "\t", maxSplits: 8, omittingEmptySubsequences: false)
-                        .map(String.init)
-                    guard fields.count == 9, fields[0] == "1", let index = Int(fields[3]), fields[4].hasPrefix("@")
-                    else { continue }
+                    guard let fields = paneFields(line), fields[0] == "1", let index = Int(fields[3]) else { continue }
                     let session = Tmux.baseSessionName(fields[2])
                     let clone = session != fields[2]
                     let window = Window(
                         session: session, index: index, windowID: fields[4], paneID: fields[5], command: fields[6],
-                        path: fields[7], active: fields[1] == "1", name: fields[8])
+                        path: fields[7], active: fields[1] == "1", name: fields[10],
+                        title: Tmux.sessionTitle(
+                            paneTitle: fields[9], command: fields[6], host: fields[8], cwd: fields[7]))
                     if let existing = seen[window.windowID] {
                         if !clone { layout.windows[existing] = window }
                         continue
@@ -223,6 +252,10 @@ public enum SessionCatalog {
             return (Tmux.isInteractiveShell(window.command) ? .idle : .busy, nil)
         }
 
+        func windowTitle(_ window: HostLayout.Window) -> String? {
+            paneAgents[window.paneID]?.title ?? window.title
+        }
+
         for tab in tabs {
             var session = BrainSession(
                 place: .tab(id: tab.id, backend: tab.backend), name: tab.label, status: tab.status.map(Self.status),
@@ -238,6 +271,7 @@ public enum SessionCatalog {
                     session.agent = agent
                     session.command = window.command
                     session.cwd = window.path
+                    session.aka = windowTitle(window)
                 }
             case .herdr(let name, _):
                 session.parent = name == "default" ? "Herdr" : "Herdr \(name)"
@@ -245,6 +279,7 @@ public enum SessionCatalog {
                     let outline = HerdrOutline(snapshot)
                     if session.status == nil { session.status = outline.focusedWorkspace?.status.map(Self.status) }
                     session.cwd = outline.focusedPane?.cwd
+                    session.aka = outline.focusedPane?.sessionTitle
                 }
             }
             result.append(session)
@@ -266,11 +301,13 @@ public enum SessionCatalog {
                 if case .tmux(let session, let index, let windowID) = current {
                     isCurrent = windowMatches(window, session, index, windowID)
                 }
+                let windowName = Tmux.isPlaceholderWindowName(window.name) ? "window \(window.index)" : window.name
+                let title = windowTitle(window)
                 result.append(
                     BrainSession(
                         place: .tmuxWindow(
                             session: name, windowIndex: window.index, windowID: window.windowID, paneID: window.paneID),
-                        name: Tmux.isPlaceholderWindowName(window.name) ? "window \(window.index)" : window.name,
+                        name: title ?? windowName, aka: title == nil ? nil : windowName,
                         status: status, agent: agent, command: window.command, cwd: window.path, parent: name,
                         number: window.index, unseen: unseen(name, window.index), isCurrent: isCurrent))
             }
@@ -295,15 +332,18 @@ public enum SessionCatalog {
                     result.append(
                         BrainSession(
                             place: .herdrTab(session: name, workspaceID: workspace.workspaceID, tabID: tab.tabID),
-                            name: tab.label, status: tab.status.map(Self.status), cwd: tab.panes.first?.cwd,
-                            parent: label, unseen: tab.status == .done, isCurrent: currentHerdr && tab.focused))
+                            name: tab.sessionTitle ?? tab.label, aka: tab.sessionTitle == nil ? nil : tab.label,
+                            status: tab.status.map(Self.status), cwd: tab.panes.first?.cwd,
+                            parent: label, unseen: tab.status == .done,
+                            isCurrent: currentHerdr && tab.focused))
                     for pane in tab.panes {
                         result.append(
                             BrainSession(
                                 place: .herdrPane(
                                     session: name, workspaceID: workspace.workspaceID, tabID: tab.tabID,
                                     paneID: pane.paneID),
-                                name: pane.title, status: pane.status.map(Self.status),
+                                name: pane.title, aka: pane.sessionTitle == nil ? nil : pane.name,
+                                status: pane.status.map(Self.status),
                                 agent: agentKinds[pane.paneID] ?? nil, cwd: pane.cwd,
                                 parent: tab.panes.count > 1 ? "\(label) tab \(tab.label)" : label,
                                 unseen: pane.status == .done, isCurrent: currentHerdr && pane.focused))
@@ -396,6 +436,8 @@ public enum SessionCatalog {
 
     static func summary(_ session: BrainSession) -> [String: Any] {
         var item: [String: Any] = ["name": session.name, "id": session.id, "kind": session.kind.rawValue]
+        if let aka = session.aka { item["aka"] = aka }
+        if let number = session.number { item["number"] = number }
         if let status = session.status { item["status"] = status.rawValue }
         if let agent = session.agent { item["agent"] = agent }
         if let parent = session.parent { item["in"] = parent }
@@ -433,7 +475,9 @@ public enum SessionResolver {
         let words = key.split(separator: " ").map(String.init)
         let kinds = mentionedKinds(words)
         let core = words.filter { !kindWords.keys.contains($0) && !fillers.contains($0) && !currentWords.contains($0) }
-        let named = sessions.filter { !key.isEmpty && AgentResolver.normalize($0.name) == key }
+        let named = sessions.filter { session in
+            !key.isEmpty && [session.name, session.aka].contains { AgentResolver.normalize($0 ?? "") == key }
+        }
         if core.isEmpty, named.count == 1 { return .found(named[0]) }
         if core.isEmpty {
             let wanted = kinds.isEmpty ? [BrainSession.Kind.tab] : kinds
@@ -487,14 +531,15 @@ public enum SessionResolver {
 
     static func score(_ key: String, words: [String], kinds: [BrainSession.Kind], _ session: BrainSession) -> Int {
         let name = AgentResolver.normalize(session.name)
+        let aka = AgentResolver.normalize(session.aka ?? "")
         let folder = AgentResolver.normalize(session.cwd.map { ($0 as NSString).lastPathComponent } ?? "")
         let parent = AgentResolver.normalize(session.parent ?? "")
-        var score = 0
-        if !name.isEmpty, key == name {
-            score += 100
-        } else if !name.isEmpty, name.count >= 2, key.contains(name) || name.contains(key) {
-            score += 40
-        }
+        var score =
+            [name, aka].map { name in
+                if !name.isEmpty, key == name { return 100 }
+                if !name.isEmpty, name.count >= 2, key.contains(name) || name.contains(key) { return 40 }
+                return 0
+            }.max() ?? 0
         if !folder.isEmpty, words.contains(folder) || key == folder { score += 30 }
         if let agent = session.agent, words.contains(agent.lowercased()) { score += 20 }
         if !parent.isEmpty,

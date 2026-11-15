@@ -1,6 +1,6 @@
 @@psh-tmux:%3|4101|claude|work|2|@7|api@@
 @@psh-session@@
-{"pid":4101,"sessionId":"5b3c0a52-7d1e-4c8e-9f20-1a2b3c4d5e6f","cwd":"/home/dev/src/api","status":"busy","name":"api-1"}
+{"pid":4101,"sessionId":"5b3c0a52-7d1e-4c8e-9f20-1a2b3c4d5e6f","cwd":"/home/dev/src/api","status":"busy"}
 @@psh-cwd@@
 /home/dev/src/api
 @@psh-screen@@

@@ -320,6 +320,7 @@ public final class AgentToolbox {
             "where": agent.where_, "preview": agent.preview,
         ]
         if let cwd = agent.cwd { item["cwd"] = cwd }
+        if let title = agent.title { item["title"] = title }
         if agent.isCurrent { item["current"] = true }
         return item
     }
@@ -493,11 +494,13 @@ public enum AgentResolver {
     static func score(_ key: String, _ agent: BrainAgent) -> Int {
         let spoken = normalize(agent.spokenName)
         let name = normalize(agent.name)
+        let title = normalize(agent.title ?? "")
         let folder = normalize(agent.cwd.map { ($0 as NSString).lastPathComponent } ?? "")
-        if key == spoken || (!name.isEmpty && key == name) { return 100 }
+        if key == spoken || (!name.isEmpty && key == name) || (!title.isEmpty && key == title) { return 100 }
         var score = 0
         let words = Set(key.split(separator: " ").map(String.init))
         if !name.isEmpty, key.contains(name) || name.contains(key) { score += 40 }
+        if !title.isEmpty, key.contains(title) || (key.count >= 3 && title.contains(key)) { score += 45 }
         if !folder.isEmpty, words.contains(folder) || key.contains(folder) { score += 30 }
         if words.contains(agent.kind.rawValue) { score += 20 }
         if case .tmux(_, let index, _, _) = agent.location,

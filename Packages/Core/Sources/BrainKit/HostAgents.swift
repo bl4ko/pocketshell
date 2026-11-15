@@ -1,5 +1,6 @@
 import Foundation
 import HerdrKit
+import Models
 import MonitorKit
 import TmuxKit
 
@@ -15,6 +16,7 @@ public struct BrainAgent: Equatable, Sendable, Identifiable {
 
     public var kind: AgentKind
     public var name: String
+    public var title: String?
     public var location: Location
     public var status: Status
     public var cwd: String?
@@ -24,11 +26,12 @@ public struct BrainAgent: Equatable, Sendable, Identifiable {
     public var prompt: InteractivePrompt?
 
     public init(
-        kind: AgentKind, name: String, location: Location, status: Status, cwd: String? = nil, pid: Int? = nil,
-        preview: String = "", isCurrent: Bool = false, prompt: InteractivePrompt? = nil
+        kind: AgentKind, name: String, title: String? = nil, location: Location, status: Status, cwd: String? = nil,
+        pid: Int? = nil, preview: String = "", isCurrent: Bool = false, prompt: InteractivePrompt? = nil
     ) {
         self.kind = kind
         self.name = name
+        self.title = title
         self.location = location
         self.status = status
         self.cwd = cwd
@@ -46,6 +49,7 @@ public struct BrainAgent: Equatable, Sendable, Identifiable {
     }
 
     public var spokenName: String {
+        if let title { return "\(kind.displayName) \(title)" }
         let place = name.isEmpty ? (cwd.map { ($0 as NSString).lastPathComponent } ?? "") : name
         return place.isEmpty || place.lowercased() == kind.rawValue
             ? kind.displayName : "\(kind.displayName) in \(place)"
@@ -93,9 +97,10 @@ public enum HostAgents {
     public static func parse(_ output: String, current: CurrentTarget? = nil) -> [BrainAgent] {
         var agents: [BrainAgent] = []
         var focusedHerdrPanes: [String: String] = [:]
+        let titles = HostLayout.paneTitles(output)
         for block in blocks(output) {
             if block.header.hasPrefix("tmux:") {
-                if let agent = tmuxAgent(block) { agents.append(agent) }
+                if let agent = tmuxAgent(block, titles: titles) { agents.append(agent) }
             } else if block.header.hasPrefix("herdr:") {
                 let session = String(block.header.dropFirst(6))
                 guard let snapshot = Herdr.parseSnapshot(block.sections["", default: ""]) else { continue }
@@ -174,7 +179,7 @@ public enum HostAgents {
         return result
     }
 
-    private static func tmuxAgent(_ block: Block) -> BrainAgent? {
+    private static func tmuxAgent(_ block: Block, titles: [String: String]) -> BrainAgent? {
         let fields = block.header.dropFirst(5).split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         guard fields.count >= 7, let pid = Int(fields[1]), let kind = AgentKind(rawValue: fields[2]),
             let windowIndex = Int(fields[4])
@@ -182,16 +187,18 @@ public enum HostAgents {
         let screen = block.sections["screen"] ?? ""
         var sessionStatus: String?
         var cwd = block.sections["cwd"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var title = titles[fields[0]]
         if let json = block.sections["session"]?.data(using: .utf8),
             let file = try? JSONDecoder().decode(SessionFile.self, from: json)
         {
             sessionStatus = file.status
             if let fileCwd = file.cwd, !fileCwd.isEmpty { cwd = fileCwd }
+            title = SessionTitle.clean(file.name) ?? title
         }
         let windowName = fields[6...].joined(separator: "|")
         let status = status(screen: screen, sessionStatus: sessionStatus)
         return BrainAgent(
-            kind: kind, name: Tmux.isPlaceholderWindowName(windowName) ? "" : windowName,
+            kind: kind, name: Tmux.isPlaceholderWindowName(windowName) ? "" : windowName, title: title,
             location: .tmux(
                 session: Tmux.baseSessionName(fields[3]), windowIndex: windowIndex, windowID: fields[5],
                 paneID: fields[0]),
@@ -216,7 +223,7 @@ public enum HostAgents {
             let pane = panes[agent.paneID]
             let label = [agent.name, tabs[agent.tabID]?.label].compactMap { $0 }.first { !$0.isEmpty } ?? ""
             return BrainAgent(
-                kind: kind, name: label,
+                kind: kind, name: label, title: agent.sessionTitle,
                 location: .herdr(
                     session: session, paneID: agent.paneID, tabID: agent.tabID, workspaceID: agent.workspaceID),
                 status: status, cwd: pane?.foregroundCwd ?? pane?.cwd, preview: agent.title ?? "")
@@ -226,6 +233,7 @@ public enum HostAgents {
     private struct SessionFile: Decodable {
         var cwd: String?
         var status: String?
+        var name: String?
     }
 
     static func shellQuote(_ value: String) -> String {

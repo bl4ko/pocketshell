@@ -2456,6 +2456,96 @@ final class SmokeUITests: XCTestCase {
             "a long press must open the menu without pasting")
     }
 
+    func testTerminalToolbarPasteKeyMatchesItsNeighboursAndEnterSitsRightmost() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; toolbar layout test skipped")
+        }
+        for theme in ["Tokyo Night", "Pocketshell Light"] {
+            app.terminate()
+            app.launchArguments = ["-pocketshell.terminalTheme", theme]
+            app.launch()
+            openHost("localbox")
+            let clipboard = app.buttons["terminal.clipboard"]
+            XCTAssertTrue(clipboard.waitForExistence(timeout: 10))
+            let attach = app.buttons["terminal.attach"]
+            let voice = app.buttons["terminal.voice"]
+            let enter = app.buttons["terminal.enter"]
+            let keyboard = app.buttons["terminal.keyboard"]
+            XCTAssertGreaterThan(enter.frame.minX, keyboard.frame.maxX, "\(theme): Enter is not the rightmost key")
+            XCTAssertEqual(enter.frame.maxX, app.frame.maxX - 6, accuracy: 2, "\(theme): Enter is not at the edge")
+            for pasteboard in ["empty", "text"] {
+                if pasteboard == "empty" {
+                    UIPasteboard.general.items = []
+                } else {
+                    UIPasteboard.general.string = "toolbar-paste-key"
+                }
+                sleep(1)
+                let shot = XCUIScreen.main.screenshot()
+                let attachment = XCTAttachment(screenshot: shot)
+                attachment.name = "toolbar-\(theme)-\(pasteboard)-pasteboard"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                let reference = voice.frame
+                let pitch = keyboard.frame.minX - voice.frame.minX
+                let key = reference.offsetBy(dx: -pitch, dy: 0)
+                let attachKey = reference.offsetBy(dx: -2 * pitch, dy: 0)
+                XCTAssertEqual(attach.frame.midX, attachKey.midX, accuracy: 1, theme)
+                for other in [attach, enter, keyboard, app.buttons["terminal.shortcutsToggle"]] {
+                    XCTAssertEqual(other.frame.height, reference.height, accuracy: 1, "\(theme): \(other)")
+                    XCTAssertEqual(other.frame.midY, reference.midY, accuracy: 0.5, "\(theme): \(other)")
+                }
+                XCTAssertTrue(
+                    clipboard.frame.contains(key.insetBy(dx: 1.5, dy: 1.5)),
+                    "\(theme): the paste control \(clipboard.frame) does not fill its key \(key)")
+                XCTAssertTrue(
+                    key.insetBy(dx: -1, dy: -1).contains(clipboard.frame),
+                    "\(theme): the paste control \(clipboard.frame) spills out of its key \(key)")
+                XCTAssertEqual(clipboard.frame.midX, key.midX, accuracy: 1, theme)
+                XCTAssertEqual(clipboard.frame.midY, key.midY, accuracy: 1, theme)
+                let width = reference.width
+                let height = reference.height
+                for (name, dx, dy, along) in [
+                    ("fill", 4.0, height - 5, CGVector(dx: 1, dy: 0)),
+                    ("left border and gap", -2, height / 2, CGVector(dx: 1, dy: 0)),
+                    ("right border and gap", width - 3, height / 2, CGVector(dx: 1, dy: 0)),
+                    ("top border", width / 2, -2, CGVector(dx: 0, dy: 1)),
+                    ("bottom border and bar", width / 2, height - 3, CGVector(dx: 0, dy: 1)),
+                ] {
+                    let expected = strip(
+                        shot.image, from: CGPoint(x: reference.minX + dx, y: reference.minY + dy), along)
+                    for (label, rect) in [("paste", key), ("attach", attachKey)] {
+                        let actual = strip(shot.image, from: CGPoint(x: rect.minX + dx, y: rect.minY + dy), along)
+                        XCTAssertLessThanOrEqual(
+                            misfit(expected, actual), 12,
+                            "\(theme), \(pasteboard) pasteboard: the \(label) key \(name) differs from the voice key")
+                    }
+                }
+            }
+        }
+    }
+
+    private func strip(_ image: UIImage, from start: CGPoint, _ along: CGVector) -> [[UInt8]] {
+        let scale = CGFloat(image.cgImage?.width ?? 1) / app.frame.width
+        let origin = CGPoint(x: (floor(start.x * scale) + 0.5) / scale, y: (floor(start.y * scale) + 0.5) / scale)
+        return (0..<Int(5 * scale)).map { step in
+            let offset = CGFloat(step) / scale
+            return color(image, at: CGPoint(x: origin.x + along.dx * offset, y: origin.y + along.dy * offset))
+        }
+    }
+
+    private func misfit(_ expected: [[UInt8]], _ actual: [[UInt8]]) -> Int {
+        (-3...3).map { shift in
+            (3..<(expected.count - 3)).map { index in
+                zip(expected[index], actual[index + shift]).map { abs(Int($0) - Int($1)) }.max() ?? 0
+            }.max() ?? 0
+        }.min() ?? .max
+    }
+
+    private func color(_ image: UIImage, at point: CGPoint) -> [UInt8] {
+        let sample = pixel(image, x: point.x / app.frame.width, y: point.y / app.frame.height)
+        return [sample.red, sample.green, sample.blue]
+    }
+
     func testTerminalEditMenuPasteDoesNotPrompt() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
             throw XCTSkip("PS_TEST_PORT not set; edit menu paste test skipped")

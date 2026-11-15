@@ -6,6 +6,7 @@
 
     public struct TerminalToolbar: View {
         private typealias Palette = ToolbarPalette
+        static let keyHeight: CGFloat = 33
 
         let theme: TerminalTheme
         @Binding var ctrlActive: Bool
@@ -80,79 +81,104 @@
 
         private var bar: some View {
             HStack(spacing: 5) {
-                slot(icon: "square.grid.2x2", active: shortcutsActive) { onShortcuts(nil) }
-                    .accessibilityLabel("Special keys")
-                    .accessibilityIdentifier("terminal.shortcutsToggle")
-                slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
-                slot("esc") { onKey(.escape) }
-                slot("tab") { onKey(.tab) }
-                slot(icon: "return") { onKey(.sequence("\r")) }
-                    .accessibilityLabel("Enter")
-                    .accessibilityIdentifier("terminal.enter")
-                if let onAttach, let onCamera {
-                    Menu {
-                        Button("Take Photo", systemImage: "camera") { onCamera() }
-                            .accessibilityIdentifier("terminal.camera")
-                        Button("Choose File", systemImage: "doc") { onAttach() }
-                            .accessibilityIdentifier("terminal.chooseFile")
-                    } label: {
-                        slotLabel(icon: "paperclip", busy: uploadingFile)
-                    }
-                    .disabled(uploadingFile)
-                    .accessibilityLabel("Attach")
-                    .accessibilityValue(uploadingFile ? "Uploading" : "Ready")
-                    .accessibilityIdentifier("terminal.attach")
-                } else if let onAttach {
-                    slot(icon: "paperclip", busy: uploadingFile, action: onAttach)
-                        .disabled(uploadingFile)
-                        .accessibilityLabel("Attach file")
-                        .accessibilityValue(uploadingFile ? "Uploading" : "Ready")
-                        .accessibilityIdentifier("terminal.attach")
-                }
-                if let onPaste {
-                    Group {
-                        if selectActive {
-                            slot(icon: "selection.pin.in.out", active: true) { onCopy?() }
-                        } else {
-                            PasteButton(supportedContentTypes: [.image, .text], payloadAction: onPaste)
-                                .labelStyle(.iconOnly)
-                                .buttonBorderShape(.roundedRectangle(radius: 8))
-                                .tint(Palette.key(theme))
-                                .foregroundStyle(Palette.text(theme))
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    // .contextMenu breaks the secure paste: its press effect drops the authentication and iOS prompts.
-                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in clipboardMenu = true })
-                    .confirmationDialog("Clipboard", isPresented: $clipboardMenu) {
-                        if let onCopy { Button("Copy selection") { onCopy() } }
-                        if let onToggleSelect {
-                            Button(selectActive ? "Done selecting" : "Select text") { onToggleSelect() }
-                        }
-                    }
-                    .accessibilityIdentifier("terminal.clipboard")
-                }
-                if let onVoice {
-                    slotLabel(icon: "waveform", active: voiceActive)
-                        .contentShape(Rectangle())
-                        .onTapGesture(perform: onVoice)
-                        .onLongPressGesture(minimumDuration: 0.5) { onCompose?() }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityLabel("Voice mode")
-                        .accessibilityValue(voiceActive ? "On" : "Off")
-                        .accessibilityHint(onCompose == nil ? "" : "Hold to write a message")
-                        .accessibilityAction(named: "Write a message") { onCompose?() }
-                        .accessibilityIdentifier("terminal.voice")
-                }
-                if let onHideKeyboard {
-                    slot(icon: KeyboardToggle.icon(keyboardVisible: keyboardVisible)) { onHideKeyboard() }
-                        .accessibilityLabel(keyboardVisible ? "Hide keyboard" : "Show keyboard")
-                        .accessibilityIdentifier("terminal.keyboard")
-                }
+                ForEach(ToolbarSlot.allCases, id: \.self, content: barSlot)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 5)
             .background(Palette.pinned(theme))
+        }
+
+        @ViewBuilder private func barSlot(_ slot: ToolbarSlot) -> some View {
+            switch slot {
+            case .shortcuts:
+                self.slot(icon: "square.grid.2x2", active: shortcutsActive) { onShortcuts(nil) }
+                    .accessibilityLabel("Special keys")
+                    .accessibilityIdentifier("terminal.shortcutsToggle")
+            case .ctrl: self.slot("ctrl", active: ctrlActive) { onKey(.ctrlModifier) }
+            case .escape: self.slot("esc") { onKey(.escape) }
+            case .tab: self.slot("tab") { onKey(.tab) }
+            case .enter:
+                self.slot(icon: "return") { onKey(.sequence("\r")) }
+                    .accessibilityLabel("Enter")
+                    .accessibilityIdentifier("terminal.enter")
+            case .attach: attachSlot
+            case .clipboard: clipboardSlot
+            case .voice: voiceSlot
+            case .keyboard:
+                if let onHideKeyboard {
+                    self.slot(icon: KeyboardToggle.icon(keyboardVisible: keyboardVisible)) { onHideKeyboard() }
+                        .accessibilityLabel(keyboardVisible ? "Hide keyboard" : "Show keyboard")
+                        .accessibilityIdentifier("terminal.keyboard")
+                }
+            }
+        }
+
+        @ViewBuilder private var attachSlot: some View {
+            if let onAttach, let onCamera {
+                Menu {
+                    Button("Take Photo", systemImage: "camera") { onCamera() }
+                        .accessibilityIdentifier("terminal.camera")
+                    Button("Choose File", systemImage: "doc") { onAttach() }
+                        .accessibilityIdentifier("terminal.chooseFile")
+                } label: {
+                    slotLabel(icon: "paperclip", busy: uploadingFile)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .disabled(uploadingFile)
+                .accessibilityLabel("Attach")
+                .accessibilityValue(uploadingFile ? "Uploading" : "Ready")
+                .accessibilityIdentifier("terminal.attach")
+            } else if let onAttach {
+                slot(icon: "paperclip", busy: uploadingFile, action: onAttach)
+                    .disabled(uploadingFile)
+                    .accessibilityLabel("Attach file")
+                    .accessibilityValue(uploadingFile ? "Uploading" : "Ready")
+                    .accessibilityIdentifier("terminal.attach")
+            }
+        }
+
+        @ViewBuilder private var clipboardSlot: some View {
+            if let onPaste {
+                Group {
+                    if selectActive {
+                        slot(icon: "selection.pin.in.out", active: true) { onCopy?() }
+                    } else {
+                        PasteKey(
+                            background: UIColor(Palette.key(theme)),
+                            foreground: UIColor(Palette.text(theme)),
+                            border: UIColor(Palette.border(theme)),
+                            onPaste: onPaste
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: Self.keyHeight)
+                    }
+                }
+                // .contextMenu breaks the secure paste: its press effect drops the authentication and iOS prompts.
+                .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in clipboardMenu = true })
+                .confirmationDialog("Clipboard", isPresented: $clipboardMenu) {
+                    if let onCopy { Button("Copy selection") { onCopy() } }
+                    if let onToggleSelect {
+                        Button(selectActive ? "Done selecting" : "Select text") { onToggleSelect() }
+                    }
+                }
+                .accessibilityIdentifier("terminal.clipboard")
+            }
+        }
+
+        @ViewBuilder private var voiceSlot: some View {
+            if let onVoice {
+                slotLabel(icon: "waveform", active: voiceActive)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onVoice)
+                    .onLongPressGesture(minimumDuration: 0.5) { onCompose?() }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("Voice mode")
+                    .accessibilityValue(voiceActive ? "On" : "Off")
+                    .accessibilityHint(onCompose == nil ? "" : "Hold to write a message")
+                    .accessibilityAction(named: "Write a message") { onCompose?() }
+                    .accessibilityIdentifier("terminal.voice")
+            }
         }
 
         private var quickReplyRow: some View {
@@ -209,12 +235,12 @@
                 .font(.system(size: 11, design: .monospaced))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
+                .frame(height: Self.keyHeight)
                 .background(background ?? Palette.key(theme))
                 .foregroundStyle(foreground ?? Palette.text(theme))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(border ?? Palette.border(theme)))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(border ?? Palette.border(theme)))
         }
 
         private func slotLabel(icon: String, active: Bool = false, busy: Bool = false) -> some View {
@@ -224,18 +250,22 @@
                 .overlay {
                     if busy { ProgressView().controlSize(.mini).tint(Palette.text(theme)) }
                 }
-                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
+                .frame(height: Self.keyHeight)
                 .background(active ? Palette.accentTint(theme) : Palette.key(theme))
                 .foregroundStyle(active ? Palette.accentDark(theme) : Palette.text(theme))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(active ? Palette.accentBorder(theme) : Palette.border(theme))
+                        .strokeBorder(active ? Palette.accentBorder(theme) : Palette.border(theme))
                 )
         }
     }
 #endif
+
+enum ToolbarSlot: CaseIterable {
+    case shortcuts, ctrl, escape, tab, attach, clipboard, voice, keyboard, enter
+}
 
 enum KeyboardToggle {
     static func icon(keyboardVisible: Bool) -> String {

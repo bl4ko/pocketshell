@@ -39,9 +39,22 @@ public struct ConfirmationGate: Sendable {
     }
 
     public mutating func resolve(userTurn: String) -> Resolution {
-        guard let pending else { return .none }
+        guard let pending, !Self.words(userTurn).allSatisfy(Self.fillers.contains) else { return .none }
         self.pending = nil
-        return Self.isAffirmative(userTurn) ? .confirmed(pending) : .declined(pending)
+        return Self.confirms(userTurn, pending.action) ? .confirmed(pending) : .declined(pending)
+    }
+
+    public static func confirms(_ text: String, _ action: AgentAction) -> Bool {
+        if isAffirmative(text) { return true }
+        guard case .choose(_, let choice) = action, !choice.labels.isEmpty else { return false }
+        let label = Set(words(choice.labels.joined(separator: " ")))
+        let said = words(text)
+        if isAffirmative(said.filter { !(negations.contains($0) && label.contains($0)) }.joined(separator: " ")) {
+            return true
+        }
+        guard !said.contains(where: { negations.contains($0) && !label.contains($0) }) else { return false }
+        let options = zip(choice.numbers, choice.labels).map { InteractivePrompt.Option(number: $0, label: $1) }
+        return ExplicitChoice.named(choice, by: text, in: options, plain: false)
     }
 
     public mutating func cancel() {
@@ -49,16 +62,23 @@ public struct ConfirmationGate: Sendable {
     }
 
     public static func isAffirmative(_ text: String) -> Bool {
-        let words =
-            text.lowercased()
-            .replacingOccurrences(of: "’", with: "'")
-            .components(separatedBy: CharacterSet.letters.union(CharacterSet(charactersIn: "'")).inverted)
-            .filter { !$0.isEmpty }
+        let words = words(text)
         guard !words.isEmpty, words.count <= 7 else { return false }
         if words.contains(where: negations.contains) { return false }
         let phrase = " " + words.joined(separator: " ") + " "
         return affirmatives.contains { phrase.contains(" \($0) ") }
     }
+
+    static func words(_ text: String) -> [String] {
+        text.lowercased()
+            .replacingOccurrences(of: "’", with: "'")
+            .components(separatedBy: CharacterSet.letters.union(CharacterSet(charactersIn: "'")).inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    private static let fillers: Set<String> = [
+        "uh", "um", "uhm", "umm", "er", "erm", "ah", "hmm", "hm", "mm", "so", "well",
+    ]
 
     private static let negations: Set<String> = [
         "no", "not", "don't", "dont", "nope", "wait", "stop", "cancel", "never", "hold", "but", "instead",
@@ -68,7 +88,8 @@ public struct ConfirmationGate: Sendable {
     private static let affirmatives = [
         "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "go ahead", "do it", "confirm", "confirmed",
         "please do", "absolutely", "correct", "affirmative", "send it", "approve it", "go for it", "right",
-        "of course", "definitely", "that's right",
+        "of course", "definitely", "that's right", "allow", "allow it", "approve", "proceed", "choose it", "pick it",
+        "select it", "that one", "alright", "all right",
     ]
 }
 

@@ -29,10 +29,15 @@ enum FakeInput: Equatable {
 class FakePane {
     var commands: [String] = []
     var inputs: [FakeInput] = []
+    var listsScreen = false
 
     func exec(_ command: String) -> String? {
         commands.append(command)
-        if command.contains("list-panes") { return (try? fixture("list-agents.txt")) ?? "" }
+        if command.contains("list-panes") {
+            guard listsScreen else { return (try? fixture("list-agents.txt")) ?? "" }
+            return "@@psh-tmux:%3|4101|claude|work|2|@7|api@@\n@@psh-cwd@@\n/home/dev/src/api\n@@psh-screen@@\n"
+                + screen()
+        }
         if command.contains("capture-pane") { return screen() }
         for input in FakeInput.parse(command) {
             inputs.append(input)

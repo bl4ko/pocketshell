@@ -242,3 +242,59 @@ private func askScreen() throws -> String {
     #expect(AgentControl.optionDigit("off site-wide", screen: screen) == "1")
     #expect(AgentControl.optionDigit("the last one", screen: screen) == "2")
 }
+
+@Test func aReplyThatRestatesTheHeldChoiceConfirmsIt() {
+    let dontAsk = AgentAction.choose(
+        agentID: "a",
+        choice: PromptChoice(
+            action: .select, numbers: [2],
+            labels: ["Yes, and don't ask again for git push commands in /home/dev/src/api"],
+            question: "Do you want to proceed?"))
+    for reply in [
+        "yes, don't ask again", "don't ask again", "the second one", "option 2", "yes please", "yeah do it",
+        "allow it", "approve",
+    ] {
+        #expect(ConfirmationGate.confirms(reply, dontAsk), "\(reply)")
+    }
+    for reply in ["no", "no, don't ask again", "not that one", "the first one", "wait", "what is it doing?"] {
+        #expect(!ConfirmationGate.confirms(reply, dontAsk), "\(reply)")
+    }
+    let deny = AgentAction.choose(
+        agentID: "a",
+        choice: PromptChoice(
+            action: .select, numbers: [3], labels: ["No, and tell Claude what to do differently (esc)"],
+            question: "Do you want to proceed?"))
+    #expect(!ConfirmationGate.confirms("no", deny), "a no to «Should I choose No?» is not a yes")
+    #expect(ConfirmationGate.confirms("yes, choose no", deny))
+    #expect(ConfirmationGate.confirms("the third one", deny))
+}
+
+@Test func aFillerTurnKeepsTheHeldConfirmation() {
+    var gate = ConfirmationGate()
+    let action = AgentAction.key(agentID: "tmux:%3", key: .esc)
+    gate.hold(action, question: "q")
+    #expect(gate.resolve(userTurn: "uh") == .none)
+    #expect(gate.resolve(userTurn: "Um, so…") == .none)
+    #expect(gate.pending != nil)
+    #expect(gate.resolve(userTurn: "yes") == .confirmed(PendingConfirmation(action: action, question: "q")))
+}
+
+@Test func detectorDoesNotRepeatAPromptAfterAHighlightMoveOrAPollThatSkippedTheAgent() throws {
+    let prompt = try #require(InteractivePrompt.read(try askScreen()))
+    var moved = prompt
+    moved.options = prompt.options.map { option in
+        var option = option
+        option.highlighted = option.number == 2
+        return option
+    }
+    var agents = HostAgents.parse(try fixture("list-agents.txt"))
+    agents[2].prompt = prompt
+    var detector = AgentEventDetector()
+    #expect(detector.update(agents).map(\.prompt) == [prompt])
+    agents[2].prompt = moved
+    #expect(detector.update(agents).isEmpty, "a moved highlight is the same question")
+    var driven = agents
+    driven.remove(at: 2)
+    #expect(detector.update(driven).isEmpty)
+    #expect(detector.update(agents).isEmpty, "the brain's own tool hid the agent for one poll")
+}

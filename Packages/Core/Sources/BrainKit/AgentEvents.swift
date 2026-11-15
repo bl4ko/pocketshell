@@ -128,11 +128,11 @@ public struct AgentEventDetector: Sendable {
             if waiting, asked[transition.key] != nil { return nil }
             return AgentEvent(agentID: transition.key, name: transition.title, kind: waiting ? .waiting : .done)
         }
-        var next: [String: InteractivePrompt] = [:]
+        var next = asked.filter { id, _ in !agents.contains { $0.id == id } }
         for agent in agents where agent.status == .waiting {
             guard let prompt = agent.prompt ?? asked[agent.id] else { continue }
             next[agent.id] = prompt
-            guard asked[agent.id] != prompt else { continue }
+            guard asked[agent.id]?.sameContent(prompt) != true else { continue }
             events.removeAll { $0.agentID == agent.id }
             events.append(AgentEvent(agentID: agent.id, name: agent.spokenName, kind: .waiting, prompt: prompt))
         }
@@ -142,6 +142,8 @@ public struct AgentEventDetector: Sendable {
 }
 
 public enum PromptSpeech {
+    public static let closing = "Which one?"
+
     public static func sentence(_ prompt: InteractivePrompt, agent: String) -> String {
         let (about, question) = spokenQuestion(prompt)
         var parts: [String]
@@ -155,7 +157,7 @@ public enum PromptSpeech {
         for option in prompt.choices.prefix(5) {
             parts.append("Option \(option.number), \(spokenLabel(option.label)).")
         }
-        parts.append("Which one?")
+        parts.append(closing)
         return parts.joined(separator: " ")
     }
 

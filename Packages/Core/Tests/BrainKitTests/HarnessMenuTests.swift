@@ -306,3 +306,164 @@ final class FakeStatic: FakePane {
 
     override func screen() -> String { text }
 }
+
+@MainActor
+final class FakePermission: FakePane {
+    var command = "git push origin main"
+    var status = "Running…"
+    var labels = [
+        "Yes", "Yes, and don't ask again for git push commands in /home/dev/src/api",
+        "No, and tell Claude what to do differently (esc)",
+    ]
+    var focus = 0
+    var chosen: String?
+
+    override func press(_ key: String) {
+        guard chosen == nil else { return }
+        switch key {
+        case "Down": focus = min(focus + 1, labels.count - 1)
+        case "Up": focus = max(focus - 1, 0)
+        case "Enter": chosen = labels[focus]
+        default: if let digit = Int(key), labels.indices.contains(digit - 1) { chosen = labels[digit - 1] }
+        }
+    }
+
+    override func screen() -> String {
+        if chosen != nil { return "⏺ Done.\n\n────\n❯ \n────\n  ? for shortcuts" }
+        let rows = labels.enumerated().map { "\($0.offset == focus ? " ❯" : "  ") \($0.offset + 1). \($0.element)" }
+        return
+            ([
+                "⏺ Bash(\(command))", "  ⎿  \(status)", "", String(repeating: "─", count: 72), " Bash command", "",
+                "   \(command)", "   Run it", "", " Do you want to proceed?",
+            ] + rows
+            + ["", " Esc to cancel · Tab to amend · ctrl+e to explain"]).joined(separator: "\n")
+    }
+}
+
+@MainActor
+private func spoke(_ pane: FakePane, _ turn: String) async -> AgentToolbox {
+    pane.listsScreen = true
+    let box = toolbox(pane)
+    await box.listAgents()
+    box.spokenTurns = ["what is it asking", "  ", turn]
+    box.noteUserTurn()
+    return box
+}
+
+@MainActor
+@Test func anOptionTheUserNamedIsChosenWithoutAskingAgain() async throws {
+    for (turn, option, label) in [
+        ("the first one", "1", "Yes"), ("yes", "yes", "Yes"), ("yes, allow it", "1", "Yes"),
+        ("option 3", "no", "No, and tell Claude what to do differently (esc)"),
+        ("no", "3", "No, and tell Claude what to do differently (esc)"),
+        ("yes, and don't ask again", "2", "Yes, and don't ask again for git push commands in /home/dev/src/api"),
+        ("always allow", "don't ask again", "Yes, and don't ask again for git push commands in /home/dev/src/api"),
+    ] {
+        let pane = FakePermission()
+        let result = try await answer(await spoke(pane, turn), #"{"agent":"api","option":"\#(option)"}"#)
+        #expect(result["done"] as? String == "Answered.", "\(turn)")
+        #expect(pane.chosen == label, "\(turn)")
+    }
+}
+
+@MainActor
+@Test func aChoiceTheUserDidNotNameStillNeedsConfirmation() async throws {
+    for (turn, option) in [
+        ("yes", "2"), ("do what you think is best", "1"), ("handle it", "yes"), ("the first one", "2"),
+        ("not the first one, the second", "2"), ("yes", "3"),
+    ] {
+        let pane = FakePermission()
+        let box = await spoke(pane, turn)
+        let result = try await answer(box, #"{"agent":"api","option":"\#(option)"}"#)
+        #expect(result["status"] as? String == "needs_confirmation", "\(turn)")
+        #expect(pane.inputs.isEmpty && box.gate.pending != nil, "\(turn)")
+    }
+    let unspoken = FakePermission()
+    let box = toolbox(unspoken)
+    await box.listAgents()
+    box.spokenTurns = ["yes"]
+    let result = try await answer(box, #"{"agent":"api","option":"1"}"#)
+    #expect(result["status"] as? String == "needs_confirmation", "no prompt was on screen when the user spoke")
+}
+
+@MainActor
+@Test func aScreenThatChangedSinceTheUserSpokeNeedsConfirmation() async throws {
+    let pane = FakePermission()
+    let box = await spoke(pane, "the first one")
+    pane.command = "git push --force origin main"
+    let result = try await answer(box, #"{"agent":"api","option":"1"}"#)
+    #expect(result["status"] as? String == "needs_confirmation")
+    #expect(pane.inputs.isEmpty)
+}
+
+@MainActor
+@Test func multiSelectSkipsConfirmationOnlyWhenEveryOptionWasNamed() async throws {
+    let risky = FakeClaudeAsk.Question(
+        header: "Cleanup", text: "What should the cleanup do?",
+        options: [
+            ("Delete old branches", "merged ones"), ("Force push main", "rewrite history"),
+            ("Prune tags", "local only"),
+        ], multi: true)
+    let all = FakeClaudeAsk([risky])
+    let named = try await answer(
+        await spoke(all, "delete the old branches and prune tags"),
+        #"{"agent":"api","options":["delete old branches","prune tags"]}"#)
+    #expect(named["done"] as? String == "Answered.")
+    #expect(all.answered[0] == "Delete old branches, Prune tags")
+
+    let one = FakeClaudeAsk([risky])
+    let box = await spoke(one, "delete the old branches")
+    let held = try await answer(box, #"{"agent":"api","options":["delete old branches","force push main"]}"#)
+    #expect(held["status"] as? String == "needs_confirmation")
+    #expect(one.inputs.isEmpty)
+}
+
+@Test func explicitChoiceReadsNumbersLabelsAndPlainAnswers() throws {
+    let options = [
+        "Yes", "Yes, and always allow access to /tmp from this project", "Yes, and switch to auto mode", "No",
+    ].enumerated().map { InteractivePrompt.Option(number: $0.offset + 1, label: $0.element) }
+    func named(_ turn: String) -> Set<Int> { ExplicitChoice.numbers(ExplicitChoice.words(turn), in: options) }
+    #expect(named("the second one") == [2])
+    #expect(named("option four") == [4])
+    #expect(named("three") == [3])
+    #expect(named("the last one") == [4])
+    #expect(named("yes") == [1])
+    #expect(named("yeah go ahead") == [1])
+    #expect(named("no, don't allow it") == [4])
+    #expect(named("switch to auto mode") == [3])
+    #expect(named("yes always allow") == [2])
+    #expect(named("hmm") == [])
+    let choice = PromptChoice(action: .select, numbers: [1], labels: ["Yes"], question: "Do you want to proceed?")
+    #expect(ExplicitChoice.named(choice, by: "yes [app: Agents now: x]", in: options))
+    #expect(!ExplicitChoice.named(choice, by: "whatever you think", in: options))
+    #expect(!ExplicitChoice.named(choice, by: "yes but only once", in: options))
+    let submit = PromptChoice(action: .submit, question: "Review your answers")
+    #expect(ExplicitChoice.named(submit, by: "submit them", in: options))
+    #expect(!ExplicitChoice.named(submit, by: "sure", in: options))
+    let typed = PromptChoice(action: .select, text: "use redis", textRow: 4, question: "q")
+    #expect(ExplicitChoice.named(typed, by: "use redis please", in: options))
+    let invented = PromptChoice(action: .select, text: "Use Redis with a five minute TTL", textRow: 4, question: "q")
+    #expect(!ExplicitChoice.named(invented, by: "redis", in: options))
+}
+
+@MainActor
+@Test func cosmeticScreenChangesDoNotStopANamedOrConfirmedChoice() async throws {
+    let pane = FakePermission()
+    let box = await spoke(pane, "the first one")
+    pane.status = "Running… (4s)"
+    pane.focus = 1
+    let result = try await answer(box, #"{"agent":"api","option":"1"}"#)
+    #expect(result["done"] as? String == "Answered.")
+    #expect(pane.chosen == "Yes")
+
+    let held = FakePermission()
+    let gated = toolbox(held)
+    let asked = try await answer(gated, #"{"agent":"api","option":"1"}"#)
+    #expect(asked["status"] as? String == "needs_confirmation")
+    held.status = "Running… (9s)"
+    held.focus = 2
+    let pending = try #require(gated.gate.pending)
+    let done = await gated.perform(pending.action)
+    #expect(done == #"{"done":"Answered."}"#)
+    #expect(held.chosen == "Yes")
+}

@@ -770,6 +770,119 @@ private func showPrompt(_ rig: StagedRig) async {
 }
 
 @MainActor
+@Test func aPermissionOptionTheUserNamedIsAnsweredWithoutAskingAgain() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([
+                .text("Choosing it. "),
+                .toolCalls([call("c1", "answer_question", #"{"agent":"reviewer","option":"1"}"#)]),
+                .finished("tool_calls"),
+            ]),
+            .success([.text("Answered."), .finished("stop")]),
+        ]), herdrScreen: try fixture("claude-permission.screen.txt"))
+    rig.onCommand = { [weak rig] in if $0.contains("agent send-keys 'w1:p3' enter") { rig?.herdrScreen = "⏺ Done.\n> " }
+    }
+    rig.time = 1
+    #expect(await eventually { !rig.mouth.spoken.isEmpty })
+    rig.mouth.settle()
+    rig.ears.phrase("the first one")
+    #expect(await eventually { rig.model.requests.count == 2 })
+    #expect(rig.commands.contains { $0.contains("agent send-keys 'w1:p3' enter") })
+    let result = try #require(rig.brain.conversation.messages.last { $0.role == .tool }?.content)
+    #expect(result.contains("Answered.") && !result.contains("needs_confirmation"))
+    #expect(rig.brain.toolbox.gate.pending == nil)
+}
+
+@MainActor
+@Test func aQuestionTheBrainIsConfirmingIsNotAskedAgainAfterItsToolHidTheAgent() async throws {
+    let permission = try fixture("claude-permission.screen.txt")
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([
+                .text("Let me pick. "),
+                .toolCalls([call("c1", "answer_question", #"{"agent":"reviewer","option":"1"}"#)]),
+                .finished("tool_calls"),
+            ]),
+            .success([.text("Should I choose Yes?"), .finished("stop")]),
+        ]), herdrScreen: permission)
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken.count == 1 })
+    rig.mouth.settle()
+    var agents = HostAgents.parse(try fixture("list-agents.txt"))
+    agents[2].prompt = InteractivePrompt.read(permission)
+    var polled = false
+    rig.onCommand = { [weak rig] command in
+        guard !polled, command.contains("pane read 'w1:p3'") else { return }
+        polled = true
+        rig?.brain.noteAgents(agents)
+    }
+    rig.ears.phrase("do whatever you think is best")
+    #expect(await eventually { rig.model.requests.count == 2 && rig.brain.toolbox.gate.pending != nil })
+    #expect(polled)
+    rig.mouth.settle()
+    rig.time += VoiceBrain.toolGrace + 1
+    rig.brain.noteAgents(agents)
+    rig.time += 1
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(rig.mouth.spoken.count == 1, "the question was not asked a second time")
+}
+
+@MainActor
+@Test func aSpokenFillerOrABargeInKeepsTheHeldConfirmation() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([
+            .success([.toolCalls([call("c1", "send_key", #"{"agent":"api","key":"esc"}"#)]), .finished("tool_calls")]),
+            .success([.text("Should I interrupt Claude in api?"), .finished("stop")]),
+            .success([.text("Go on."), .finished("stop")]),
+            .success([.text("Done."), .finished("stop")]),
+        ]))
+    rig.ears.phrase("stop claude")
+    #expect(await eventually { rig.model.requests.count == 2 && rig.brain.toolbox.gate.pending != nil })
+    rig.ears.partial("uh")
+    rig.ears.phrase("uh")
+    #expect(await eventually { rig.model.requests.count == 3 })
+    #expect(rig.brain.toolbox.gate.pending != nil)
+    rig.mouth.settle()
+    rig.ears.phrase("yes")
+    #expect(await eventually { rig.commands.contains { $0.contains("send-keys -t '%3' Escape") } })
+}
+
+@MainActor
+@Test func anAnswerSpokenOverTheEndOfTheQuestionIsNotTakenForEcho() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([.success([.text("Okay."), .finished("stop")])]), herdrScreen: askScreen)
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken == [askSentence] })
+    let cut = try #require(askSentence.range(of: "Which one?"))
+    rig.mouth.hear(String(askSentence[..<cut.lowerBound]))
+    rig.time = 2
+    rig.ears.phrase("keep on", start: 1.2, end: 1.6)
+    #expect(rig.model.requests.isEmpty, "the mouth's own option words are still echo")
+    rig.mouth.hear("Which one?")
+    rig.time = 3.5
+    rig.ears.phrase("keep on", start: 2.6, end: 3.1)
+    #expect(await eventually { rig.model.requests.count == 1 })
+    #expect(rig.model.requests.first?.last == .user("keep on"))
+}
+
+@MainActor
+@Test func aTappedAnswerIsNotAskedAgainWhenOnlyTheHighlightMoved() async throws {
+    let rig = try await StagedRig(ScriptedModel([]), herdrScreen: askScreen)
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken == [askSentence] })
+    let waiting = try #require(rig.brain.waitingPrompts.first)
+    await rig.brain.answer(waiting, option: 2)
+    rig.herdrScreen = askScreen.replacingOccurrences(of: "❯ 1. Off", with: "  1. Off")
+        .replacingOccurrences(of: "  2. Keep on", with: "❯ 2. Keep on")
+    if let agents = await rig.brain.toolbox.listAgents() { rig.brain.noteAgents(agents) }
+    rig.mouth.settle()
+    rig.time += 2
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(rig.brain.waitingPrompts.isEmpty)
+    #expect(rig.mouth.spoken == [askSentence])
+}
+
+@MainActor
 @Test func tappingAPromptOptionAnswersItAndRemovesTheCard() async throws {
     let rig = try await StagedRig(ScriptedModel([]), herdrScreen: askScreen)
     rig.time = 1

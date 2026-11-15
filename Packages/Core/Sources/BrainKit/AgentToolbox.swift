@@ -31,6 +31,7 @@ public final class AgentToolbox {
 
     public private(set) var agents: [BrainAgent] = []
     public internal(set) var handedOver: [String: InteractivePrompt] = [:]
+    public internal(set) var promptsAtTurn: [String: [InteractivePrompt]] = [:]
     public private(set) var listed = false
     public var gate = ConfirmationGate()
     public var onSent: ((BrainAgent, String) -> Void)?

@@ -87,6 +87,7 @@ public final class VoiceBrain: ObservableObject {
     private var carry: String?
     private var echo = EchoGuard()
     private var partialSince: TimeInterval?
+    private var asking: (heard: String, total: Int, done: TimeInterval?)?
     private var mouthQuiet: TimeInterval? = -.infinity
     private var agentSegment = false
     private var answered: [String: InteractivePrompt] = [:]
@@ -246,9 +247,12 @@ public final class VoiceBrain: ObservableObject {
         let now = clock()
         driving = driving.filter { $0.value > now }
         let agents = listed.filter { driving[$0.id] == nil }
-        answered = answered.filter { id, prompt in agents.contains { $0.id == id && $0.prompt == prompt } }
+        answered = answered.filter { id, prompt in
+            agents.contains { $0.id == id && $0.prompt?.sameContent(prompt) == true }
+        }
         let current = agents.compactMap { agent -> WaitingPrompt? in
-            guard agent.status == .waiting, let prompt = agent.prompt, answered[agent.id] != prompt else { return nil }
+            guard agent.status == .waiting, let prompt = agent.prompt, answered[agent.id]?.sameContent(prompt) != true
+            else { return nil }
             return WaitingPrompt(agentID: agent.id, agentName: agent.spokenName, prompt: prompt)
         }
         let kept = waitingPrompts.compactMap { old in current.first { $0.agentID == old.agentID } }
@@ -259,7 +263,7 @@ public final class VoiceBrain: ObservableObject {
             for check in replyTracker.update(agents, present: Set(listed.map(\.id))) { fetchReply(check) }
         }
         for event in detector.update(agents) {
-            if event.prompt != nil, answered[event.agentID] == event.prompt { continue }
+            if let prompt = event.prompt, answered[event.agentID]?.sameContent(prompt) == true { continue }
             if let prompt = event.prompt, toolbox.handedOver[event.agentID]?.sameQuestion(prompt) == true { continue }
             if event.kind == .done,
                 replyTracker.isTracking(event.agentID)
@@ -326,7 +330,9 @@ public final class VoiceBrain: ObservableObject {
         case .phrase(let text):
             let span = spoken
             spoken = nil
-            let echoed = isEcho(text, since: span?.start ?? partialSince, until: span?.end ?? clock() - 2)
+            let echoed =
+                isEcho(text, since: span?.start ?? partialSince, until: span?.end ?? clock() - 2)
+                && !answersPrompt(text, start: span?.start)
             partialSince = nil
             guard !echoed else {
                 feed(.userPartial(""))
@@ -344,6 +350,12 @@ public final class VoiceBrain: ObservableObject {
         }
     }
 
+    private func answersPrompt(_ text: String, start: TimeInterval?) -> Bool {
+        guard let start, let done = asking?.done, start >= done else { return false }
+        let said = ExplicitChoice.words(text)
+        return waitingPrompts.contains { ExplicitChoice.numbers(said, in: $0.prompt.options).count == 1 }
+    }
+
     private func isEcho(_ text: String, since: TimeInterval?, until: TimeInterval) -> Bool {
         if let mouthQuiet, until > mouthQuiet + 0.3 { return false }
         return echo.matches(text, since: (since ?? clock()) - 2)
@@ -359,6 +371,11 @@ public final class VoiceBrain: ObservableObject {
             ears.agentSaid(text, end: false)
         case .heard(let text, let reply):
             echo.heard(text, at: clock())
+            if var ask = asking, ask.done == nil {
+                ask.heard += text
+                if ask.heard.components(separatedBy: PromptSpeech.closing).count > ask.total { ask.done = clock() }
+                asking = ask
+            }
             guard let index = replies.firstIndex(where: { $0.id == reply }) else { break }
             replies[index].heard += text
             caption = Caption(.brain, replies[index].heard.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -423,6 +440,7 @@ public final class VoiceBrain: ObservableObject {
                 }
                 caption = Caption(.brain, sentence)
                 append(.assistant(sentence))
+                asking = ("", sentence.components(separatedBy: PromptSpeech.closing).count - 1, nil)
                 mouth.speak(sentence)
             }
         }
@@ -469,6 +487,7 @@ public final class VoiceBrain: ObservableObject {
     }
 
     private func runTurn(_ phrase: String, id: Int) async {
+        toolbox.noteUserTurn()
         var text = phrase
         if let carry, conversation.messages.last == .user(carry) {
             conversation.removeLast()
@@ -879,7 +898,7 @@ public enum BrainPrompt {
         and ends with "Which one?", and the agent note shows the question and its numbered options. The user's next \
         reply usually answers it: map their words ("the first", "keep on") to an option and call answer_question \
         with its number. An option marked free text lets the user type their own answer. If the reply matches no \
-        option, ask once more in a few words.
+        option, ask once more in a few words. When the user named the option, never ask them to confirm it.
 
         The user's words come from speech recognition, which can mishear a word or cut a message off in the middle \
         of a thought. If a message is clearly unfinished, do not call a tool: say "Go on." and wait for the rest. \

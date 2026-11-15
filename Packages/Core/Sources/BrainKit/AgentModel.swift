@@ -433,11 +433,9 @@ extension AgentToolbox {
         case .current(let model, let choices):
             return Self.json(["agent": name, "model": model, "choices": choices.map(\.summary)])
         case .switched(let model):
-            return Self.json(["agent": name, "model": model, "switched": true, "scope": "this session only"])
+            return Self.done("Switched to \(model).", ["model": model, "switched": true])
         case .unchanged(let model):
-            return Self.json([
-                "agent": name, "model": model, "switched": false, "note": "This model was already active.",
-            ])
+            return Self.done("\(model) is already on.", ["model": model, "switched": false])
         case .noMatch(let choices):
             return Self.json([
                 "error": "No model in the menu of \(name) matches «\(request ?? "")». Nothing changed. "

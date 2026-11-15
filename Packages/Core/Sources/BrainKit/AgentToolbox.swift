@@ -163,35 +163,31 @@ public final class AgentToolbox {
                 return Self.error("There is no tmux session to start an agent in.")
             }
             guard
-                let output = await io.exec(
-                    AgentControl.startCommand(kind: kind, tmuxSession: session, directory: directory))
+                await io.exec(AgentControl.startCommand(kind: kind, tmuxSession: session, directory: directory)) != nil
             else { return Self.error("The host is not connected.") }
-            return Self.json([
-                "started": kind.displayName, "pane": output.trimmingCharacters(in: .whitespacesAndNewlines),
-            ])
+            return Self.done("Started \(kind.displayName).")
         }
         guard let id = Self.agentID(action), let agent = agents.first(where: { $0.id == id }) else {
             return Self.error("That agent is gone.")
         }
         let command: String
-        var result: [String: Any] = ["agent": agent.spokenName]
+        let done: String
         switch action {
         case .sendPrompt(_, let text):
             command = AgentControl.promptCommand(agent, text: text)
-            result["sent"] = text
+            done = "Sent."
         case .answer(_, let digit):
             command = AgentControl.textCommand(agent, text: digit)
-            result["answered"] = digit
+            done = "Answered."
         case .key(_, let key):
             command = AgentControl.keyCommand(agent, key: key)
-            result["key"] = key.rawValue
+            done = "Done."
         case .close:
             command = AgentControl.exitCommand(agent)
-            result["closed"] = true
+            done = "Closed."
         case .focus:
             guard await io.focus(agent) else { return Self.error("Could not switch to \(agent.spokenName).") }
-            result["focused"] = true
-            return Self.json(result)
+            return Self.done("Done.")
         case .start, .session:
             return Self.error("unreachable")
         }
@@ -207,7 +203,7 @@ public final class AgentToolbox {
             return Self.error(failure)
         }
         if case .sendPrompt(_, let text) = action { onSent?(agent, text) }
-        return Self.json(result)
+        return Self.done(done)
     }
 
     private func request(_ action: AgentAction, agent: BrainAgent?, screen: String? = nil) async -> String {
@@ -295,6 +291,10 @@ public final class AgentToolbox {
 
     nonisolated public static func error(_ message: String) -> String {
         json(["error": message])
+    }
+
+    nonisolated public static func done(_ acknowledgement: String, _ extra: [String: Any] = [:]) -> String {
+        json(extra.merging(["done": acknowledgement]) { _, new in new })
     }
 
     nonisolated public static let definitions: [ToolDefinition] = [

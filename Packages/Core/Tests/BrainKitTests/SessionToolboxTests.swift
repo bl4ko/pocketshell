@@ -199,7 +199,7 @@ private func object(_ json: String) -> [String: Any] {
 @MainActor
 @Test func focusSessionShowsTabsWindowsAndHerdrPanes() async throws {
     let harness = try Harness()
-    #expect(await harness.call("focus_session", #"{"target":"tab 2"}"#).contains("focused"))
+    #expect(await harness.call("focus_session", #"{"target":"tab 2"}"#) == #"{"done":"Done."}"#)
     #expect(harness.focused.last == .tab(id: "t2", backend: .shell))
     _ = await harness.call("focus_session", #"{"target":"work session"}"#)
     #expect(harness.focused.last == .tmuxWindow(session: "work", windowIndex: 0, windowID: "@1", paneID: "%1"))
@@ -229,13 +229,14 @@ private func object(_ json: String) -> [String: Any] {
 @MainActor
 @Test func sendTextTypesIntoIdleTargetsAndAsksFirstForBusyOrRiskyOnes() async throws {
     let harness = try Harness()
-    #expect(await harness.call("send_text", #"{"target":"tab 2","text":"ls -la","enter":true}"#).contains("typed"))
+    #expect(
+        await harness.call("send_text", #"{"target":"tab 2","text":"ls -la","enter":true}"#) == #"{"done":"Sent."}"#)
     #expect(harness.typed.last! == ("t2", "ls -la\r"))
 
     let held = await harness.call("send_text", #"{"target":"build","text":"q"}"#)
     #expect(held.contains("needs_confirmation"))
     #expect(!harness.sent.contains { $0.contains("send-keys") })
-    #expect(await harness.confirm()?.contains("typed") == true)
+    #expect(await harness.confirm() == #"{"done":"Typed."}"#)
     #expect(harness.sent.last?.contains("send-keys -t '%5' -l -- 'q'") == true)
 
     #expect(
@@ -260,11 +261,11 @@ private func object(_ json: String) -> [String: Any] {
     #expect(harness.sent.last?.contains("send-keys -t '%3' Down") == true)
 
     #expect(await harness.call("send_key", #"{"key":"ctrl_d","target":"zsh"}"#).contains("needs_confirmation"))
-    #expect(await harness.confirm()?.contains("ctrl_d") == true)
+    #expect(await harness.confirm() == #"{"done":"Done."}"#)
     #expect(harness.sent.last?.contains("send-keys -t '%1' C-d") == true)
     #expect(await harness.call("send_key", #"{"key":"esc","target":"api"}"#).contains("Should I interrupt"))
     harness.toolbox.gate.cancel()
-    #expect(await harness.call("send_key", #"{"key":"esc","target":"zsh"}"#).contains("\"key\":\"esc\""))
+    #expect(await harness.call("send_key", #"{"key":"esc","target":"zsh"}"#) == #"{"done":"Done."}"#)
 }
 
 @MainActor
@@ -273,7 +274,7 @@ private func object(_ json: String) -> [String: Any] {
     harness.replies = [("new-window", "work|3|@12|%20\n\n@@psh-exit:0@@")]
     let result = object(await harness.call("new_session", #"{"directory":"homelab","name":"lab"}"#))
     #expect(result["opened"] as? String == "tmux_window")
-    #expect(result["directory"] as? String == "/home/dev/homelab")
+    #expect(result["done"] as? String == "Opened.")
     let command = try #require(harness.sent.last)
     #expect(command.contains("new-window -t 'work' -c '/home/dev/homelab' -n 'lab' -P -F"))
     #expect(!command.contains("send-keys"))
@@ -323,7 +324,7 @@ private func object(_ json: String) -> [String: Any] {
         await harness.call("new_session", #"{"kind":"herdr_tab","agent":"codex","in":"pocketshell"}"#).contains(
             "needs_confirmation"))
     let started = await harness.confirm()
-    #expect(started?.contains("\"started\":\"Codex\"") == true)
+    #expect(object(started ?? "")["done"] as? String == "Started Codex.")
     #expect(harness.sent.contains { $0.contains("tab create --workspace 'w2'") })
     #expect(harness.sent.last?.contains("agent start 'codex' --kind 'codex' --pane 'w1:p9'") == true)
 }
@@ -347,7 +348,7 @@ private func object(_ json: String) -> [String: Any] {
 @MainActor
 @Test func renameUsesTheTabLabelOrTheRealTmuxAndHerdrNames() async throws {
     let harness = try Harness()
-    #expect(await harness.call("rename", #"{"name":"backups"}"#).contains("renamed"))
+    #expect(await harness.call("rename", #"{"name":"backups"}"#) == #"{"done":"Renamed."}"#)
     #expect(harness.renamed.last! == ("t1", "backups"))
     _ = await harness.call("rename", #"{"target":"build","name":"web build"}"#)
     #expect(harness.sent.last?.contains("rename-window -t '@4' 'web build'") == true)
@@ -384,7 +385,7 @@ private func object(_ json: String) -> [String: Any] {
     let held = await harness.call("skip_permissions", #"{"agent":"Claude in api"}"#)
     #expect(held.contains("Should I turn off permission prompts in the api tab"))
     #expect(harness.skipped == 0)
-    #expect(await harness.confirm()?.contains("skipped_permissions") == true)
+    #expect(await harness.confirm() == #"{"done":"Done."}"#)
     #expect(harness.focused.last == .tab(id: "t1", backend: .tmux(session: "work", windowIndex: 2, windowID: "@7")))
     #expect(harness.skipped == 1)
     #expect(await harness.call("skip_permissions", #"{"agent":"reviewer"}"#).contains("give Codex full access"))
@@ -493,4 +494,14 @@ private func object(_ json: String) -> [String: Any] {
     #expect(parameters["required"] == .array(["action"]))
     #expect(properties["target"] != nil && properties["pages"] != nil)
     #expect(BrainPrompt.system(hostName: "h").contains("the view tool"))
+}
+
+@Test func theBrainAcknowledgesActionsInAWordInsteadOfASummary() {
+    let prompt = BrainPrompt.system(hostName: "h")
+    #expect(prompt.contains("say only a short acknowledgement: the done text of the tool result"))
+    #expect(prompt.contains("Never sum up what you did"))
+    #expect(!prompt.contains("what you sent."))
+    #expect(AgentToolbox.done("Sent.") == #"{"done":"Sent."}"#)
+    #expect(AgentToolbox.done("Opened.", ["opened": "shell_tab"]) == #"{"done":"Opened.","opened":"shell_tab"}"#)
+    #expect(ViewAction.allCases.allSatisfy { $0.acknowledgement.split(separator: " ").count <= 3 })
 }

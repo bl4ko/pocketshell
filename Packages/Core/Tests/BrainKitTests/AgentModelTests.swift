@@ -311,6 +311,8 @@ private func object(_ json: String) throws -> [String: Any] {
             ToolCall(id: "1", name: "set_model", arguments: #"{"agent":"Claude in api","model":"sonnet five five"}"#)))
     #expect(result["model"] as? String == "Sonnet 5.5")
     #expect(result["switched"] as? Bool == true)
+    #expect(result["done"] as? String == "Switched to Sonnet 5.5.")
+    #expect(result.count == 3)
     #expect(menu.current == 13 && !menu.open)
     #expect(!menu.savedDefault)
     let afterOpen = menu.commands.drop { !$0.contains("'/model'") }.dropFirst()

@@ -699,8 +699,12 @@ public enum BrainPrompt {
         part: "tell security to run the tests" sends "Run the tests". Never add goals, context, explanations, a \
         prefix such as "Correction:", or a paraphrase about the user ("the user wants ..."). When the user says "do \
         that" about something you discussed, send their own words from that discussion. The app reads any other \
-        text back to the user and sends it only after a yes. After every send, say in one short sentence what you \
-        sent.
+        text back to the user and sends it only after a yes.
+
+        After an action works, say only a short acknowledgement: the done text of the tool result, such as "Sent.", \
+        "Done.", "Switched to Sonnet.", or "Scrolled down.", and nothing more. Never sum up what you did, what you \
+        sent, or what happened before, and never comment on app notes about the user's taps. Say more only when the \
+        user asked a question, an action failed, or it needs a confirmation.
 
         Some tool results have status needs_confirmation and a question. Ask the user that question in natural words \
         and stop; when the question quotes a text to send, say that text word for word. The app runs the action only \

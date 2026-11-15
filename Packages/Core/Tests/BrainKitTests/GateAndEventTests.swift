@@ -126,7 +126,7 @@ func otherRepliesDoNotConfirm(_ reply: String) {
         return
     }
     let result = await toolbox.perform(pending.action)
-    #expect(result.contains("esc"))
+    #expect(result == #"{"done":"Done."}"#)
     #expect(commands.last?.contains("send-keys -t '%3' Escape") == true)
 }
 
@@ -144,7 +144,7 @@ func otherRepliesDoNotConfirm(_ reply: String) {
     toolbox.onSent = { _, text in sent = text }
     let result = await toolbox.call(
         ToolCall(id: "1", name: "send_prompt", arguments: #"{"agent":"web","text":"Run the login tests"}"#))
-    #expect(result.contains("\"sent\":\"Run the login tests\""))
+    #expect(result == #"{"done":"Sent."}"#)
     #expect(sent == "Run the login tests")
     #expect(commands.last?.contains("send-keys -t '%9' -l -- 'Run the login tests'") == true)
 }

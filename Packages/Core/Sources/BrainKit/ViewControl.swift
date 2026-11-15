@@ -53,7 +53,7 @@ extension SessionToolbox {
 
     private func apply(_ action: ViewAction, pages: Int) async -> String {
         if let failure = await io.view(action, pages) { return Self.error(failure) }
-        return AgentToolbox.json(["done": action.acknowledgement])
+        return AgentToolbox.done(action.acknowledgement)
     }
 
     nonisolated static let viewDefinition = ToolDefinition(

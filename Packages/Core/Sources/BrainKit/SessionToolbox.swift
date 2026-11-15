@@ -432,19 +432,17 @@ public final class SessionToolbox {
         case .key(_, let key):
             guard let endpoint = endpoint(session) else { return Self.error("Nothing to type into there.") }
             if case .local(let tab) = endpoint {
-                return io.type(tab, key.bytes)
-                    ? AgentToolbox.json(["key": key.rawValue, "target": session.spokenName])
-                    : Self.error("The tab is not connected.")
+                return io.type(tab, key.bytes) ? AgentToolbox.done("Done.") : Self.error("The tab is not connected.")
             }
             return await run(SessionCommands.key(endpoint, key) ?? "", herdr: session.isHerdr) {
-                AgentToolbox.json(["key": key.rawValue, "target": session.spokenName])
+                AgentToolbox.done("Done.")
             }
         case .close:
             return await close(session)
         case .skipPermissions:
             guard await io.focus(session.place) else { return Self.error("Could not show the \(session.spokenName).") }
             if let failure = await io.skipPermissions() { return Self.error(failure) }
-            return AgentToolbox.json(["skipped_permissions": session.spokenName])
+            return AgentToolbox.done("Done.")
         case .snippet(let name, _):
             guard let snippet = snippet(named: name) else { return Self.error("That snippet is gone.") }
             return await type(snippet.command, enter: true, into: session)
@@ -532,9 +530,7 @@ public final class SessionToolbox {
     }
 
     private func create(_ new: NewSession) async -> String {
-        var result: [String: Any] = ["opened": new.kind.rawValue]
-        if let name = new.name { result["name"] = name }
-        if let directory = new.directory { result["directory"] = directory }
+        var result: [String: Any] = ["opened": new.kind.rawValue, "done": "Opened."]
         switch new.kind {
         case .shellTab:
             guard await io.newTab(new.directory, new.name) else { return Self.error("A new tab cannot open here.") }
@@ -551,8 +547,7 @@ public final class SessionToolbox {
                     "tmux did not open it. " + output.trimmingCharacters(in: .whitespacesAndNewlines).suffix(200))
             }
             let session = Tmux.baseSessionName(fields[0..<(fields.count - 3)].joined(separator: "|"))
-            result["tmux_session"] = session
-            if let agent = new.agent { result["started"] = agent.displayName }
+            if let agent = new.agent { result["done"] = "Started \(agent.displayName)." }
             let shown = await io.focus(
                 .tmuxWindow(
                     session: session, windowIndex: index, windowID: fields[fields.count - 2],
@@ -587,7 +582,7 @@ public final class SessionToolbox {
                 let parsed =
                     started.map(Herdr.parseActionResult) ?? .failed(code: "", message: "The host is not connected.")
                 if !Herdr.agentStarted(parsed), case .failed(_, let message) = parsed { return Self.error(message) }
-                result["started"] = agent.displayName
+                result["done"] = "Started \(agent.displayName)."
             }
             result["shown"] = await io.focus(
                 .herdrPane(session: host, workspaceID: new.workspaceID ?? "", tabID: "", paneID: pane))
@@ -608,7 +603,7 @@ public final class SessionToolbox {
         if let command = herdrFocusCommand(place), await io.exec(command) == nil {
             return Self.error("Could not switch Herdr to the \(session.spokenName).")
         }
-        return AgentToolbox.json(["focused": session.spokenName])
+        return AgentToolbox.done("Done.")
     }
 
     private func herdrFocusCommand(_ place: BrainSession.Place) -> String? {
@@ -640,7 +635,7 @@ public final class SessionToolbox {
 
     private func type(_ text: String, enter: Bool, into session: BrainSession) async -> String {
         guard let endpoint = endpoint(session) else { return Self.error("Nothing to type into there.") }
-        let done = AgentToolbox.json(["typed": text, "target": session.spokenName, "enter": enter])
+        let done = AgentToolbox.done(enter ? "Sent." : "Typed.")
         if case .local(let tab) = endpoint {
             return io.type(tab, text + (enter ? "\r" : "")) ? done : Self.error("The tab is not connected.")
         }
@@ -648,7 +643,7 @@ public final class SessionToolbox {
     }
 
     private func rename(_ session: BrainSession, to name: String) async -> String {
-        let done = AgentToolbox.json(["renamed": session.spokenName, "name": name])
+        let done = AgentToolbox.done("Renamed.")
         if case .tab(let id, _) = session.place {
             return io.renameTab(id, name) ? done : Self.error("Could not rename the tab.")
         }
@@ -658,7 +653,7 @@ public final class SessionToolbox {
     }
 
     private func close(_ session: BrainSession) async -> String {
-        let done = AgentToolbox.json(["closed": session.spokenName])
+        let done = AgentToolbox.done("Closed.")
         if case .tab(let id, _) = session.place {
             return io.closeTab(id) ? done : Self.error("Could not close the tab.")
         }

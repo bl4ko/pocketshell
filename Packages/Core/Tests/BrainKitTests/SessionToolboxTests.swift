@@ -24,6 +24,8 @@ private final class Harness {
     var skipped = 0
     var screens: [String: String] = ["t2": "$ ls\u{0}\u{0}src\n$ \n\n"]
     var snippets: [Snippet] = []
+    var views: [String] = []
+    var viewFailure: String?
     let list: String
     lazy var toolbox: AgentToolbox = makeToolbox()
 
@@ -74,7 +76,11 @@ private final class Harness {
                     self.skipped += 1
                     return nil
                 },
-                snippets: { [unowned self] in self.snippets }))
+                snippets: { [unowned self] in self.snippets },
+                view: { [unowned self] action, pages in
+                    self.views.append("\(action.rawValue)×\(pages)")
+                    return self.viewFailure
+                }))
         return toolbox
     }
 
@@ -428,7 +434,7 @@ private func object(_ json: String) -> [String: Any] {
     #expect(
         SessionToolbox.toolNames == [
             "list_sessions", "focus_session", "read_screen", "send_text", "new_session", "rename", "close",
-            "skip_permissions", "git_status", "run_snippet",
+            "skip_permissions", "git_status", "run_snippet", "view",
         ])
     #expect(BrainPrompt.system(hostName: "box").contains("[app: Sessions now: ...]"))
 }
@@ -445,4 +451,46 @@ private func object(_ json: String) -> [String: Any] {
     harness.toolbox.gate.cancel()
     let sent = await harness.call("send_text", #"{"target":"api","text":"Work in subagents.","enter":true}"#)
     #expect(!sent.contains("I will send to"))
+}
+
+@MainActor
+@Test func viewToolMovesTheShownTabWithoutTypingOrAsking() async throws {
+    let harness = try Harness()
+    #expect(object(await harness.call("view", #"{"action":"bottom"}"#))["done"] as? String == "Scrolled down.")
+    #expect(harness.commands.isEmpty, "the current tab needs no host round trip")
+    _ = await harness.call("view", #"{"action":"page_up","pages":3}"#)
+    _ = await harness.call("view", #"{"action":"PAGE_DOWN","pages":500}"#)
+    _ = await harness.call("view", #"{"action":"show_keyboard","target":"this tab"}"#)
+    #expect(harness.views == ["bottom×1", "page_up×3", "page_down×20", "show_keyboard×1"])
+    #expect(harness.focused.isEmpty)
+    #expect(harness.typed.isEmpty)
+    #expect(harness.toolbox.gate.pending == nil)
+
+    let wrong = object(await harness.call("view", #"{"action":"zoom"}"#))["error"] as? String
+    #expect(wrong?.contains("bottom, page_up, page_down, top") == true)
+    #expect(harness.views.count == 4)
+
+    _ = await harness.call("view", #"{"action":"font_bigger","target":"tab 2"}"#)
+    #expect(harness.focused == [.tab(id: "t2", backend: .shell)])
+    #expect(harness.views.last == "font_bigger×1")
+    _ = await harness.call("view", #"{"action":"top","target":"server pane"}"#)
+    #expect(harness.focused.last == .herdrPane(session: "default", workspaceID: "w1", tabID: "w1:t1", paneID: "w1:p5"))
+    #expect(harness.views.last == "top×1")
+
+    harness.viewFailure = "Focus mode needs a Herdr tab."
+    #expect(
+        object(await harness.call("view", #"{"action":"focus_mode_on"}"#))["error"] as? String
+            == "Focus mode needs a Herdr tab.")
+    #expect(!harness.sent.contains { $0.contains("send-keys") || $0.contains("send-text") })
+}
+
+@Test func viewToolIsOfferedWithEveryActionAndTheBrainIsToldAboutIt() throws {
+    let tool = try #require(SessionToolbox.definitions.first { $0.name == "view" })
+    guard case .object(let parameters) = tool.parameters, case .object(let properties) = parameters["properties"],
+        case .object(let action) = properties["action"], case .array(let actions) = action["enum"]
+    else { return #expect(Bool(false), "view has no action enum") }
+    #expect(actions == ViewAction.allCases.map { .string($0.rawValue) })
+    #expect(parameters["required"] == .array(["action"]))
+    #expect(properties["target"] != nil && properties["pages"] != nil)
+    #expect(BrainPrompt.system(hostName: "h").contains("the view tool"))
 }

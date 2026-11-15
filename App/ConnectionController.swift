@@ -154,6 +154,11 @@ final class ConnectionController: ObservableObject {
         return nil
     }
 
+    var tmuxCloneTarget: String? {
+        guard let cloneTag, case .tmux(let session, _, _) = pendingShell else { return nil }
+        return Tmux.cloneName(session: session, clientTag: cloneTag)
+    }
+
     var herdrTarget: (session: String, workspaceID: String?)? {
         if case .herdr(let session, let workspaceID) = pendingShell {
             return (session, workspaceID)

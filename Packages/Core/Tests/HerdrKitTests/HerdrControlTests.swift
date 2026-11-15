@@ -200,6 +200,29 @@ private func fixtureSnapshot() throws -> HerdrSnapshot {
     #expect(Herdr.sidebarToggleKeys(config: "[ui]\nprefix = \"ctrl+a\"\n") == [0x02, 0x62])
 }
 
+@Test func scrollingAPaneBackTakesWheelsFromTheSnapshotOffsetAndTheConfiguredStep() throws {
+    let output = """
+        {"id":"cli","result":{"snapshot":{"version":"0.9.5","protocol":22,"focused_pane_id":"w1:p2",\
+        "workspaces":[],"agents":[],"panes":[{"pane_id":"w1:p2","workspace_id":"w1","tab_id":"w1:t1",\
+        "agent_status":"unknown","focused":true,"scroll":{"offset_from_bottom":10,"max_offset_from_bottom":400,\
+        "viewport_rows":30}},{"pane_id":"w1:p3","workspace_id":"w1","tab_id":"w1:t1","agent_status":"unknown",\
+        "focused":false}]}}}
+        """
+    let panes = try #require(Herdr.parseSnapshot(output)?.panes)
+    let scroll = try #require(panes[0].scroll)
+    #expect(scroll == HerdrScroll(offsetFromBottom: 10, maxOffsetFromBottom: 400))
+    #expect(panes[1].scroll == nil)
+    #expect(scroll.wheels(toBottom: true, linesPerWheel: 3) == 4)
+    #expect(scroll.wheels(toBottom: false, linesPerWheel: 3) == 130)
+    #expect(scroll.wheels(toBottom: true, linesPerWheel: 0) == 10)
+    #expect(HerdrScroll(offsetFromBottom: 0, maxOffsetFromBottom: 0).wheels(toBottom: true, linesPerWheel: 3) == 0)
+
+    #expect(Herdr.mouseScrollLines(config: "") == 3)
+    #expect(Herdr.mouseScrollLines(config: "[ui]\n# mouse_scroll_lines = 9\nmouse_scroll_lines = 5 # fast\n") == 5)
+    #expect(Herdr.mouseScrollLines(config: "[keys]\nmouse_scroll_lines = 7\n") == 3)
+    #expect(Herdr.mouseScrollLines(config: "[ui]\nmouse_scroll_lines = 0\n") == 3)
+}
+
 @Test func detectsTheExpandedSidebarOnlyOnHerdrsDesktopLayout() {
     let desktop = """
          spaces                  │  1 Z      build    +

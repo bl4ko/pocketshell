@@ -379,6 +379,23 @@ extension Herdr {
         return prefix + key
     }
 
+    public static func mouseScrollLines(config: String) -> Int {
+        var section = ""
+        for raw in config.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") {
+                section = line.trimmingCharacters(in: CharacterSet(charactersIn: "[] "))
+                continue
+            }
+            guard section == "ui", line.hasPrefix("mouse_scroll_lines"), let equals = line.firstIndex(of: "=") else {
+                continue
+            }
+            let value = line[line.index(after: equals)...].prefix { $0 != "#" }.trimmingCharacters(in: .whitespaces)
+            if let lines = Int(value), lines > 0 { return lines }
+        }
+        return 3
+    }
+
     public static func sidebarExpanded(screen: String) -> Bool {
         guard let first = screen.split(whereSeparator: \.isNewline).first else { return false }
         return first.trimmingCharacters(in: .whitespaces).hasPrefix("spaces") && first.contains("│")

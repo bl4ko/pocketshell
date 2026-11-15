@@ -1700,6 +1700,45 @@ final class SmokeUITests: XCTestCase {
         app.buttons["voice.end"].tap()
     }
 
+    func testVoiceBrainScrollsBackToTheInputAndShowsTheKeyboard() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
+            throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")
+        }
+        openHost("localbox")
+        let terminal = app.textViews["terminal.view"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText("i=0; while [ $i -lt 400 ]; do echo brain-view-$i; i=$((i+1)); done\n")
+        XCTAssertTrue(waitForValue(terminal, "bottom"))
+
+        tapVoiceToggle()
+        let input = app.textFields["voice.testInput"]
+        let caption = app.staticTexts["voice.caption"]
+        func say(_ text: String) {
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            input.tap()
+            input.typeText(text + "\n")
+        }
+
+        say("scroll up a page")
+        XCTAssertTrue(waitForValue(terminal, "history"), "the brain must scroll the tab back")
+        XCTAssertTrue(waitForLabel(caption, containing: "Scrolled up."))
+        say("scroll down to the input")
+        XCTAssertTrue(waitForValue(terminal, "bottom"), "the brain must scroll back to the input")
+        XCTAssertTrue(waitForLabel(caption, containing: "Scrolled down."))
+        say("show the keyboard")
+        let focused = NSPredicate(format: "hasKeyboardFocus == true")
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [expectation(for: focused, evaluatedWith: terminal)], timeout: 10), .completed,
+            "the brain must give the terminal the keyboard")
+        XCTAssertTrue(waitForLabel(caption, containing: "Keyboard's up."))
+        XCTAssertEqual(terminal.value as? String, "bottom")
+
+        app.buttons["voice.end"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["voice.bar"].waitForNonExistence(timeout: 5))
+    }
+
     func testVoiceBrainFullViewShowsTheTranscript() throws {
         guard ProcessInfo.processInfo.environment["PS_TEST_BRAIN_URL"] != nil else {
             throw XCTSkip("PS_TEST_BRAIN_URL not set; mock brain test skipped")

@@ -259,6 +259,18 @@
 
         var zoomScale = 1.0
 
+        func stepFont(_ step: FontZoom.Step) {
+            guard let view else { return }
+            let base = FontZoom.base(after: step, from: Double(view.font.pointSize) / zoomScale)
+            let size = FontZoom.size(base: base, scale: zoomScale).rounded()
+            view.setFont(UIFont.monospacedSystemFont(ofSize: CGFloat(size), weight: .regular))
+            if step == .reset {
+                UserDefaults.standard.removeObject(forKey: SSHTerminalView.Coordinator.fontSizeKey)
+            } else {
+                UserDefaults.standard.set(base, forKey: SSHTerminalView.Coordinator.fontSizeKey)
+            }
+        }
+
         @objc func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
             guard let view else { return }
             if gesture.state == .began {

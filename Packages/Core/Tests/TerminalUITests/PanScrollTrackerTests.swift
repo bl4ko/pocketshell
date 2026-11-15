@@ -48,6 +48,14 @@ import Testing
     #expect(FontZoom.size(base: 13, scale: 10) == FontZoom.range.upperBound)
 }
 
+@Test func fontZoomStepsByTwoPointsWithinRangeAndResetsToTheDefault() {
+    #expect(FontZoom.base(after: .bigger, from: 13.4) == 15)
+    #expect(FontZoom.base(after: .smaller, from: 14) == 12)
+    #expect(FontZoom.base(after: .bigger, from: 31) == FontZoom.range.upperBound)
+    #expect(FontZoom.base(after: .smaller, from: 9) == FontZoom.range.lowerBound)
+    #expect(FontZoom.base(after: .reset, from: 22) == FontZoom.defaultSize)
+}
+
 @Test func momentumCoastsAndDecaysToAStop() {
     var momentum = ScrollMomentum(velocity: 1000)
     #expect(momentum.isActive)

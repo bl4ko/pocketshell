@@ -427,6 +427,77 @@
             #expect(sent == [Data("text".utf8)])
         }
 
+        @Test func brainViewScrollsLocalScrollbackToTheInputWithoutSendingInput() {
+            let bridge = TerminalBridge()
+            let view = makeGhostty()
+            bridge.view = view
+            var sent: [Data] = []
+            bridge.sendToHost = { sent.append($0) }
+            view.onSend = { [weak bridge] in bridge?.processOutgoing($0) }
+            view.feed(Data((0..<200).map { "line \($0)" }.joined(separator: "\r\n").utf8))
+            #expect(!bridge.wheelReachesHost)
+            bridge.scrollPages(up: true, count: 2)
+            #expect(!bridge.isScrolledToBottom)
+            let half = view.terminalRows / 2
+            #expect(bridge.visibleText().hasPrefix("line \(200 - view.terminalRows - 4 * half)\n"))
+            bridge.scrollToTop()
+            #expect(bridge.visibleText().hasPrefix("line 0\n"))
+            #expect(view.accessibilityValue == "history")
+            bridge.scrollPages(up: false, count: 1)
+            #expect(bridge.visibleText().hasPrefix("line \(2 * half)\n"))
+            bridge.scrollToBottom()
+            #expect(bridge.isScrolledToBottom)
+            #expect(view.accessibilityValue == "bottom")
+            #expect(sent.isEmpty)
+            #expect(bridge.inputEvents == 0)
+        }
+
+        @Test func brainViewWheelsReachAMouseReportingHostInOneWrite() {
+            let bridge = TerminalBridge()
+            let view = makeGhostty()
+            bridge.view = view
+            var sent: [Data] = []
+            bridge.sendToHost = { sent.append($0) }
+            view.onSend = { [weak bridge] in bridge?.processOutgoing($0) }
+            view.feed(Data("\u{1b}[?1000h\u{1b}[?1006h".utf8))
+            #expect(bridge.wheelReachesHost)
+            let center = "\(view.terminalCols / 2 + 1);\(view.terminalRows / 2 + 1)M"
+            bridge.sendWheel(up: false, count: 3)
+            #expect(sent == [Data(String(repeating: "\u{1b}[<65;\(center)", count: 3).utf8)])
+            bridge.sendWheel(up: true, count: 0)
+            #expect(sent.count == 1)
+            bridge.scrollPages(up: true, count: 1)
+            #expect(sent.count == 3)
+            #expect(sent[1] == Data(String(repeating: "\u{1b}[<64;\(center)", count: view.terminalRows / 6).utf8))
+        }
+
+        @Test func brainViewStepsTheFontLikeAPinchAndResetsIt() {
+            let key = SSHTerminalView.Coordinator.fontSizeKey
+            let saved = UserDefaults.standard.object(forKey: key)
+            defer { UserDefaults.standard.set(saved, forKey: key) }
+            let bridge = TerminalBridge()
+            let view = makeGhostty()
+            bridge.view = view
+            #expect(!bridge.stepFont(.bigger))
+            let gestures = GhosttyGestureCoordinator(bridge: bridge, view: view)
+            gestures.zoomScale = 1.5
+            bridge.fontStepper = { [weak gestures] in gestures?.stepFont($0) }
+            view.setFont(.monospacedSystemFont(ofSize: 21, weight: .regular))
+            view.layoutIfNeeded()
+            let rows = view.terminalRows
+            #expect(bridge.stepFont(.bigger))
+            view.layoutIfNeeded()
+            #expect(bridge.fontSize == 24)
+            #expect(UserDefaults.standard.double(forKey: key) == 16)
+            #expect(view.terminalRows < rows)
+            #expect(bridge.stepFont(.smaller))
+            #expect(bridge.stepFont(.smaller))
+            #expect(bridge.fontSize == 18)
+            #expect(bridge.stepFont(.reset))
+            #expect(bridge.fontSize == 21)
+            #expect(UserDefaults.standard.object(forKey: key) == nil)
+        }
+
         @Test func hiddenTabsReleaseTheDrawableAndRestoreItWhenShown() {
             let bridge = TerminalBridge()
             let view = makeGhostty()

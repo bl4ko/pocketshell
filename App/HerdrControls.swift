@@ -6,6 +6,7 @@ final class HerdrState: ObservableObject {
     @Published var snapshot: HerdrSnapshot?
     let zoom: HerdrZoomKeeper
     var collapsedSidebarKeys: [UInt8]?
+    var scrollLines: Int?
 
     init(hostID: UUID) {
         zoom = HerdrZoomKeeper(ledgerKey: "pocketshell.herdrZoomed.\(hostID.uuidString)")

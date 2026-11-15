@@ -289,6 +289,7 @@
             gestures.install()
             setFont(on: view, base: Double(view.font.pointSize))
             gestures.zoomScale = scale
+            bridge.fontStepper = { [weak gestures] in gestures?.stepFont($0) }
             bridge.view = view
             view.onResign = { [weak bridge] in bridge?.keyboardHold = nil }
             view.onCaretPlacement = { [weak bridge] in bridge?.caretPlacement = $0 }

@@ -99,14 +99,36 @@ public struct HerdrPane: Codable, Equatable, Sendable, Identifiable {
     public var foregroundCwd: String?
     public var status: HerdrAgentStatus
     public var focused: Bool
+    public var scroll: HerdrScroll? = nil
 
     enum CodingKeys: String, CodingKey {
         case paneID = "pane_id"
         case workspaceID = "workspace_id"
         case tabID = "tab_id"
-        case agent, label, cwd, focused
+        case agent, label, cwd, focused, scroll
         case foregroundCwd = "foreground_cwd"
         case status = "agent_status"
+    }
+}
+
+public struct HerdrScroll: Codable, Equatable, Sendable {
+    public var offsetFromBottom: Int
+    public var maxOffsetFromBottom: Int
+
+    public init(offsetFromBottom: Int, maxOffsetFromBottom: Int) {
+        self.offsetFromBottom = offsetFromBottom
+        self.maxOffsetFromBottom = maxOffsetFromBottom
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case offsetFromBottom = "offset_from_bottom"
+        case maxOffsetFromBottom = "max_offset_from_bottom"
+    }
+
+    public func wheels(toBottom: Bool, linesPerWheel: Int) -> Int {
+        let lines = toBottom ? offsetFromBottom : maxOffsetFromBottom - offsetFromBottom
+        let step = max(1, linesPerWheel)
+        return (max(0, lines) + step - 1) / step
     }
 }
 

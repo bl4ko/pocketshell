@@ -233,6 +233,7 @@ public final class SessionToolbox {
         public var skipPermissions: @MainActor () async -> String?
         public var snippets: @MainActor () -> [Snippet]
         public var defaultTmuxSession: @MainActor () -> String?
+        public var view: @MainActor (ViewAction, Int) async -> String?
 
         public init(
             exec: @escaping @MainActor (String) async -> String?,
@@ -247,7 +248,8 @@ public final class SessionToolbox {
             unseen: @escaping @MainActor (String, Int) -> Bool = { _, _ in false },
             skipPermissions: @escaping @MainActor () async -> String? = { "Not available." },
             snippets: @escaping @MainActor () -> [Snippet] = { [] },
-            defaultTmuxSession: @escaping @MainActor () -> String? = { nil }
+            defaultTmuxSession: @escaping @MainActor () -> String? = { nil },
+            view: @escaping @MainActor (ViewAction, Int) async -> String? = { _, _ in "Not available here." }
         ) {
             self.exec = exec
             self.tabs = tabs
@@ -262,6 +264,7 @@ public final class SessionToolbox {
             self.skipPermissions = skipPermissions
             self.snippets = snippets
             self.defaultTmuxSession = defaultTmuxSession
+            self.view = view
         }
     }
 
@@ -274,7 +277,7 @@ public final class SessionToolbox {
     public private(set) var ingested = false
     public var spokenTurns: [String]?
     private var agents: [BrainAgent] = []
-    private let io: IO
+    let io: IO
 
     public init(io: IO) {
         self.io = io
@@ -301,9 +304,10 @@ public final class SessionToolbox {
         func string(_ key: String) -> String? {
             (arguments[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         }
+        let target = string("target") ?? string("agent")
+        if call.name == "view" { return await view(arguments, target: target, refresh: refresh) }
         let refreshed = !ingested
         if refreshed { await refresh() }
-        let target = string("target") ?? string("agent")
         switch call.name {
         case "list_sessions":
             if !refreshed { await refresh() }
@@ -591,7 +595,7 @@ public final class SessionToolbox {
         }
     }
 
-    private func focus(_ session: BrainSession) async -> String {
+    func focus(_ session: BrainSession) async -> String {
         var place = session.place
         if case .tmuxSession(let name) = place,
             let window = layout.windows.first(where: { $0.session == name && $0.active })
@@ -849,7 +853,7 @@ public final class SessionToolbox {
         String(text.lowercased().filter { $0.isLetter || $0.isNumber })
     }
 
-    private func withTarget(
+    func withTarget(
         _ name: String?, refresh: @MainActor () async -> Void, _ body: (BrainSession) async -> Outcome
     ) async -> Outcome {
         switch SessionResolver.resolve(name, in: sessions) {
@@ -963,6 +967,7 @@ public final class SessionToolbox {
             "run_snippet",
             "Run one of the user's saved snippets by name. Snippets that type into a terminal go to the target.",
             ["name": .object(["type": "string"]), "target": targetParameter], required: ["name"]),
+        viewDefinition,
     ]
 
     nonisolated static let targetParameter: JSONValue = .object([

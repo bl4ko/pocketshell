@@ -7,6 +7,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 KEY = sys.argv[2] if len(sys.argv) > 2 else "psh-test-key"
 MODELS = ["mock-denied", "claude-opus-5-5", "mock-embedding"]
+VIEW = {
+    "scroll up a page": "page_up",
+    "scroll down to the input": "bottom",
+    "show the keyboard": "show_keyboard",
+}
 DENIED = {
     "error": {
         "message": "this client key cannot use this model",
@@ -70,6 +75,8 @@ class Handler(BaseHTTPRequestHandler):
                 text = result["question"]
             elif "opened" in result:
                 text = "Opened it."
+            elif "done" in result:
+                text = result["done"]
             else:
                 text = "The agent list failed."
             parts = [chunk({"role": "assistant", "content": text}), chunk({}, "stop")]
@@ -81,6 +88,8 @@ class Handler(BaseHTTPRequestHandler):
                 name, arguments = "new_session", {"kind": "shell_tab", "name": said.split()[-1]}
             elif said.startswith("close the "):
                 name, arguments = "close", {"target": said[len("close the "):]}
+            elif said in VIEW:
+                name, arguments = "view", {"action": VIEW[said]}
             call = {
                 "index": 0,
                 "id": "call_psh",

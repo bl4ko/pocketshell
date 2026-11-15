@@ -220,6 +220,14 @@ public enum Tmux {
         "\(tmux) display-message -p -t \(shellQuote(target)) '#{pane_current_path}'"
     }
 
+    public static func leaveCopyModeCommand(target: String) -> String {
+        "\(tmux) send-keys -t \(shellQuote(target)) -X cancel 2>/dev/null; true"
+    }
+
+    public static func historyTopCommand(target: String) -> String {
+        "\(tmux) copy-mode -e -t \(shellQuote(target)) \\; send-keys -t \(shellQuote(target)) -X history-top"
+    }
+
     public static func panePIDCommand(target: String) -> String {
         "\(tmux) display-message -p -t \(shellQuote(target)) '#{pane_pid}'"
     }

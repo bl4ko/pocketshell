@@ -558,7 +558,7 @@ public final class VoiceBrain: ObservableObject {
     }
 
     private func drivenAgent(_ call: ToolCall) -> String? {
-        guard !["list_agents", "list_sessions"].contains(call.name) else { return nil }
+        guard !["list_agents", "list_sessions", "view"].contains(call.name) else { return nil }
         let arguments = call.argumentObject
         let name = (arguments["agent"] as? String) ?? (arguments["target"] as? String)
         guard case .found(let agent) = AgentResolver.resolve(name, in: toolbox.agents) else { return nil }
@@ -685,7 +685,7 @@ public enum BrainPrompt {
         agent, act on the agent in the current tab: omit the agent argument. Read answers with read_answer and \
         summarize them in plain speech; give details only when asked.
 
-        \(SessionToolbox.prompt)
+        \(SessionToolbox.prompt) \(SessionToolbox.viewPrompt)
 
         You can switch the model of an agent session yourself: call set_model with the model the user names, and \
         get_model when they ask which model an agent uses. Never tell the user to open a menu or a model picker. The \

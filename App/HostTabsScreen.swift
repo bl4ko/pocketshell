@@ -583,7 +583,36 @@ struct HostTabsScreen: View {
                     $0.sortOrder < $1.sortOrder
                 }
             },
-            defaultTmuxSession: { host.tmuxSession ?? activeController?.tmuxTarget?.session })
+            defaultTmuxSession: { host.tmuxSession ?? activeController?.tmuxTarget?.session },
+            view: { await brainView($0, pages: $1) })
+    }
+
+    private func brainView(_ action: ViewAction, pages: Int) async -> String? {
+        guard let controller = activeController else { return "No tab is open." }
+        let bridge = controller.bridge
+        switch action {
+        case .bottom:
+            await controller.scrollToInput()
+        case .top:
+            await controller.scrollToHistoryTop()
+        case .pageUp, .pageDown:
+            bridge.scrollPages(up: action == .pageUp, count: pages)
+        case .showKeyboard, .hideKeyboard:
+            bridge.setTerminalFocused(action == .showKeyboard)
+        case .showShortcuts, .hideShortcuts:
+            #if targetEnvironment(macCatalyst)
+                return "The Mac app has no shortcut panel."
+            #else
+                bridge.setShortcuts(action == .showShortcuts)
+            #endif
+        case .focusModeOn, .focusModeOff:
+            guard controller.isHerdrAttached else { return "Focus mode works only in a Herdr tab." }
+            setHerdrFocus(action == .focusModeOn)
+        case .fontBigger, .fontSmaller, .fontReset:
+            let step: FontZoom.Step = action == .fontBigger ? .bigger : action == .fontSmaller ? .smaller : .reset
+            guard bridge.stepFont(step) else { return "The tab is not on screen yet." }
+        }
+        return nil
     }
 
     private var brainTabs: [AppTab] {

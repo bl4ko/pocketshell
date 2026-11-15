@@ -281,10 +281,17 @@
             setNeedsRender()
         }
 
+        func scrollToTop() {
+            terminal.scroll(toRow: 0)
+            updateScrollAccessibility()
+            setNeedsRender()
+        }
+
         func sendWheel(up: Bool, count: Int) {
-            sendMouse(
-                button: up ? .wheelUp : .wheelDown, action: .press, col: terminal.cols / 2, row: terminal.rows / 2,
-                count: count)
+            let bytes = terminal.encodeMouse(
+                button: up ? .wheelUp : .wheelDown, action: .press, col: terminal.cols / 2, row: terminal.rows / 2)
+            guard !bytes.isEmpty, count > 0 else { return }
+            onSend?(Data(repeatElement(bytes, count: count).joined()))
         }
 
         func sendMouse(button: VTMouseButton?, action: VTMouseAction, col: Int, row: Int, count: Int = 1) {

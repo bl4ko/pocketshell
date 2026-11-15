@@ -262,6 +262,42 @@
             view.sendWheel(up: up, count: max(1, view.terminalRows / 6))
         }
 
+        public func scrollPages(up: Bool, count: Int) {
+            for _ in 0..<(2 * max(1, count)) { scrollHalfPage(up: up) }
+        }
+
+        public func scrollToBottom() {
+            view?.scrollToBottom()
+        }
+
+        public func scrollToTop() {
+            view?.scrollToTop()
+        }
+
+        public var isScrolledToBottom: Bool {
+            view?.scrolledToBottom ?? true
+        }
+
+        public var wheelReachesHost: Bool {
+            view?.mouseReportingActive ?? false
+        }
+
+        public func sendWheel(up: Bool, count: Int) {
+            view?.sendWheel(up: up, count: count)
+        }
+
+        var fontStepper: ((FontZoom.Step) -> Void)?
+
+        public func stepFont(_ step: FontZoom.Step) -> Bool {
+            guard let fontStepper else { return false }
+            fontStepper(step)
+            return true
+        }
+
+        public var fontSize: Double? {
+            view.map { Double($0.font.pointSize) }
+        }
+
         public func copySelection() {
             guard let view, view.selectionActive else { return }
             view.copySelectionToPasteboard()
@@ -312,6 +348,14 @@
             }
             updateShortcutKeyboard?()
             setTerminalFocused(true)
+        }
+
+        public func setShortcuts(_ on: Bool) {
+            guard shortcutsActive != on else {
+                setTerminalFocused(true)
+                return
+            }
+            toggleShortcuts()
         }
 
         func showTypingKeyboard() {

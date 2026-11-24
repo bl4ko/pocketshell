@@ -187,6 +187,29 @@ private let longAnswer = """
 }
 
 @MainActor
+@Test func aReplyTheUserInterruptsNoLongerTellsTheModelToReadItBeforeTheirQuestion() async throws {
+    let summary = "Api: the migration runner now gives each test its own schema. Want the full answer?"
+    let rig = try await ReplyRig(
+        ScriptedModel(try sendScript() + [.success([.text(summary), .finished("stop")])]))
+    rig.transcript = try claudeTranscript(prompt: sentText, answer: longAnswer)
+    await rig.send("tell claude to run the migration tests again")
+    try rig.finishAPI()
+    #expect(await eventually { rig.model.requests.count == 3 && rig.mouth.streamed.hasSuffix(summary) })
+    rig.mouth.hear("Api: the migration ", reply: rig.mouth.reply)
+    rig.ears.partial("yes")
+    rig.ears.phrase("yes")
+    #expect(await eventually { rig.model.requests.count == 4 }, "an offer the user never heard is not open")
+    let request = try #require(rig.model.requests.last)
+    #expect(request.last == .user("yes"))
+    let note = try #require(request.last { $0.content?.contains("finished the prompt you sent") == true }?.content)
+    #expect(!note.contains("Tell the user now"))
+    #expect(note.contains("the user interrupted"))
+    #expect(note.contains("Answer what the user says now."))
+    #expect(note.contains("own schema, which stops the tests"), "the reply stays available for questions about it")
+    #expect(request.contains(.assistant("Api: the migration…")))
+}
+
+@MainActor
 @Test func aLongReplyThatEndsInAQuestionAsksItAndAYesGoesToTheModel() async throws {
     let question = longAnswer + "\n\nShould I also fix the two warnings?"
     let rig = try await ReplyRig(

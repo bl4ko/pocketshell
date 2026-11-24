@@ -96,6 +96,7 @@ public final class VoiceBrain: ObservableObject {
     private var driving: [String: TimeInterval] = [:]
     private var replyTracker = ReplyTracker()
     private var replyOffer: AgentReply?
+    private var telling: AgentReply?
     private var logNotes: [String] = []
 
     private struct Reply {
@@ -167,6 +168,7 @@ public final class VoiceBrain: ObservableObject {
         driving = [:]
         replyTracker = ReplyTracker()
         replyOffer = nil
+        telling = nil
         ears.onEvent = { [weak self] in self?.hear($0) }
         mouth.onEvent = { [weak self] in self?.mouthChanged($0) }
         ears.muted = muted
@@ -423,6 +425,7 @@ public final class VoiceBrain: ObservableObject {
 
     private func settleTurn() {
         logHeard(cut: false)
+        telling = nil
         replies = []
         turnText = nil
         endAgentSegment()
@@ -780,6 +783,7 @@ public final class VoiceBrain: ObservableObject {
         let id = turnID
         machine.startTurn(at: clock())
         turnActive = true
+        telling = reply
         appendUser(Self.replyNote(reply))
         turnTask = Task { [weak self] in
             await self?.converse(id)
@@ -788,17 +792,27 @@ public final class VoiceBrain: ObservableObject {
     }
 
     static func replyNote(_ reply: AgentReply) -> String {
-        func plain(_ text: String, _ limit: Int) -> String {
-            let clipped = text.count > limit ? String(text.prefix(limit)) + "…" : text
-            return clipped.replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
-        }
         let ending =
             reply.asks
             ? "end with its question to the user, word for word" : "ask \"Want the full answer?\""
-        return "[app: \(reply.agentName) finished the prompt you sent, «\(plain(reply.sent, 200))». The user has not "
-            + "heard its reply yet: «\(plain(reply.answer, 6000))». Tell the user now: start with \"\(reply.lead):\", "
-            + "give a faithful spoken summary in two to four sentences that uses only what the reply says, then "
-            + "\(ending). Do not call tools.]"
+        return "[app: \(reply.agentName) finished the prompt you sent, «\(replyText(reply.sent, 200))». The user has "
+            + "not heard its reply yet: «\(replyText(reply.answer, 6000))». Tell the user now: start with "
+            + "\"\(reply.lead):\", give a faithful spoken summary in two to four sentences that uses only what the reply "
+            + "says, then \(ending). Do not call tools.]"
+    }
+
+    static func interruptedReplyNote(_ reply: AgentReply) -> String {
+        "[app: \(reply.agentName) finished the prompt you sent, «\(replyText(reply.sent, 200))». You started to tell "
+            + "its reply, but the user interrupted, so they did not hear all of it: "
+            + "«\(replyText(reply.answer, 6000))». Answer what the user says now. If they ask for this reply, tell it "
+            + "from it only: start with \"\(reply.lead):\" and give a spoken summary in two to four sentences. If they "
+            + "talk about something else, answer that and then offer this reply in one short sentence. Do not call "
+            + "tools for it.]"
+    }
+
+    private static func replyText(_ text: String, _ limit: Int) -> String {
+        let clipped = text.count > limit ? String(text.prefix(limit)) + "…" : text
+        return clipped.replacingOccurrences(of: "[", with: "(").replacingOccurrences(of: "]", with: ")")
     }
 
     private func readFull(_ reply: AgentReply, id: Int) {
@@ -858,6 +872,13 @@ public final class VoiceBrain: ObservableObject {
         }
         if let cut { append(.assistant(cut)) }
         sealToolCalls()
+        if let reply = telling,
+            let index = conversation.messages.lastIndex(where: { $0 == .user(Self.replyNote(reply)) })
+        {
+            conversation.setContent(Self.interruptedReplyNote(reply), at: index)
+            if replyOffer == reply { replyOffer = nil }
+        }
+        telling = nil
         if let turnText, conversation.messages.last == .user(turnText) { carry = turnText }
         turnText = nil
         turnActive = false

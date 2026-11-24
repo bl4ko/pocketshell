@@ -6,6 +6,10 @@ Guidance for AI coding agents and contributors working in this repository. `CLAU
 
 iOS SSH terminal + VNC app (SwiftUI, iOS 17+) for managing tmux-based agent sessions from iPhone. Companion watchOS app and home/lock-screen widget. Commits use conventional format (`<type>(<scope>): <subject>`).
 
+## Source and delivery
+
+The primary repository is private; GitHub is a read-only mirror of `main`. Never open PRs, push branches, or tag on GitHub. Deliver each verified change as one signed conventional commit, fast-forwarded onto the primary `main`. CodeQL runs on GitHub after the mirror push. Dependency updates (`swift package update`, `Relay/` pnpm, action pins, `pre-commit autoupdate`) are made by hand; there is no Renovate.
+
 ## Commands
 
 ```sh
@@ -31,7 +35,7 @@ pre-commit run --all-files                         # format + lint + Core tests 
 
 ## Shipping
 
-- `Scripts/ship.sh` refuses a dirty tree and sets `CURRENT_PROJECT_VERSION` to minutes since 2020, which only ever climbs. Do not go back to `git rev-list --count HEAD`: rewriting history lowers the count and App Store Connect permanently rejects a reused build number.
+- `Scripts/ship.sh` refuses a dirty tree or a branch ahead of its upstream (push first) and sets `CURRENT_PROJECT_VERSION` to minutes since 2020, which only ever climbs. Do not go back to `git rev-list --count HEAD`: rewriting history lowers the count and App Store Connect permanently rejects a reused build number.
 - All three Info.plists take their versions from `$(MARKETING_VERSION)`/`$(CURRENT_PROJECT_VERSION)`; bump `MARKETING_VERSION` in `project.yml` for a user-visible version, never edit the plists directly (xcodegen rewrites them).
 - The watchOS app and widget ride along inside the iOS archive. The Catalyst build uploads as a separate macOS build of the same app record.
 - **Catalyst must be sandboxed to upload** (`90296`), so the app and widget carry `CODE_SIGN_ENTITLEMENTS[sdk=macosx*]` pointing at separate `*-mac.entitlements` files; iOS keeps the plain ones. The Mac needs `network.client` for SSH/VNC, `network.server` because `PortForwarder` binds a local listener, and `files.user-selected.read-write` for the config import/export in Settings. Sandboxing moves `UserDefaults.standard` into the app container, so a Mac install made before this loses its UI preferences once — hosts and snippets live in the app group and credentials in the Keychain, both unaffected.

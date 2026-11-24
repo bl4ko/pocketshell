@@ -56,3 +56,5 @@ swift test --package-path Packages/Core   # unit + sshd integration tests (no si
 ```
 
 Architecture, testing workflow, and contributor guidance live in [CLAUDE.md](CLAUDE.md) (`AGENTS.md` symlinks to it).
+
+GitHub is a read-only mirror; PRs are not merged, open an issue.

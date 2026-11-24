@@ -2,6 +2,10 @@
 set -eu
 cd "$(dirname "$0")/.."
 
+[ -z "$(git status --porcelain)" ] || { echo "working tree is dirty, commit first" >&2; exit 1; }
+ahead=$(git rev-list --count '@{upstream}..HEAD')
+[ "$ahead" -eq 0 ] || { echo "$ahead commit(s) not on the upstream, push first" >&2; exit 1; }
+
 : "${ASC_KEY_ID:?set ASC_KEY_ID (App Store Connect API key id)}"
 : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID (App Store Connect issuer id)}"
 key="$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
@@ -9,7 +13,6 @@ key="$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
 
 # Minutes since 2020, so build numbers only ever climb. Commit counts do not:
 # rewriting history lowers them and App Store Connect rejects the reused number.
-[ -z "$(git status --porcelain)" ] || { echo "working tree is dirty, commit first" >&2; exit 1; }
 build=$(( ($(date +%s) - 1577836800) / 60 ))
 
 xcodegen generate

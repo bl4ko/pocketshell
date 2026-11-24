@@ -492,7 +492,10 @@ final class SmokeUITests: XCTestCase {
         let attach = app.buttons["terminal.attach"]
         XCTAssertTrue(attach.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["terminal.dpad"].exists)
+        let chooseFile = app.buttons["terminal.chooseFile"]
         attach.tap()
+        XCTAssertTrue(chooseFile.waitForExistence(timeout: 5), app.debugDescription)
+        chooseFile.tap()
         let cancel = app.buttons["Cancel"].firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 30), app.debugDescription)
         defer { if cancel.exists && cancel.isHittable { cancel.tap() } }
@@ -508,6 +511,8 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
         terminal.typeText("printf '%s' ")
         attach.tap()
+        XCTAssertTrue(chooseFile.waitForExistence(timeout: 5), app.debugDescription)
+        chooseFile.tap()
         XCTAssertTrue(cancel.waitForExistence(timeout: 30), app.debugDescription)
         let file = app.cells["pocketshell-attachment-test, txt"]
         if !file.waitForExistence(timeout: 3) {
@@ -515,9 +520,11 @@ final class SmokeUITests: XCTestCase {
             if browse.exists && !browse.isSelected { browse.tap() }
             let local = app.cells["DOC.sidebar.item.On My iPhone"]
             if local.exists { local.tap() }
-            let folder = app.staticTexts["pocketshell"].firstMatch
-            XCTAssertTrue(folder.waitForExistence(timeout: 5), app.debugDescription)
-            folder.tap()
+            if !file.waitForExistence(timeout: 3) {
+                let folder = app.staticTexts["pocketshell"].firstMatch
+                XCTAssertTrue(folder.waitForExistence(timeout: 5), app.debugDescription)
+                folder.tap()
+            }
         }
         XCTAssertTrue(file.waitForExistence(timeout: 5), app.debugDescription)
         file.tap()
@@ -644,6 +651,57 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(path.hasPrefix("/tmp/psh-") && path.hasSuffix(".jpg"), path)
         let jpeg = try Data(contentsOf: URL(fileURLWithPath: path))
         XCTAssertTrue(jpeg.starts(with: [0xFF, 0xD8, 0xFF]))
+    }
+
+    func testTerminalPhotoLibraryUploadsPhotosAndInsertsPaths() throws {
+        guard ProcessInfo.processInfo.environment["PS_TEST_PORT"] != nil else {
+            throw XCTSkip("PS_TEST_PORT not set; photo library test skipped")
+        }
+        openHost("localbox")
+        let attach = app.buttons["terminal.attach"]
+        XCTAssertTrue(attach.waitForExistence(timeout: 10))
+        let capture = "/tmp/psh-library-path-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: capture) }
+        let terminal = app.textViews["terminal.view"]
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 5))
+        terminal.typeText("printf '%s ' ")
+        attach.tap()
+        let library = app.buttons["terminal.photoLibrary"]
+        XCTAssertTrue(library.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["terminal.chooseFile"].exists)
+        library.tap()
+        let photos = app.images.matching(identifier: "PXGGridLayout-Info")
+        XCTAssertTrue(photos.element(boundBy: 1).waitForExistence(timeout: 15), app.debugDescription)
+        let before = Set((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? [])
+        for index in 0..<2 {
+            photos.element(boundBy: index).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        app.buttons["Done"].firstMatch.tap()
+        var uploads: [String] = []
+        let uploaded = NSPredicate { _, _ in
+            uploads = ((try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? []).filter {
+                $0.hasPrefix("psh-") && $0.hasSuffix(".jpg") && !before.contains($0)
+            }
+            return uploads.count == 2
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: uploaded, object: nil)], timeout: 20), .completed)
+        defer { for name in uploads { try? FileManager.default.removeItem(atPath: "/tmp/" + name) } }
+        terminal.tap()
+        terminal.typeText("> '\(capture)'\n")
+        let captured = NSPredicate { _, _ in
+            FileManager.default.contents(atPath: capture)?.isEmpty == false
+        }
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: captured, object: nil)], timeout: 10), .completed)
+        let paths = try XCTUnwrap(
+            FileManager.default.contents(atPath: capture).flatMap { String(data: $0, encoding: .utf8) }
+        ).split(separator: " ").map(String.init)
+        XCTAssertEqual(Set(paths), Set(uploads.map { "/tmp/" + $0 }))
+        for path in paths {
+            XCTAssertTrue(try Data(contentsOf: URL(fileURLWithPath: path)).starts(with: [0xFF, 0xD8, 0xFF]), path)
+        }
     }
 
     func testTopBarButtonsHaveNoAdaptiveGlass() throws {

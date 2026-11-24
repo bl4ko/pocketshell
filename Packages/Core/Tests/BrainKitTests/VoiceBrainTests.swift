@@ -179,6 +179,32 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
 }
 
 @MainActor
+@Test func aYesToTheBrainsReaskedQuestionRunsTheActionInsteadOfAskingAgain() async throws {
+    let interrupt = call("c1", "send_key", #"{"agent":"api","key":"esc"}"#)
+    let rig = try Rig(
+        ScriptedModel([
+            .success([.toolCalls([interrupt]), .finished("tool_calls")]),
+            .success([.text("Should I interrupt Claude in api?"), .finished("stop")]),
+            .success([.text("It is running the tests. Should I interrupt it?"), .finished("stop")]),
+            .success([.toolCalls([call("c2", "send_key", #"{"agent":"api","key":"esc"}"#)]), .finished("tool_calls")]),
+            .success([.text("Done."), .finished("stop")]),
+        ]))
+    await rig.brain.start()
+    rig.phrase("stop claude")
+    #expect(await eventually { rig.mouth.spoken.contains("Should I interrupt Claude in api?") })
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.phrase("Sorry, what is it doing?")
+    #expect(await eventually { rig.mouth.spoken.contains("Should I interrupt it?") })
+    #expect(rig.brain.toolbox.gate.pending == nil)
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.phrase("Yes.")
+    #expect(await eventually { rig.mouth.spoken.contains("Done.") })
+    #expect(rig.commands.contains { $0.contains("send-keys -t '%3' Escape") })
+    #expect(rig.brain.toolbox.gate.pending == nil)
+    #expect(rig.mouth.spoken.filter { $0.hasPrefix("Should I interrupt") }.count == 2, "no third question")
+}
+
+@MainActor
 @Test func riskyToolWaitsForASpokenYes() async throws {
     let rig = try Rig(
         ScriptedModel([

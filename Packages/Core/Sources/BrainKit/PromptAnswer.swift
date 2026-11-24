@@ -105,7 +105,7 @@ extension AgentToolbox {
             textRow: textRow, question: prompt.question)
         let held = AgentAction.choose(agentID: agent.id, choice: choice)
         if let text, let turns = spokenTurns, !PromptFidelity.isVerbatim(text, turns: turns) {
-            return hold(held, question: PromptFidelity.readBack(text, agent: name))
+            return await hold(held, question: PromptFidelity.readBack(text, agent: name))
         }
         if userChose(choice, prompt: prompt, options: options, agent: agent) { return await perform(held) }
         return await request(held, agent: agent, screen: screen)

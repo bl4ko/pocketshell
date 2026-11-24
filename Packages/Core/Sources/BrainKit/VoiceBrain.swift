@@ -132,6 +132,12 @@ public final class VoiceBrain: ObservableObject {
             self?.delivered(agent.id, text: text, isPrompt: true)
             self?.record(.sent(agent: agent.spokenName, text: text))
         }
+        toolbox.onReconfirmed = { [weak self] confirmed, result in
+            self?.record(
+                .confirmation(
+                    .accepted, question: confirmed.question, action: Self.describe(confirmed.action), by: "voice",
+                    result: result))
+        }
     }
 
     public var isOn: Bool { mode != .off }

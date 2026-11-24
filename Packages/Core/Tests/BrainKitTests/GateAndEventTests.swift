@@ -279,6 +279,30 @@ private func askScreen() throws -> String {
     #expect(gate.resolve(userTurn: "yes") == .confirmed(PendingConfirmation(action: action, question: "q")))
 }
 
+@Test func aYesToTheReaskedQuestionConfirmsTheActionTheGateHeldBefore() {
+    var gate = ConfirmationGate()
+    let action = AgentAction.close(agentID: "tmux:%3")
+    let held = PendingConfirmation(action: action, question: "Should I close Claude in api?")
+    gate.hold(action, question: held.question)
+    #expect(gate.resolve(userTurn: "Sorry, close what?") == .declined(held))
+    #expect(gate.resolve(userTurn: "uh") == .none)
+    #expect(gate.resolve(userTurn: "Yes.") == .none)
+    #expect(gate.takeReconfirmed(.close(agentID: "tmux:%4")) == nil, "only the same action")
+    #expect(gate.takeReconfirmed(action) == held)
+    #expect(gate.takeReconfirmed(action) == nil, "once")
+
+    gate.hold(action, question: held.question)
+    #expect(gate.resolve(userTurn: "No, leave it open.") == .declined(held))
+    #expect(gate.resolve(userTurn: "Yes.") == .none)
+    #expect(gate.takeReconfirmed(action) == nil, "an explicit no is final")
+
+    gate.hold(action, question: held.question)
+    #expect(gate.resolve(userTurn: "What is it doing?") == .declined(held))
+    #expect(gate.resolve(userTurn: "Tell me about Codex.") == .none)
+    #expect(gate.resolve(userTurn: "Yes.") == .none)
+    #expect(gate.takeReconfirmed(action) == nil, "only the turn right after the unclear one")
+}
+
 @Test func detectorDoesNotRepeatAPromptAfterAHighlightMoveOrAPollThatSkippedTheAgent() throws {
     let prompt = try #require(InteractivePrompt.read(try askScreen()))
     var moved = prompt

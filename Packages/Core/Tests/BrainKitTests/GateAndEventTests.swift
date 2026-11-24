@@ -212,6 +212,27 @@ private func askScreen() throws -> String {
             + "Option 3, No, and tell Claude what to do differently. Which one?")
 }
 
+@Test func aLongQuestionKeepsItsSubjectWhenOnlyTheLastSentenceIsSpoken() throws {
+    var prompt = try #require(InteractivePrompt.read(try askScreen()))
+    prompt.header = nil
+    prompt.question =
+        "Kernel reboots waiting for approval: w4 (6.12.117→118), media.example.com (741.24.1), s3.example.com "
+        + "(264.17.1), and w3 (264.17.1, but its drain leaves ~100 pods Pending). When should they run?"
+    #expect(
+        PromptSpeech.spokenQuestion(prompt).question == "Kernel reboots waiting for approval. When should they run?")
+    #expect(
+        PromptSpeech.sentence(prompt, agent: "Claude in ops").hasPrefix(
+            "Claude in ops asks: Kernel reboots waiting for approval. When should they run? Option 1,"))
+    prompt.question =
+        "The gate blocks CI file changes in 9 repos because of repo-level secrets (cosign signing "
+        + "key, registry push robot, GitHub App private key). How do we unblock?"
+    #expect(
+        PromptSpeech.spokenQuestion(prompt).question
+            == "The gate blocks CI file changes in 9 repos because of repo-level secrets. How do we unblock?")
+    prompt.header = "Reboots"
+    #expect(PromptSpeech.spokenQuestion(prompt) == ("Reboots", "How do we unblock?"))
+}
+
 @Test func detectorReportsAPromptOnceAtFirstSightAndAgainWhenItChanges() throws {
     let prompt = try #require(InteractivePrompt.read(try askScreen()))
     var next = prompt

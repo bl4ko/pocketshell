@@ -12,6 +12,7 @@
             }
         }
         public var terms = ["Claude", "Codex", "Herdr", "tmux", "PocketShell"]
+        public var hearsAgentText: Bool { true }
         public private(set) var lastError: SonioxError?
         public let model: String
         public let turnEnd: TurnEnd

@@ -70,6 +70,7 @@ final class StagedMouth: VoiceMouth {
 final class RecordingEars: VoiceEars {
     var onEvent: ((EarsEvent) -> Void)?
     var muted = false
+    var hearsAgentText = false
     private(set) var said: [String] = []
     private(set) var ends = 0
 

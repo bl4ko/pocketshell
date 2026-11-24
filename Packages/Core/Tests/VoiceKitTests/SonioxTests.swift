@@ -625,6 +625,7 @@ final class ScriptedMouth: ProviderMouth {
 final class ScriptedEars: VoiceEars {
     var onEvent: ((EarsEvent) -> Void)?
     var muted = false
+    var hearsAgentText = false
     var startError: Error?
     private(set) var running = false
 
@@ -641,6 +642,7 @@ final class ScriptedEars: VoiceEars {
 @MainActor
 @Test func fallbackEarsSwitchToTheIPhoneWhenSonioxFails() async throws {
     let primary = ScriptedEars()
+    primary.hearsAgentText = true
     let fallback = ScriptedEars()
     let ears = FallbackEars(primary: primary, fallback: { fallback })
     var events: [EarsEvent] = []
@@ -648,9 +650,11 @@ final class ScriptedEars: VoiceEars {
     ears.onEvent = { events.append($0) }
     ears.onNotice = { notices.append($0) }
     try await ears.start()
+    #expect(ears.hearsAgentText)
     primary.onEvent?(.partial("hello"))
     primary.onEvent?(.failed("Soniox is not reachable"))
     #expect(await eventually { fallback.running })
+    #expect(!ears.hearsAgentText, "the on-device ears need the echo guard again")
     #expect(!primary.running)
     #expect(notices.count == 1)
     fallback.onEvent?(.phrase("still here"))
@@ -676,6 +680,7 @@ final class ScriptedEars: VoiceEars {
     let clock = LockedClock(500)
     let ears = SonioxEars(
         apiKey: "test-key", microphone: microphone, connect: factory.connect, clock: { clock.value })
+    #expect(ears.hearsAgentText)
     var events: [EarsEvent] = []
     ears.onEvent = { events.append($0) }
     try await ears.start()

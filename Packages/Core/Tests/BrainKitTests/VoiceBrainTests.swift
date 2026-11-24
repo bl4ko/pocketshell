@@ -870,6 +870,23 @@ private func showPrompt(_ rig: StagedRig) async {
 }
 
 @MainActor
+@Test func earsThatHearTheAgentTextNeverDropAnAnswerAsEcho() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([.success([.text("Okay."), .finished("stop")])]), herdrScreen: askScreen)
+    rig.ears.hearsAgentText = true
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken == [askSentence] })
+    let cut = try #require(askSentence.range(of: "Option 2"))
+    rig.mouth.hear(String(askSentence[..<cut.lowerBound]))
+    rig.time = 2
+    rig.ears.partial("Off site-wide")
+    #expect(rig.mouth.stops == 1, "the user's answer over the options stops the mouth")
+    rig.ears.phrase("Off site-wide.", start: 1.2, end: 1.6)
+    #expect(await eventually { rig.model.requests.count == 1 })
+    #expect(rig.model.requests.first?.last == .user("Off site-wide."))
+}
+
+@MainActor
 @Test func aTappedAnswerIsNotAskedAgainWhenOnlyTheHighlightMoved() async throws {
     let rig = try await StagedRig(ScriptedModel([]), herdrScreen: askScreen)
     rig.time = 1

@@ -378,6 +378,7 @@ public final class VoiceBrain: ObservableObject {
     }
 
     private func isEcho(_ text: String, since: TimeInterval?, until: TimeInterval) -> Bool {
+        if ears.hearsAgentText { return false }
         if let mouthQuiet, until > mouthQuiet + 0.3 { return false }
         return echo.matches(text, since: (since ?? clock()) - 2)
     }

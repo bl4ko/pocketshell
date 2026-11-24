@@ -148,6 +148,7 @@ public final class FallbackEars: VoiceEars {
         didSet { active.muted = muted }
     }
     public private(set) var usingFallback = false
+    public var hearsAgentText: Bool { active.hearsAgentText }
     private let primary: VoiceEars
     private let makeFallback: @MainActor () -> VoiceEars
     private var active: VoiceEars

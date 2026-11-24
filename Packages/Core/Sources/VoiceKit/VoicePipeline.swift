@@ -20,12 +20,14 @@ public enum MouthEvent: Equatable, Sendable {
 public protocol VoiceEars: AnyObject {
     var onEvent: ((EarsEvent) -> Void)? { get set }
     var muted: Bool { get set }
+    var hearsAgentText: Bool { get }
     func start() async throws
     func stop()
     func agentSaid(_ text: String, end: Bool)
 }
 
 extension VoiceEars {
+    public var hearsAgentText: Bool { false }
     public func agentSaid(_ text: String, end: Bool) {}
 }
 

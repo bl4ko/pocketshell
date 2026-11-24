@@ -35,6 +35,7 @@ public final class AgentToolbox {
     public private(set) var listed = false
     public var gate = ConfirmationGate()
     public var onSent: ((BrainAgent, String) -> Void)?
+    public var onReconfirmed: ((PendingConfirmation, String) -> Void)?
     public var sessions: SessionToolbox?
     public var spokenTurns: [String]? {
         didSet { sessions?.spokenTurns = spokenTurns }
@@ -93,7 +94,7 @@ public final class AgentToolbox {
             return await withAgent(name) { agent in
                 let action = AgentAction.sendPrompt(agentID: agent.id, text: text)
                 if let turns = self.spokenTurns, !PromptFidelity.isVerbatim(text, turns: turns) {
-                    return self.hold(action, question: PromptFidelity.readBack(text, agent: agent.spokenName))
+                    return await self.hold(action, question: PromptFidelity.readBack(text, agent: agent.spokenName))
                 }
                 return await self.request(action, agent: agent)
             }
@@ -203,12 +204,17 @@ public final class AgentToolbox {
 
     func request(_ action: AgentAction, agent: BrainAgent?, screen: String? = nil) async -> String {
         if let question = SafetyPolicy.question(for: action, agent: agent, screen: screen) {
-            return hold(action, question: question)
+            return await hold(action, question: question)
         }
         return await perform(action)
     }
 
-    func hold(_ action: AgentAction, question: String) -> String {
+    func hold(_ action: AgentAction, question: String) async -> String {
+        if let confirmed = gate.takeReconfirmed(action) {
+            let result = await perform(action)
+            onReconfirmed?(confirmed, result)
+            return result
+        }
         gate.hold(action, question: question)
         let instruction =
             question.hasPrefix(PromptFidelity.readBackPrefix)
@@ -217,10 +223,10 @@ public final class AgentToolbox {
         return Self.json(["status": "needs_confirmation", "question": question, "instruction": instruction])
     }
 
-    private func settle(_ outcome: SessionToolbox.Outcome) -> String {
+    private func settle(_ outcome: SessionToolbox.Outcome) async -> String {
         switch outcome {
         case .done(let result): result
-        case .confirm(let action, let question): hold(.session(action), question: question)
+        case .confirm(let action, let question): await hold(.session(action), question: question)
         }
     }
 

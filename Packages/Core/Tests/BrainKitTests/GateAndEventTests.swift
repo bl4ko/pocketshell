@@ -212,6 +212,27 @@ private func askScreen() throws -> String {
             + "Option 3, No, and tell Claude what to do differently. Which one?")
 }
 
+@Test func aLongQuestionKeepsItsSubjectWhenOnlyTheLastSentenceIsSpoken() throws {
+    var prompt = try #require(InteractivePrompt.read(try askScreen()))
+    prompt.header = nil
+    prompt.question =
+        "Kernel reboots waiting for approval: w4 (6.12.117→118), media.example.com (741.24.1), s3.example.com "
+        + "(264.17.1), and w3 (264.17.1, but its drain leaves ~100 pods Pending). When should they run?"
+    #expect(
+        PromptSpeech.spokenQuestion(prompt).question == "Kernel reboots waiting for approval. When should they run?")
+    #expect(
+        PromptSpeech.sentence(prompt, agent: "Claude in ops").hasPrefix(
+            "Claude in ops asks: Kernel reboots waiting for approval. When should they run? Option 1,"))
+    prompt.question =
+        "The gate blocks CI file changes in 9 repos because of repo-level secrets (cosign signing "
+        + "key, registry push robot, GitHub App private key). How do we unblock?"
+    #expect(
+        PromptSpeech.spokenQuestion(prompt).question
+            == "The gate blocks CI file changes in 9 repos because of repo-level secrets. How do we unblock?")
+    prompt.header = "Reboots"
+    #expect(PromptSpeech.spokenQuestion(prompt) == ("Reboots", "How do we unblock?"))
+}
+
 @Test func detectorReportsAPromptOnceAtFirstSightAndAgainWhenItChanges() throws {
     let prompt = try #require(InteractivePrompt.read(try askScreen()))
     var next = prompt
@@ -277,6 +298,30 @@ private func askScreen() throws -> String {
     #expect(gate.resolve(userTurn: "Um, so…") == .none)
     #expect(gate.pending != nil)
     #expect(gate.resolve(userTurn: "yes") == .confirmed(PendingConfirmation(action: action, question: "q")))
+}
+
+@Test func aYesToTheReaskedQuestionConfirmsTheActionTheGateHeldBefore() {
+    var gate = ConfirmationGate()
+    let action = AgentAction.close(agentID: "tmux:%3")
+    let held = PendingConfirmation(action: action, question: "Should I close Claude in api?")
+    gate.hold(action, question: held.question)
+    #expect(gate.resolve(userTurn: "Sorry, close what?") == .declined(held))
+    #expect(gate.resolve(userTurn: "uh") == .none)
+    #expect(gate.resolve(userTurn: "Yes.") == .none)
+    #expect(gate.takeReconfirmed(.close(agentID: "tmux:%4")) == nil, "only the same action")
+    #expect(gate.takeReconfirmed(action) == held)
+    #expect(gate.takeReconfirmed(action) == nil, "once")
+
+    gate.hold(action, question: held.question)
+    #expect(gate.resolve(userTurn: "No, leave it open.") == .declined(held))
+    #expect(gate.resolve(userTurn: "Yes.") == .none)
+    #expect(gate.takeReconfirmed(action) == nil, "an explicit no is final")
+
+    gate.hold(action, question: held.question)
+    #expect(gate.resolve(userTurn: "What is it doing?") == .declined(held))
+    #expect(gate.resolve(userTurn: "Tell me about Codex.") == .none)
+    #expect(gate.resolve(userTurn: "Yes.") == .none)
+    #expect(gate.takeReconfirmed(action) == nil, "only the turn right after the unclear one")
 }
 
 @Test func detectorDoesNotRepeatAPromptAfterAHighlightMoveOrAPollThatSkippedTheAgent() throws {

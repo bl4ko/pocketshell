@@ -178,9 +178,10 @@ public enum PromptSpeech {
         guard question.count > 140 else { return (nil, question) }
         var sentences: [String] = []
         var sentence = ""
-        for character in question {
+        for (index, character) in zip(question.indices, question) {
             sentence.append(character)
-            guard ".?!".contains(character) else { continue }
+            let next = question.index(after: index)
+            guard ".?!".contains(character), next == question.endIndex || question[next].isWhitespace else { continue }
             sentences.append(sentence.trimmingCharacters(in: .whitespaces))
             sentence = ""
         }
@@ -188,7 +189,24 @@ public enum PromptSpeech {
             sentences.append(sentence.trimmingCharacters(in: .whitespaces))
         }
         guard let last = sentences.last(where: { $0.hasSuffix("?") }) ?? sentences.last else { return (nil, question) }
-        return (prompt.header, last)
+        guard prompt.header == nil, let first = sentences.first, first != last, let lead = lead(first) else {
+            return (prompt.header, last)
+        }
+        return (nil, "\(lead). \(last)")
+    }
+
+    static func lead(_ sentence: String) -> String? {
+        var text = sentence.replacing(/\s*\([^)]*\)?/, with: "")
+        if let colon = text.firstIndex(of: ":"), text[..<colon].split(separator: " ").count >= 2 {
+            text = String(text[..<colon])
+        }
+        text = text.trimmingCharacters(in: CharacterSet(charactersIn: " .,;:"))
+        var words: [Substring] = []
+        for word in text.split(separator: " ") {
+            guard (words + [word]).joined(separator: " ").count <= 100 else { break }
+            words.append(word)
+        }
+        return words.isEmpty ? nil : words.joined(separator: " ")
     }
 
     static func spokenContext(_ prompt: InteractivePrompt) -> String? {

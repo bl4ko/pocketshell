@@ -31,6 +31,8 @@ public struct ConfirmationGate: Sendable {
     }
 
     public private(set) var pending: PendingConfirmation?
+    private var unanswered: PendingConfirmation?
+    private var reconfirmed: PendingConfirmation?
 
     public init() {}
 
@@ -39,9 +41,27 @@ public struct ConfirmationGate: Sendable {
     }
 
     public mutating func resolve(userTurn: String) -> Resolution {
-        guard let pending, !Self.words(userTurn).allSatisfy(Self.fillers.contains) else { return .none }
+        let words = Self.words(userTurn)
+        guard !words.allSatisfy(Self.fillers.contains) else { return .none }
+        reconfirmed = nil
+        guard let pending else {
+            if let unanswered, Self.isAffirmative(userTurn) { reconfirmed = unanswered }
+            unanswered = nil
+            return .none
+        }
         self.pending = nil
-        return Self.confirms(userTurn, pending.action) ? .confirmed(pending) : .declined(pending)
+        if Self.confirms(userTurn, pending.action) {
+            unanswered = nil
+            return .confirmed(pending)
+        }
+        unanswered = words.contains(where: Self.negations.contains) ? nil : pending
+        return .declined(pending)
+    }
+
+    public mutating func takeReconfirmed(_ action: AgentAction) -> PendingConfirmation? {
+        guard let reconfirmed, reconfirmed.action == action else { return nil }
+        self.reconfirmed = nil
+        return reconfirmed
     }
 
     public static func confirms(_ text: String, _ action: AgentAction) -> Bool {
@@ -59,6 +79,8 @@ public struct ConfirmationGate: Sendable {
 
     public mutating func cancel() {
         pending = nil
+        unanswered = nil
+        reconfirmed = nil
     }
 
     public static func isAffirmative(_ text: String) -> Bool {

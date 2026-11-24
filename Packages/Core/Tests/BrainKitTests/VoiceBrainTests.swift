@@ -179,6 +179,32 @@ private func call(_ id: String, _ name: String, _ arguments: String = "{}") -> T
 }
 
 @MainActor
+@Test func aYesToTheBrainsReaskedQuestionRunsTheActionInsteadOfAskingAgain() async throws {
+    let interrupt = call("c1", "send_key", #"{"agent":"api","key":"esc"}"#)
+    let rig = try Rig(
+        ScriptedModel([
+            .success([.toolCalls([interrupt]), .finished("tool_calls")]),
+            .success([.text("Should I interrupt Claude in api?"), .finished("stop")]),
+            .success([.text("It is running the tests. Should I interrupt it?"), .finished("stop")]),
+            .success([.toolCalls([call("c2", "send_key", #"{"agent":"api","key":"esc"}"#)]), .finished("tool_calls")]),
+            .success([.text("Done."), .finished("stop")]),
+        ]))
+    await rig.brain.start()
+    rig.phrase("stop claude")
+    #expect(await eventually { rig.mouth.spoken.contains("Should I interrupt Claude in api?") })
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.phrase("Sorry, what is it doing?")
+    #expect(await eventually { rig.mouth.spoken.contains("Should I interrupt it?") })
+    #expect(rig.brain.toolbox.gate.pending == nil)
+    #expect(await eventually { rig.brain.phase == .listening })
+    rig.phrase("Yes.")
+    #expect(await eventually { rig.mouth.spoken.contains("Done.") })
+    #expect(rig.commands.contains { $0.contains("send-keys -t '%3' Escape") })
+    #expect(rig.brain.toolbox.gate.pending == nil)
+    #expect(rig.mouth.spoken.filter { $0.hasPrefix("Should I interrupt") }.count == 2, "no third question")
+}
+
+@MainActor
 @Test func riskyToolWaitsForASpokenYes() async throws {
     let rig = try Rig(
         ScriptedModel([
@@ -867,6 +893,23 @@ private func showPrompt(_ rig: StagedRig) async {
     rig.ears.phrase("keep on", start: 2.6, end: 3.1)
     #expect(await eventually { rig.model.requests.count == 1 })
     #expect(rig.model.requests.first?.last == .user("keep on"))
+}
+
+@MainActor
+@Test func earsThatHearTheAgentTextNeverDropAnAnswerAsEcho() async throws {
+    let rig = try await StagedRig(
+        ScriptedModel([.success([.text("Okay."), .finished("stop")])]), herdrScreen: askScreen)
+    rig.ears.hearsAgentText = true
+    rig.time = 1
+    #expect(await eventually { rig.mouth.spoken == [askSentence] })
+    let cut = try #require(askSentence.range(of: "Option 2"))
+    rig.mouth.hear(String(askSentence[..<cut.lowerBound]))
+    rig.time = 2
+    rig.ears.partial("Off site-wide")
+    #expect(rig.mouth.stops == 1, "the user's answer over the options stops the mouth")
+    rig.ears.phrase("Off site-wide.", start: 1.2, end: 1.6)
+    #expect(await eventually { rig.model.requests.count == 1 })
+    #expect(rig.model.requests.first?.last == .user("Off site-wide."))
 }
 
 @MainActor

@@ -21,6 +21,7 @@
         let onCompose: (() -> Void)?
         let onAttach: (() -> Void)?
         let onCamera: (() -> Void)?
+        let onPhotoLibrary: (() -> Void)?
         let uploadingFile: Bool
         let selectActive: Bool
         let voiceActive: Bool
@@ -42,6 +43,7 @@
             onCompose: (() -> Void)? = nil,
             onAttach: (() -> Void)? = nil,
             onCamera: (() -> Void)? = nil,
+            onPhotoLibrary: (() -> Void)? = nil,
             uploadingFile: Bool = false,
             selectActive: Bool = false,
             voiceActive: Bool = false,
@@ -61,6 +63,7 @@
             self.onCompose = onCompose
             self.onAttach = onAttach
             self.onCamera = onCamera
+            self.onPhotoLibrary = onPhotoLibrary
             self.uploadingFile = uploadingFile
             self.selectActive = selectActive
             self.voiceActive = voiceActive
@@ -114,10 +117,16 @@
         }
 
         @ViewBuilder private var attachSlot: some View {
-            if let onAttach, let onCamera {
+            if let onAttach, onCamera != nil || onPhotoLibrary != nil {
                 Menu {
-                    Button("Take Photo", systemImage: "camera") { onCamera() }
-                        .accessibilityIdentifier("terminal.camera")
+                    if let onPhotoLibrary {
+                        Button("Photo Library", systemImage: "photo.on.rectangle") { onPhotoLibrary() }
+                            .accessibilityIdentifier("terminal.photoLibrary")
+                    }
+                    if let onCamera {
+                        Button("Take Photo", systemImage: "camera") { onCamera() }
+                            .accessibilityIdentifier("terminal.camera")
+                    }
                     Button("Choose File", systemImage: "doc") { onAttach() }
                         .accessibilityIdentifier("terminal.chooseFile")
                 } label: {

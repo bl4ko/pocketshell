@@ -1,6 +1,7 @@
 import HerdrKit
 import Models
 import MonitorKit
+import PhotosUI
 import SwiftUI
 import TerminalUI
 import TmuxKit
@@ -250,6 +251,8 @@ struct TerminalScreen: View {
     @State private var findFailed = false
     @State private var attachingFile = false
     @State private var takingPhoto = false
+    @State private var choosingPhotos = false
+    @State private var pickedPhotos: [PhotosPickerItem] = []
     @State private var attachmentError: String?
     @FocusState private var findFocused: Bool
 
@@ -360,6 +363,7 @@ struct TerminalScreen: View {
                                 attachingFile = true
                             },
                             onCamera: cameraAction,
+                            onPhotoLibrary: { choosingPhotos = true },
                             uploadingFile: connection.isUploadingFile,
                             selectActive: connection.bridge.selectMode,
                             voiceActive: voiceModeOn,
@@ -391,6 +395,21 @@ struct TerminalScreen: View {
         .fullScreenCover(isPresented: $takingPhoto) {
             CameraPicker { connection.bridge.pastePhoto($0) }
                 .ignoresSafeArea()
+        }
+        .photosPicker(
+            isPresented: $choosingPhotos, selection: $pickedPhotos, maxSelectionCount: 10,
+            selectionBehavior: .ordered, matching: .images
+        )
+        .onChange(of: pickedPhotos) { _, items in
+            guard !items.isEmpty else { return }
+            pickedPhotos = []
+            Task {
+                for item in items {
+                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                        connection.bridge.pastePhoto(image)
+                    }
+                }
+            }
         }
         .fileImporter(isPresented: $attachingFile, allowedContentTypes: [.item]) { result in
             Task {

@@ -24,7 +24,7 @@ if [ -n "${PS_BUILD_KEYCHAIN:-}" ] && [ -n "${PS_BUILD_KEYCHAIN_PASSWORD:-}" ]; 
 fi
 
 ship() {
-    out=$(mktemp -d)
+    out=$(mktemp -d "${TMPDIR:-/tmp}/pocketshell-ship.XXXXXX")
     xcodebuild archive -scheme pocketshell -destination "$1" \
         -archivePath "$out/pocketshell.xcarchive" \
         -derivedDataPath "${PS_BUILD_DIR:-$HOME/Library/Developer/Xcode/DerivedData/pocketshell-ship}/dd-ship" \

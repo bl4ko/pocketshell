@@ -3,8 +3,23 @@ set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 DIR=$(mktemp -d)
-PORT=${PS_TEST_PORT:-24222}
-BRAIN_PORT=${PS_TEST_BRAIN_PORT:-24223}
+pick_port() {
+    lo=${PS_TEST_PORT_RANGE%-*}
+    hi=${PS_TEST_PORT_RANGE#*-}
+    for _ in $(seq 1 200); do
+        p=$((lo + $(od -An -N2 -tu2 /dev/urandom) % (hi - lo + 1)))
+        [ "$p" != "${1:-}" ] && ! nc -z 127.0.0.1 "$p" 2>/dev/null && { echo "$p"; return; }
+    done
+    echo "no free port in $PS_TEST_PORT_RANGE" >&2
+    exit 1
+}
+if [ -n "${PS_TEST_PORT_RANGE:-}" ]; then
+    PORT=${PS_TEST_PORT:-$(pick_port)}
+    BRAIN_PORT=${PS_TEST_BRAIN_PORT:-$(pick_port "$PORT")}
+else
+    PORT=${PS_TEST_PORT:-24222}
+    BRAIN_PORT=${PS_TEST_BRAIN_PORT:-24223}
+fi
 SIM=${PS_TEST_SIM:-iPhone 17}
 TMUX_SESSION="psh-uitest-$$"
 STATUS_STABLE="$TMUX_SESSION-stable"
@@ -44,9 +59,9 @@ chmod 600 "$DIR/authorized_keys"
 cat > "$DIR/sshd_config" << EOF
 Port $PORT
 ListenAddress 127.0.0.1
-HostKey $DIR/host_ed25519
-PidFile $DIR/sshd.pid
-AuthorizedKeysFile $DIR/authorized_keys
+HostKey "$DIR/host_ed25519"
+PidFile "$DIR/sshd.pid"
+AuthorizedKeysFile "$DIR/authorized_keys"
 StrictModes no
 UsePAM no
 PasswordAuthentication no

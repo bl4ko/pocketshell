@@ -47,7 +47,7 @@
 
             var payload = Data(count: 900_000)
             payload.withUnsafeMutableBytes { _ = SecRandomCopyBytes(kSecRandomDefault, 900_000, $0.baseAddress!) }
-            let path = "/tmp/psh-repro-\(UUID().uuidString.prefix(8)).jpg"
+            let path = sshd.dir.appendingPathComponent("psh-repro-\(UUID().uuidString.prefix(8)).jpg").path
             for (i, command) in RemoteFileUpload.commands(base64: payload.base64EncodedString(), remotePath: path)
                 .enumerated()
             {

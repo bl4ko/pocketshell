@@ -38,7 +38,7 @@
             try await connection.connect()
 
             let forward = try await connection.forwardPort(
-                localPort: 0,
+                localPort: TestSSHD.freePort(),
                 remoteHost: "127.0.0.1",
                 remotePort: sshd.port
             )

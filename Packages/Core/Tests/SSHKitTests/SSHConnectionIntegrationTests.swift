@@ -44,9 +44,9 @@
             let config = """
                 Port \(port)
                 ListenAddress 127.0.0.1
-                HostKey \(hostKey.path)
-                PidFile \(dir.appendingPathComponent("sshd.pid").path)
-                AuthorizedKeysFile \(authorizedKeys.path)
+                HostKey "\(hostKey.path)"
+                PidFile "\(dir.appendingPathComponent("sshd.pid").path)"
+                AuthorizedKeysFile "\(authorizedKeys.path)"
                 StrictModes no
                 UsePAM no
                 PasswordAuthentication no
@@ -77,9 +77,10 @@
             ["-c", daemonScript, "sh", config, String(owner)]
         }
 
-        private static func freePort() -> Int {
-            for _ in 0..<50 {
-                let candidate = Int.random(in: 20000...29999)
+        static func freePort() -> Int {
+            let range = portRange()
+            for _ in 0..<200 {
+                let candidate = Int.random(in: range)
                 let fd = socket(AF_INET, SOCK_STREAM, 0)
                 defer { close(fd) }
                 var addr = sockaddr_in()
@@ -93,7 +94,17 @@
                 }
                 if rc == 0 { return candidate }
             }
-            return Int.random(in: 20000...29999)
+            return Int.random(in: range)
+        }
+
+        static func portRange(_ value: String? = ProcessInfo.processInfo.environment["PS_TEST_PORT_RANGE"])
+            -> ClosedRange<Int>
+        {
+            let bounds = value?.split(separator: "-").compactMap { Int($0) } ?? []
+            guard bounds.count == 2, bounds[0] <= bounds[1], bounds[0] > 0, bounds[1] < 65536 else {
+                return 20000...29999
+            }
+            return bounds[0]...bounds[1]
         }
 
         var username: String { NSUserName() }

@@ -410,6 +410,7 @@ import Models
 @Test func placeholderWindowNamesDetected() {
     #expect(Tmux.isPlaceholderWindowName("[tmux]"))
     #expect(Tmux.isPlaceholderWindowName("[dead]"))
+    #expect(Tmux.isPlaceholderWindowName("[tmux][dead]"))
     #expect(Tmux.isPlaceholderWindowName(""))
     #expect(!Tmux.isPlaceholderWindowName("homeassistant"))
     #expect(!Tmux.isPlaceholderWindowName("tmux"))

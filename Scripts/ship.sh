@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+umask 022
 cd "$(dirname "$0")/.."
 
 [ -z "$(git status --porcelain)" ] || { echo "working tree is dirty, commit first" >&2; exit 1; }

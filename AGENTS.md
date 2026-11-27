@@ -24,6 +24,7 @@ swift build --package-path Packages/Core           # compile check without tests
 ./Scripts/uitest.sh                                # e2e UI tests: throwaway sshd + tmux session + simulator
 xcodebuild build -scheme pocketshell -destination "generic/platform=iOS Simulator"  # full app build
 pre-commit run --all-files                         # format + lint + Core tests (hooks: pre-commit install)
+./Scripts/ci-gate.sh                               # merge gate: lint, libghostty (cached), Core tests without the Keychain-backed KeyKit tests, iOS Simulator + Catalyst builds; load gate first
 ./Scripts/install-mac.sh                           # build + install the Catalyst app into /Applications on this Mac
 ./Scripts/ship.sh                                  # archive iOS + Catalyst and upload both to TestFlight
 ```

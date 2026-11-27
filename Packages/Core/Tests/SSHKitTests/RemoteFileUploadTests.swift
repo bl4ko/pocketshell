@@ -37,4 +37,5 @@ import Testing
     #expect(path != RemoteFileUpload.remotePath(filename: filename))
     #expect(RemoteFileUpload.quotedPath(path).contains("draft'\\''s.pdf"))
     #expect(RemoteFileUpload.remotePath(filename: "../note\n.txt").hasSuffix("/note_.txt"))
+    #expect(RemoteFileUpload.remotePath(filename: filename, root: "/srv/up").hasPrefix("/srv/up/psh-"))
 }

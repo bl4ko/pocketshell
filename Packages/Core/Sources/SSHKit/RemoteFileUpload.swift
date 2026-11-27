@@ -19,10 +19,10 @@ public enum RemoteFileUpload {
         "/tmp/psh-\(UUID().uuidString.prefix(8).lowercased()).jpg"
     }
 
-    public static func remotePath(filename: String) -> String {
+    public static func remotePath(filename: String, root: String = "/tmp") -> String {
         let name = URL(fileURLWithPath: filename).lastPathComponent
             .replacingOccurrences(of: #"[\x00-\x1f\x7f]"#, with: "_", options: .regularExpression)
-        return "/tmp/psh-\(UUID().uuidString.lowercased())/\(name)"
+        return "\(root)/psh-\(UUID().uuidString.lowercased())/\(name)"
     }
 
     public static func quotedPath(_ path: String) -> String {
@@ -31,13 +31,13 @@ public enum RemoteFileUpload {
 }
 
 extension SSHConnection {
-    public func uploadFile(at url: URL) async throws -> String {
+    public func uploadFile(at url: URL, root: String = "/tmp") async throws -> String {
         guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
             throw CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "Select a file to attach."])
         }
         let file = try FileHandle(forReadingFrom: url)
         defer { try? file.close() }
-        let path = RemoteFileUpload.remotePath(filename: url.lastPathComponent)
+        let path = RemoteFileUpload.remotePath(filename: url.lastPathComponent, root: root)
         let directory = RemoteFileUpload.quotedPath(URL(fileURLWithPath: path).deletingLastPathComponent().path)
         let destination = RemoteFileUpload.quotedPath(path)
         try Task.checkCancellation()

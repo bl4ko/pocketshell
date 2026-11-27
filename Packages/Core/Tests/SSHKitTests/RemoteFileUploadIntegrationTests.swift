@@ -14,7 +14,7 @@
             for data in [payload, Data()] {
                 let file = sshd.dir.appendingPathComponent("report draft's.bin")
                 try data.write(to: file)
-                let path = try await connection.uploadFile(at: file)
+                let path = try await connection.uploadFile(at: file, root: sshd.dir.path)
                 let quote = RemoteFileUpload.quotedPath(path)
                 let remoteHash = try await connection.exec("shasum -a 256 \(quote) | cut -d' ' -f1")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -31,7 +31,7 @@
                 try FileManager.default.removeItem(at: directory)
             }
             do {
-                _ = try await connection.uploadFile(at: sshd.dir)
+                _ = try await connection.uploadFile(at: sshd.dir, root: sshd.dir.path)
                 Issue.record("A directory must not be attached as a file")
             } catch is CocoaError {
                 // The picker can return only a readable file.

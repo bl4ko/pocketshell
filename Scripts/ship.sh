@@ -49,4 +49,4 @@ echo "uploaded build $build (iOS + Mac Catalyst) to TestFlight"
 
 # Answer the per-build export-compliance question (standard algorithms, exempt)
 # so builds reach TestFlight without clicking through App Store Connect.
-uv run --with cryptography python3 Scripts/asc-compliance.py "$build"
+uv run --no-project --python "$(xcrun --find python3)" --with cryptography python3 Scripts/asc-compliance.py "$build"

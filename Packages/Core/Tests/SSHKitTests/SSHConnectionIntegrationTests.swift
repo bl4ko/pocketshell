@@ -62,7 +62,22 @@
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = Self.daemonArguments(config: configURL.path, owner: getpid())
             try process.run()
-            Thread.sleep(forTimeInterval: 0.5)
+            let deadline = Date().addingTimeInterval(10)
+            while !Self.accepts(port: port), Date() < deadline { usleep(20_000) }
+        }
+
+        static func accepts(port: Int) -> Bool {
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            defer { close(fd) }
+            var addr = sockaddr_in()
+            addr.sin_family = sa_family_t(AF_INET)
+            addr.sin_port = in_port_t(port).bigEndian
+            addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+            return withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+                }
+            }
         }
 
         static let daemonScript = """
